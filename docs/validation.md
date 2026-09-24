@@ -79,6 +79,8 @@ Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) e
 
 **Tableau (2026-09-24)** : sur mobile, sélecteur d’étape avec compteurs et une seule colonne ; glisser une carte à gauche ou à droite la déplace vers l’étape voisine (aperçu de la destination, seuil de 90 px ; mêmes déplacements en actions d’accessibilité) ; enregistrement avec contrôle de version. Colonnes côte à côte au-delà de 900 px. Vérifié dans Chromium : carte « À faire » glissée → « En cours », compteurs mis à jour.
 
+**Fiche et création (2026-09-24)** : fiche d’une tâche existante = numéro et étape, titre sans cadre sur plusieurs lignes, actions immédiates C’est fait (choix explicite de qui l’a réalisé), Reporter (demain, dans 3 jours, lundi prochain, date au choix ; échéance, sinon date de début) et Bloqué/Débloquer (étape « en attente » ↔ « en cours »), tuiles Qui / Quand / Étapes / Tags modifiables, puis notes, étapes, images, échanges ; réglages complets repliés dans « Tous les réglages ». Création rapide depuis le bouton + : titre, puces Quand / Qui / Priorité / Tag, Créer ; « Plus de détails » ouvre le formulaire complet prérempli. Cartes lues par les lecteurs d’écran titre d’abord, sans initiales ni pourcentages. Recette Chromium : création rapide, blocage puis clôture avec réalisateur vérifiés via l’API.
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique

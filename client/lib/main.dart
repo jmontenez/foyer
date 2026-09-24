@@ -414,6 +414,217 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     await refresh();
   }
 
+  // Création rapide : un titre et quelques puces ; « Plus de détails » ouvre la fiche complète.
+  Future<void> quickCreate() async {
+    if (data == null) return;
+    final title = TextEditingController();
+    final ticket = <String, dynamic>{
+      'title': '',
+      'description': '',
+      'kind': 'obligation',
+      'priority': 'normal',
+      'stageId': 'backlog',
+      'startDate': null,
+      'dueDate': null,
+      'assignees': <String>[],
+      'performers': <String>[],
+      'tagIds': <String>[],
+      'checklist': <Map<String, dynamic>>[],
+      'comments': <Map<String, dynamic>>[],
+      'images': <Map<String, dynamic>>[],
+      'history': <Map<String, dynamic>>[],
+      'version': 0,
+    };
+    final members = maps(data!['members']);
+    final me = data!['me']['id'];
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    String iso(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, change) {
+          Widget chip({
+            required IconData icon,
+            required String label,
+            required bool active,
+            required List<(String, Object?)> options,
+            required void Function(Object?) onPick,
+          }) => PopupMenuButton<int>(
+            tooltip: label,
+            onSelected: (i) => change(() => onPick(options[i].$2)),
+            itemBuilder: (_) => [
+              for (final (i, (name, _)) in options.indexed)
+                PopupMenuItem(value: i, child: Text(name)),
+            ],
+            child: IgnorePointer(
+              child: FilterPill(
+                label: label,
+                icon: icon,
+                selected: active,
+                onTap: () {},
+              ),
+            ),
+          );
+          final due = DateTime.tryParse(ticket['dueDate'] ?? '');
+          final who = strings(ticket['assignees']);
+          final tag = maps(data!['tags'])
+              .where((g) => strings(ticket['tagIds']).contains(g['id']))
+              .firstOrNull;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              0,
+              20,
+              20 + MediaQuery.viewInsetsOf(c).bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Nouvelle tâche',
+                  style: TextStyle(
+                    color: Theme.of(c).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                TextField(
+                  controller: title,
+                  autofocus: true,
+                  maxLength: 160,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: TextStyle(
+                    fontFamily: tokensOf(c).displayFont,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'Qu’est-ce qu’on a en tête ?',
+                    counterText: '',
+                  ),
+                  onSubmitted: (_) => Navigator.pop(c, 'create'),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  runSpacing: 8,
+                  children: [
+                    chip(
+                      icon: Icons.event_outlined,
+                      label: due == null ? 'Quand ?' : relativeDay(due, today),
+                      active: due != null,
+                      options: [
+                        ('Sans date', null),
+                        ('Aujourd’hui', day),
+                        ('Demain', day.add(const Duration(days: 1))),
+                        ('Dans une semaine', day.add(const Duration(days: 7))),
+                      ],
+                      onPick: (d) => ticket['dueDate'] = d == null
+                          ? null
+                          : iso(d as DateTime),
+                    ),
+                    chip(
+                      icon: Icons.person_outline,
+                      label: who.isEmpty
+                          ? 'Qui ?'
+                          : who
+                                .map((id) => id == me ? 'Moi' : memberName(id))
+                                .join(' + '),
+                      active: who.isNotEmpty,
+                      options: [
+                        ('Personne pour l’instant', <String>[]),
+                        ('Moi', [me]),
+                        for (final m in members.where((m) => m['id'] != me))
+                          (m['name'].toString(), [m['id']]),
+                        if (members.length > 1)
+                          ('Nous deux', [for (final m in members) m['id']]),
+                      ],
+                      onPick: (v) =>
+                          ticket['assignees'] = List<String>.from(v as List),
+                    ),
+                    chip(
+                      icon: Icons.flag_outlined,
+                      label: ticket['priority'] == 'normal'
+                          ? 'Priorité'
+                          : priorityName(ticket['priority']),
+                      active: ticket['priority'] != 'normal',
+                      options: [
+                        for (final p in ['low', 'normal', 'high', 'urgent'])
+                          (priorityName(p), p),
+                      ],
+                      onPick: (p) => ticket['priority'] = p,
+                    ),
+                    chip(
+                      icon: Icons.sell_outlined,
+                      label: tag == null ? 'Tag' : tag['name'].toString(),
+                      active: tag != null,
+                      options: [
+                        ('Aucun', null),
+                        for (final g in maps(data!['tags']))
+                          (g['name'].toString(), g['id']),
+                      ],
+                      onPick: (id) => ticket['tagIds'] = [?id as String?],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(c, 'details'),
+                      child: const Text('Plus de détails'),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(c, 'create'),
+                        child: const Text('Créer'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    ticket['title'] = title.text.trim();
+    title.dispose();
+    if (choice == 'details') {
+      await openTicket(ticket);
+      return;
+    }
+    if (choice != 'create') return;
+    if (ticket['title'].toString().isEmpty) {
+      message('Donnez un titre à cette tâche.');
+      return;
+    }
+    try {
+      await api.call('POST', '/api/v1/tickets', {
+        for (final key in [
+          'title',
+          'description',
+          'kind',
+          'priority',
+          'stageId',
+          'startDate',
+          'dueDate',
+          'assignees',
+          'performers',
+          'tagIds',
+          'checklist',
+        ])
+          key: ticket[key],
+      });
+      message('Tâche créée.');
+    } catch (e) {
+      message(e);
+    }
+    await refresh();
+  }
+
   String memberName(String who) =>
       maps(data?['members'])
           .where((m) => m['id'] == who)
@@ -606,7 +817,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       floatingActionButton: FloatingActionButton(
         tooltip: 'Une nouvelle tâche',
         shape: const CircleBorder(),
-        onPressed: () => openTicket(),
+        onPressed: quickCreate,
         child: const Icon(Icons.add, size: 28),
       ),
       bottomNavigationBar: wide
@@ -1848,6 +2059,430 @@ class _TicketPageState extends State<TicketPage> {
         )
         .toList(),
   );
+  bool get existing => t['id'] != null;
+  List<Map<String, dynamic>> get members => maps(widget.data['members']);
+  List<Map<String, dynamic>> get stages =>
+      maps(widget.data['stages'])
+        ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
+  String get stageName =>
+      {
+        'backlog': 'Backlog',
+        'done': 'Terminé',
+        'abandoned': 'Abandonné',
+        for (final s in stages) s['id']: s['name'],
+      }[t['stageId']]?.toString() ??
+      '';
+  String? stageOf(String category) =>
+      stages.where((s) => s['category'] == category).firstOrNull?['id'];
+  bool get blocked =>
+      stages.any((s) => s['id'] == t['stageId'] && s['category'] == 'waiting');
+
+  // Actions rapides : décisives, elles enregistrent tout de suite.
+  Future<void> apply(
+    void Function() change,
+    String done, {
+    bool close = false,
+  }) async {
+    setState(change);
+    dirty = true;
+    await save(close: close);
+    if (!dirty) message(done);
+  }
+
+  Future<void> finish() async {
+    final me = widget.data['me']?['id']?.toString();
+    final chosen = <String>{
+      ...strings(t['assignees']),
+      if (strings(t['assignees']).isEmpty && me != null) me,
+    };
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, change) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Qui l’a réalisé ?',
+                  style: Theme.of(c).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                const Text('Choix explicite, indépendant des responsables.'),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final m in members)
+                      FilterChip(
+                        label: Text(m['name']),
+                        selected: chosen.contains(m['id']),
+                        onSelected: (v) => change(
+                          () =>
+                              v ? chosen.add(m['id']) : chosen.remove(m['id']),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: chosen.isEmpty
+                      ? null
+                      : () => Navigator.pop(c, true),
+                  child: const Text('C’est fait'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (ok == true) {
+      await apply(
+        () {
+          t['stageId'] = 'done';
+          t['performers'] = chosen.toList();
+        },
+        'Bravo, c’est fait.',
+        close: true,
+      );
+    }
+  }
+
+  Future<void> postpone() async {
+    final today = DateTime.now();
+    final day = DateTime(today.year, today.month, today.day);
+    final nextMonday = day.add(Duration(days: 8 - day.weekday));
+    final choice = await showModalBottomSheet<DateTime>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (label, d) in [
+              ('Demain', day.add(const Duration(days: 1))),
+              ('Dans 3 jours', day.add(const Duration(days: 3))),
+              ('Lundi prochain', nextMonday),
+            ])
+              ListTile(
+                leading: const Icon(Icons.event_outlined),
+                title: Text(label),
+                subtitle: Text(headerDay(d)),
+                onTap: () => Navigator.pop(c, d),
+              ),
+            ListTile(
+              leading: const Icon(Icons.calendar_month_outlined),
+              title: const Text('Choisir une date…'),
+              onTap: () async {
+                final d = await showDatePicker(
+                  context: c,
+                  initialDate: day.add(const Duration(days: 1)),
+                  firstDate: day,
+                  lastDate: DateTime(2100),
+                );
+                if (c.mounted) Navigator.pop(c, d);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return;
+    // On décale l’échéance ; à défaut la date de début si c’est la seule renseignée.
+    final key = t['dueDate'] == null && t['startDate'] != null
+        ? 'startDate'
+        : 'dueDate';
+    await apply(
+      () => t[key] = DateFormat('yyyy-MM-dd').format(choice),
+      'Reporté à ${relativeDay(choice, today).toLowerCase()}.',
+    );
+  }
+
+  Future<void> toggleBlocked() async {
+    final target = blocked
+        ? (stageOf('doing') ?? stageOf('todo'))
+        : stageOf('waiting');
+    if (target == null) {
+      message('Aucune étape « en attente » dans vos étapes.');
+      return;
+    }
+    await apply(
+      () => t['stageId'] = target,
+      blocked ? 'Tâche débloquée.' : 'Tâche marquée bloquée.',
+    );
+  }
+
+  Future<void> editField(String title, Widget Function(StateSetter) body) =>
+      showModalBottomSheet<void>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (c) => StatefulBuilder(
+          builder: (c, change) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(title, style: Theme.of(c).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  body((f) {
+                    change(f);
+                    setState(() {});
+                  }),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(c),
+                    child: const Text('Valider'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget chips(
+    String field,
+    List<Map<String, dynamic>> items,
+    StateSetter change,
+  ) => Wrap(
+    spacing: 8,
+    runSpacing: 4,
+    children: [
+      for (final item in items)
+        FilterChip(
+          label: Text(item['name']),
+          selected: strings(t[field]).contains(item['id']),
+          onSelected: (v) => change(() {
+            final list = strings(t[field]);
+            v ? list.add(item['id']) : list.remove(item['id']);
+            t[field] = list;
+            dirty = true;
+          }),
+        ),
+    ],
+  );
+
+  List<Widget> summary() {
+    final c = Theme.of(context).colorScheme;
+    return [
+      Text(
+        'F-${t['number']} · $stageName',
+        style: TextStyle(color: c.onSurfaceVariant),
+      ),
+      const SizedBox(height: 6),
+    ];
+  }
+
+  List<Widget> actions() {
+    final c = Theme.of(context).colorScheme;
+    final tk = tokensOf(context);
+    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
+    Widget action(
+      IconData icon,
+      String label,
+      VoidCallback? onTap, {
+      bool primary = false,
+    }) => Expanded(
+      child: Material(
+        color: primary ? c.primary : Theme.of(context).cardTheme.color,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tk.radius - 2),
+          side: primary ? BorderSide.none : BorderSide(color: c.outlineVariant),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(tk.radius - 2),
+          onTap: saving ? null : onTap,
+          child: SizedBox(
+            height: 66,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: primary ? c.onPrimary : c.onSurface),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: primary ? c.onPrimary : c.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    Widget tile(String label, Widget value, VoidCallback onTap) => Expanded(
+      child: Material(
+        color: Theme.of(context).cardTheme.color,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tk.radius - 2),
+          side: BorderSide(color: c.outlineVariant),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(tk.radius - 2),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: c.onSurfaceVariant)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 28,
+                  child: Align(alignment: Alignment.centerLeft, child: value),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    final bold = TextStyle(
+      fontWeight: FontWeight.w700,
+      fontSize: 16,
+      color: c.onSurface,
+    );
+    final assignees = strings(t['assignees']);
+    final check = maps(t['checklist']);
+    final done = check.where((i) => i['done'] == true).length;
+    final due = DateTime.tryParse(t['dueDate']?.toString() ?? '');
+    final start = DateTime.tryParse(t['startDate']?.toString() ?? '');
+    final selectedTags = tags
+        .where((g) => strings(t['tagIds']).contains(g['id']))
+        .toList();
+    return [
+      const SizedBox(height: 14),
+      if (!closed) ...[
+        Row(
+          children: [
+            action(Icons.check, 'C’est fait', finish, primary: true),
+            const SizedBox(width: 10),
+            action(Icons.event_repeat, 'Reporter', postpone),
+            const SizedBox(width: 10),
+            action(
+              blocked ? Icons.play_arrow_outlined : Icons.pause_circle_outline,
+              blocked ? 'Débloquer' : 'Bloqué',
+              toggleBlocked,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+      ],
+      Row(
+        children: [
+          tile(
+            'Qui',
+            assignees.isEmpty
+                ? Text('Personne', style: bold)
+                : Row(
+                    children: [
+                      for (final id in assignees)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: MemberAvatar(
+                            name: name(id),
+                            index: members.indexWhere((m) => m['id'] == id),
+                            size: 26,
+                          ),
+                        ),
+                      if (assignees.length == 1)
+                        Flexible(
+                          child: Text(
+                            name(assignees.first),
+                            style: bold,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+            () => editField(
+              'Qui s’en occupe ?',
+              (change) => chips('assignees', members, change),
+            ),
+          ),
+          const SizedBox(width: 10),
+          tile(
+            'Quand',
+            Text(
+              due != null
+                  ? relativeDay(due, DateTime.now())
+                  : start != null
+                  ? 'Dès ${relativeDay(start, DateTime.now()).toLowerCase()}'
+                  : 'Sans date',
+              style: bold,
+            ),
+            () => datePick('dueDate'),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          tile(
+            'Étapes',
+            check.isEmpty
+                ? Text('Aucune', style: bold)
+                : Row(
+                    children: [
+                      Text('$done/${check.length}', style: bold),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: done / check.length,
+                            minHeight: 6,
+                            color: c.secondaryContainer,
+                            backgroundColor: c.outlineVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+            addCheck,
+          ),
+          const SizedBox(width: 10),
+          tile(
+            selectedTags.length > 1 ? 'Tags' : 'Tag',
+            Text(
+              selectedTags.isEmpty
+                  ? 'Aucun'
+                  : selectedTags.map((g) => g['name']).join(', '),
+              style: bold,
+              overflow: TextOverflow.ellipsis,
+            ),
+            () => editField(
+              'Les tags',
+              (change) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  chips('tagIds', tags, change),
+                  TextButton.icon(
+                    onPressed: () async {
+                      await addTag();
+                      change(() {});
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nouveau tag'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
   String activityDetail(Map<String, dynamic> a) {
     final action = a['action'];
     if (action == 'stage') {
@@ -1916,10 +2551,16 @@ class _TicketPageState extends State<TicketPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            t['id'] == null ? 'Une nouvelle tâche' : 'F-${t['number']}',
-          ),
+          title: Text(t['id'] == null ? 'Une nouvelle tâche' : ''),
           actions: [
+            if (existing &&
+                (t['priority'] == 'urgent' || t['priority'] == 'high'))
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: PriorityBadge(
+                  t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: FilledButton(
@@ -1936,33 +2577,306 @@ class _TicketPageState extends State<TicketPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 60),
               children: [
-                TextField(
-                  controller: title,
-                  maxLength: 160,
-                  textCapitalization: TextCapitalization.sentences,
-                  autofocus: t['id'] == null,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Qu’est-ce qu’on a en tête ?',
-                    counterText: '',
-                  ),
-                ),
-                if (!details)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => details = true),
-                      icon: const Icon(Icons.tune),
-                      label: const Text(
-                        'Ajouter des détails, une date, un responsable…',
-                      ),
+                if (!existing) ...[
+                  TextField(
+                    controller: title,
+                    maxLength: 160,
+                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.done,
+                    textCapitalization: TextCapitalization.sentences,
+                    autofocus: t['id'] == null,
+                    style: TextStyle(
+                      fontFamily: tokensOf(context).displayFont,
+                      fontSize: existing ? 28 : 24,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Qu’est-ce qu’on a en tête ?',
+                      counterText: '',
+                      border: existing ? InputBorder.none : null,
+                      enabledBorder: existing ? InputBorder.none : null,
+                      filled: existing ? false : null,
+                      contentPadding: existing ? EdgeInsets.zero : null,
                     ),
                   ),
-                if (details) ...[
-                  heading('L’essentiel'),
+                  if (!details)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => details = true),
+                        icon: const Icon(Icons.tune),
+                        label: const Text(
+                          'Ajouter des détails, une date, un responsable…',
+                        ),
+                      ),
+                    ),
+                  if (details) ...[
+                    heading(existing ? 'Notes' : 'L’essentiel'),
+                    TextField(
+                      controller: description,
+                      minLines: 3,
+                      maxLines: 8,
+                      maxLength: 12000,
+                      decoration: const InputDecoration(
+                        labelText: 'Notes et contexte',
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: t['stageId'],
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Avancement',
+                      ),
+                      items: stageItems
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s['id'].toString(),
+                              child: Text(
+                                s['name'].toString(),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        t['stageId'] = v;
+                        dirty = true;
+                      }),
+                    ),
+                    if (t['stageId'] == 'done') ...[
+                      heading('Qui l’a réalisé ?'),
+                      const Text(
+                        'Choix explicite, indépendant des responsables.',
+                      ),
+                      memberChoices('performers'),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: t['kind'],
+                            decoration: const InputDecoration(
+                              labelText: 'Type',
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'obligation',
+                                child: Text('Obligation'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'wish',
+                                child: Text('Envie'),
+                              ),
+                            ],
+                            onChanged: (v) => setState(() {
+                              t['kind'] = v;
+                              dirty = true;
+                            }),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            initialValue: t['priority'],
+                            decoration: const InputDecoration(
+                              labelText: 'Priorité',
+                            ),
+                            items: ['low', 'normal', 'high', 'urgent']
+                                .map(
+                                  (p) => DropdownMenuItem(
+                                    value: p,
+                                    child: Text(priorityName(p)),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() {
+                              t['priority'] = v;
+                              dirty = true;
+                            }),
+                          ),
+                        ),
+                      ],
+                    ),
+                    heading('Qui s’en occupe ?'),
+                    memberChoices('assignees'),
+                    heading('Quand ?'),
+                    ...['startDate', 'dueDate'].map(
+                      (key) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.calendar_today_outlined),
+                        title: Text(
+                          key == 'startDate'
+                              ? 'À faire à partir du'
+                              : 'Échéance',
+                        ),
+                        subtitle: Text(
+                          t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                        ),
+                        onTap: () => datePick(key),
+                        trailing: t[key] == null
+                            ? null
+                            : IconButton(
+                                onPressed: () => setState(() {
+                                  t[key] = null;
+                                  dirty = true;
+                                }),
+                                icon: const Icon(Icons.close),
+                              ),
+                      ),
+                    ),
+                    heading('Les tags'),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        ...tags.map(
+                          (tag) => FilterChip(
+                            avatar: Icon(
+                              Icons.circle,
+                              size: 12,
+                              color: Color(
+                                int.parse(
+                                  tag['color'].toString().replaceFirst(
+                                    '#',
+                                    'FF',
+                                  ),
+                                  radix: 16,
+                                ),
+                              ),
+                            ),
+                            label: Text(tag['name']),
+                            selected: strings(t['tagIds']).contains(tag['id']),
+                            onSelected: (v) => setState(() {
+                              final list = strings(t['tagIds']);
+                              v ? list.add(tag['id']) : list.remove(tag['id']);
+                              t['tagIds'] = list;
+                              dirty = true;
+                            }),
+                          ),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: const Text('Nouveau tag'),
+                          onPressed: addTag,
+                        ),
+                      ],
+                    ),
+                    heading('Une étape à la fois'),
+                    ...maps(t['checklist']).map(
+                      (item) => CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: item['done'],
+                        title: Text(item['text']),
+                        secondary: IconButton(
+                          tooltip: 'Retirer',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() {
+                            t['checklist'] = maps(t['checklist'])
+                              ..removeWhere((c) => c['id'] == item['id']);
+                            dirty = true;
+                          }),
+                        ),
+                        onChanged: (v) => setState(() {
+                          t['checklist'] = maps(t['checklist'])
+                              .map(
+                                (c) => c['id'] == item['id']
+                                    ? {...c, 'done': v}
+                                    : c,
+                              )
+                              .toList();
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: addCheck,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Ajouter une étape'),
+                    ),
+                    heading('Images'),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: maps(t['images']).map((image) {
+                        final key = image['id'].toString();
+                        return FutureBuilder<Uint8List>(
+                          future: imageCache.putIfAbsent(
+                            key,
+                            () => api.imageBytes(key),
+                          ),
+                          builder: (c, s) => s.hasData
+                              ? InkWell(
+                                  onTap: () => showDialog<void>(
+                                    context: context,
+                                    builder: (c) => Dialog(
+                                      child: InteractiveViewer(
+                                        child: Image.memory(s.data!),
+                                      ),
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(
+                                      s.data!,
+                                      width: 120,
+                                      height: 100,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                )
+                              : SizedBox(
+                                  width: 120,
+                                  height: 100,
+                                  child: Center(
+                                    child: s.hasError
+                                        ? const Icon(Icons.broken_image)
+                                        : const CircularProgressIndicator(),
+                                  ),
+                                ),
+                        );
+                      }).toList(),
+                    ),
+                    TextButton.icon(
+                      onPressed: saving ? null : upload,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Ajouter une image'),
+                    ),
+                  ],
+                ] else ...[
+                  ...summary(),
+                  TextField(
+                    controller: title,
+                    maxLength: 160,
+                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.done,
+                    textCapitalization: TextCapitalization.sentences,
+                    autofocus: t['id'] == null,
+                    style: TextStyle(
+                      fontFamily: tokensOf(context).displayFont,
+                      fontSize: existing ? 28 : 24,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Qu’est-ce qu’on a en tête ?',
+                      counterText: '',
+                      border: existing ? InputBorder.none : null,
+                      enabledBorder: existing ? InputBorder.none : null,
+                      filled: existing ? false : null,
+                      contentPadding: existing ? EdgeInsets.zero : null,
+                    ),
+                  ),
+                  ...actions(),
+                  heading(existing ? 'Notes' : 'L’essentiel'),
                   TextField(
                     controller: description,
                     minLines: 3,
@@ -1974,138 +2888,6 @@ class _TicketPageState extends State<TicketPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: t['stageId'],
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Avancement'),
-                    items: stageItems
-                        .map(
-                          (s) => DropdownMenuItem(
-                            value: s['id'].toString(),
-                            child: Text(
-                              s['name'].toString(),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      t['stageId'] = v;
-                      dirty = true;
-                    }),
-                  ),
-                  if (t['stageId'] == 'done') ...[
-                    heading('Qui l’a réalisé ?'),
-                    const Text(
-                      'Choix explicite, indépendant des responsables.',
-                    ),
-                    memberChoices('performers'),
-                  ],
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: t['kind'],
-                          decoration: const InputDecoration(labelText: 'Type'),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'obligation',
-                              child: Text('Obligation'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'wish',
-                              child: Text('Envie'),
-                            ),
-                          ],
-                          onChanged: (v) => setState(() {
-                            t['kind'] = v;
-                            dirty = true;
-                          }),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: t['priority'],
-                          decoration: const InputDecoration(
-                            labelText: 'Priorité',
-                          ),
-                          items: ['low', 'normal', 'high', 'urgent']
-                              .map(
-                                (p) => DropdownMenuItem(
-                                  value: p,
-                                  child: Text(priorityName(p)),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) => setState(() {
-                            t['priority'] = v;
-                            dirty = true;
-                          }),
-                        ),
-                      ),
-                    ],
-                  ),
-                  heading('Qui s’en occupe ?'),
-                  memberChoices('assignees'),
-                  heading('Quand ?'),
-                  ...['startDate', 'dueDate'].map(
-                    (key) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.calendar_today_outlined),
-                      title: Text(
-                        key == 'startDate' ? 'À faire à partir du' : 'Échéance',
-                      ),
-                      subtitle: Text(
-                        t[key] == null ? 'Sans date' : dateLabel(t[key]),
-                      ),
-                      onTap: () => datePick(key),
-                      trailing: t[key] == null
-                          ? null
-                          : IconButton(
-                              onPressed: () => setState(() {
-                                t[key] = null;
-                                dirty = true;
-                              }),
-                              icon: const Icon(Icons.close),
-                            ),
-                    ),
-                  ),
-                  heading('Les tags'),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      ...tags.map(
-                        (tag) => FilterChip(
-                          avatar: Icon(
-                            Icons.circle,
-                            size: 12,
-                            color: Color(
-                              int.parse(
-                                tag['color'].toString().replaceFirst('#', 'FF'),
-                                radix: 16,
-                              ),
-                            ),
-                          ),
-                          label: Text(tag['name']),
-                          selected: strings(t['tagIds']).contains(tag['id']),
-                          onSelected: (v) => setState(() {
-                            final list = strings(t['tagIds']);
-                            v ? list.add(tag['id']) : list.remove(tag['id']);
-                            t['tagIds'] = list;
-                            dirty = true;
-                          }),
-                        ),
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.add, size: 18),
-                        label: const Text('Nouveau tag'),
-                        onPressed: addTag,
-                      ),
-                    ],
-                  ),
                   heading('Une étape à la fois'),
                   ...maps(t['checklist']).map(
                     (item) => CheckboxListTile(
@@ -2186,8 +2968,6 @@ class _TicketPageState extends State<TicketPage> {
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: const Text('Ajouter une image'),
                   ),
-                ],
-                if (t['id'] != null) ...[
                   heading('On en parle'),
                   ...maps(t['comments']).map(
                     (c) => Card(
@@ -2226,6 +3006,160 @@ class _TicketPageState extends State<TicketPage> {
                       icon: const Icon(Icons.send_outlined),
                       label: const Text('Commenter'),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Tous les réglages'),
+                    subtitle: const Text(
+                      'Avancement, type, priorité, responsables, dates, tags',
+                    ),
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: t['stageId'],
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Avancement',
+                        ),
+                        items: stageItems
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s['id'].toString(),
+                                child: Text(
+                                  s['name'].toString(),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          t['stageId'] = v;
+                          dirty = true;
+                        }),
+                      ),
+                      if (t['stageId'] == 'done') ...[
+                        heading('Qui l’a réalisé ?'),
+                        const Text(
+                          'Choix explicite, indépendant des responsables.',
+                        ),
+                        memberChoices('performers'),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: t['kind'],
+                              decoration: const InputDecoration(
+                                labelText: 'Type',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'obligation',
+                                  child: Text('Obligation'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'wish',
+                                  child: Text('Envie'),
+                                ),
+                              ],
+                              onChanged: (v) => setState(() {
+                                t['kind'] = v;
+                                dirty = true;
+                              }),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: t['priority'],
+                              decoration: const InputDecoration(
+                                labelText: 'Priorité',
+                              ),
+                              items: ['low', 'normal', 'high', 'urgent']
+                                  .map(
+                                    (p) => DropdownMenuItem(
+                                      value: p,
+                                      child: Text(priorityName(p)),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) => setState(() {
+                                t['priority'] = v;
+                                dirty = true;
+                              }),
+                            ),
+                          ),
+                        ],
+                      ),
+                      heading('Qui s’en occupe ?'),
+                      memberChoices('assignees'),
+                      heading('Quand ?'),
+                      ...['startDate', 'dueDate'].map(
+                        (key) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.calendar_today_outlined),
+                          title: Text(
+                            key == 'startDate'
+                                ? 'À faire à partir du'
+                                : 'Échéance',
+                          ),
+                          subtitle: Text(
+                            t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                          ),
+                          onTap: () => datePick(key),
+                          trailing: t[key] == null
+                              ? null
+                              : IconButton(
+                                  onPressed: () => setState(() {
+                                    t[key] = null;
+                                    dirty = true;
+                                  }),
+                                  icon: const Icon(Icons.close),
+                                ),
+                        ),
+                      ),
+                      heading('Les tags'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          ...tags.map(
+                            (tag) => FilterChip(
+                              avatar: Icon(
+                                Icons.circle,
+                                size: 12,
+                                color: Color(
+                                  int.parse(
+                                    tag['color'].toString().replaceFirst(
+                                      '#',
+                                      'FF',
+                                    ),
+                                    radix: 16,
+                                  ),
+                                ),
+                              ),
+                              label: Text(tag['name']),
+                              selected: strings(t['tagIds'])
+                                  .contains(tag['id']),
+                              onSelected: (v) => setState(() {
+                                final list = strings(t['tagIds']);
+                                v
+                                    ? list.add(tag['id'])
+                                    : list.remove(tag['id']);
+                                t['tagIds'] = list;
+                                dirty = true;
+                              }),
+                            ),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.add, size: 18),
+                            label: const Text('Nouveau tag'),
+                            onPressed: addTag,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   heading('Le fil de cette tâche'),
                   ...maps(t['history']).reversed.map(
