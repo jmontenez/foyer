@@ -73,10 +73,15 @@ def call(
 
 call("GET", "/api/v1/state", expected=401)
 call("GET", "/api/v1/images/nope", expected=401)
+call("GET", "/api/v1/app/android", expected=401)
+call("GET", "/api/v1/app/android.apk", expected=401)
 call("POST", "/auth/demo/0", origin="https://intrus.invalid", expected=403)
 a = call("POST", "/auth/demo/0")["token"]
 b = call("POST", "/auth/demo/1")["token"]
 state = call("GET", "/api/v1/state", token=a)
+# Aucune mise à jour Android publiée sur l’instance de test : 404, jamais d’APK.
+call("GET", "/api/v1/app/android", token=a, expected=404)
+call("GET", "/api/v1/app/android.apk", token=a, expected=404)
 assert "sessions" not in state and "devices" not in state
 assert all("email" not in m and "subject" not in m for m in state["members"])
 original_palette = state["me"]["paletteId"]
@@ -227,7 +232,7 @@ def response_headers(path, token=None):
     return response.headers
 
 
-for private_path in ("/auth/config", "/api/v1/state"):
+for private_path in ("/auth/config", "/api/v1/state", "/api/v1/app/android"):
     got = response_headers(private_path, token=b if "api" in private_path else None)
     assert got["Cache-Control"] == "no-store", f"{private_path}: {got['Cache-Control']}"
     assert got["X-Content-Type-Options"] == "nosniff"

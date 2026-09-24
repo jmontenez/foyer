@@ -6,6 +6,7 @@ public sealed class Settings(IConfiguration c, IWebHostEnvironment env)
 {
     public string Origin { get; } = c["PublicOrigin"]?.TrimEnd('/') ?? "http://localhost:5080";
     public string Images { get; } = c["ImagesPath"] ?? Path.Combine(env.ContentRootPath, "images");
+    public string Updates { get; } = c["UpdatesPath"] ?? Path.Combine(env.ContentRootPath, "updates");
     public string[] AllowedEmails { get; } = (c["AllowedEmails"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public string[] GoogleAudiences { get; } = (c["GoogleAudiences"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public string? GoogleClientId { get; } = c["GoogleClientId"];
