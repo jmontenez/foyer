@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'ui.dart';
 import 'update.dart';
 
 final messenger = GlobalKey<ScaffoldMessengerState>();
@@ -119,6 +120,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   String? error;
   int tab = 0;
   String person = 'all', query = '', tag = 'all';
+  bool searching = false;
   DateTime? historyFrom, historyTo;
   Timer? timer;
   bool refreshing = false;
@@ -557,199 +559,92 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       );
     }
     final wide = MediaQuery.sizeOf(context).width > 900;
-    final titles = [
-      'Aujourd’hui',
-      'Cette semaine',
-      'Notre tableau',
-      'Le backlog',
-      'Notre historique',
-    ];
+    final today =
+        DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
     final subtitles = [
-      'Ce qui mérite notre attention.',
-      'Un peu de recul sur les prochains jours.',
-      'Chacun sait où nous en sommes.',
-      'Tout ce qu’on veut garder en tête.',
-      'Ce qu’on a fait, et les décisions prises.',
+      headerDay(today),
+      'Les jours qui viennent',
+      'Chacun sait où on en est',
+      'Plus tard, sans pression',
+      'Ce qu’on a fait, et ce qu’on a décidé',
     ];
     final tickets = visible();
-    final navIcons = [
-      Icons.wb_sunny_outlined,
-      Icons.date_range_outlined,
-      Icons.view_kanban_outlined,
-      Icons.inventory_2_outlined,
-      Icons.history,
+    const views = [
+      (Icons.wb_sunny_outlined, 'Aujourd’hui'),
+      (Icons.date_range_outlined, 'Semaine'),
+      (Icons.view_kanban_outlined, 'Tableau'),
+      (Icons.inventory_2_outlined, 'Backlog'),
+      (Icons.history, 'Historique'),
     ];
-    final labels = [
-      'Aujourd’hui',
-      'Semaine',
-      'Tableau',
-      'Backlog',
-      'Historique',
-    ];
+    final members = maps(data!['members']);
+    final me = Map<String, dynamic>.from(data!['me']);
+    final meIndex = members.indexWhere((m) => m['id'] == me['id']);
+    final selectedTag = maps(data!['tags'])
+        .where((t) => t['id'] == tag)
+        .firstOrNull;
+    final rows = tokensOf(context).rows;
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cottage_rounded,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            SizedBox(width: 10),
-            Text('Foyer', style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Actualiser',
-            onPressed: refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Réglages',
-            onPressed: () => settingsDialog(),
-            icon: const Icon(Icons.tune),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Une nouvelle tâche',
+        shape: const CircleBorder(),
         onPressed: () => openTicket(),
-        icon: const Icon(Icons.add),
-        label: const Text('Une nouvelle tâche'),
+        child: const Icon(Icons.add, size: 28),
       ),
       bottomNavigationBar: wide
           ? null
-          : NavigationBar(
-              selectedIndex: tab,
-              onDestinationSelected: (i) => setState(() => tab = i),
-              destinations: List.generate(
-                5,
-                (i) => NavigationDestination(
-                  icon: Icon(navIcons[i]),
-                  label: labels[i],
-                ),
-              ),
+          : FloatingNav(
+              index: tab,
+              items: views,
+              onSelected: (i) => setState(() => tab = i),
             ),
-      body: Row(
-        children: [
-          if (wide)
-            NavigationRail(
-              selectedIndex: tab,
-              onDestinationSelected: (i) => setState(() => tab = i),
-              labelType: NavigationRailLabelType.all,
-              destinations: List.generate(
-                5,
-                (i) => NavigationRailDestination(
-                  icon: Icon(navIcons[i]),
-                  label: Text(labels[i]),
-                ),
+      body: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            if (wide)
+              NavigationRail(
+                selectedIndex: tab,
+                onDestinationSelected: (i) => setState(() => tab = i),
+                labelType: NavigationRailLabelType.all,
+                destinations: [
+                  for (final (icon, label) in views)
+                    NavigationRailDestination(
+                      icon: Icon(icon),
+                      label: Text(label),
+                    ),
+                ],
               ),
-            ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                wide ? 32 : 18,
-                18,
-                wide ? 32 : 18,
-                0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titles[tab],
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitles[tab],
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  if (error != null)
-                    MaterialBanner(
-                      content: Text(error!),
-                      actions: [
-                        TextButton(
-                          onPressed: refresh,
-                          child: const Text('Réessayer'),
-                        ),
-                      ],
-                    ),
-                  if (update != null && !updateDismissed)
-                    MaterialBanner(
-                      leading: const Icon(Icons.system_update_outlined),
-                      content: Text(
-                        'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () =>
-                              setState(() => updateDismissed = true),
-                          child: const Text('Plus tard'),
-                        ),
-                        FilledButton(
-                          onPressed: installingUpdate ? null : installUpdate,
-                          child: Text(
-                            installingUpdate ? 'Téléchargement…' : 'Installer',
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ScreenHeader(
+                      title: views[tab].$2,
+                      subtitle: subtitles[tab],
+                      searching: searching,
+                      onSearch: () => setState(() {
+                        searching = !searching;
+                        if (!searching) query = '';
+                      }),
+                      profile: IconButton(
+                        tooltip: 'Réglages',
+                        onPressed: () => settingsDialog(),
+                        icon: ExcludeSemantics(
+                          child: MemberAvatar(
+                            name: me['name'].toString(),
+                            index: meIndex < 0 ? 0 : meIndex,
+                            size: 36,
                           ),
                         ),
-                      ],
-                    ),
-                  if (data!['maintenance'] == true)
-                    const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Text(
-                        'Maintenance en cours : modifications temporairement suspendues.',
                       ),
                     ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Tout le foyer'),
-                          selected: person == 'all',
-                          onSelected: (_) => setState(() => person = 'all'),
-                        ),
-                        const SizedBox(width: 8),
-                        ...maps(data!['members']).map(
-                          (m) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(
-                                m['id'] == data!['me']['id']
-                                    ? 'Moi'
-                                    : m['name'],
-                              ),
-                              selected: person == m['id'],
-                              onSelected: (_) =>
-                                  setState(() => person = m['id']),
-                            ),
-                          ),
-                        ),
-                        ChoiceChip(
-                          label: Text(
-                            tab == 4 ? 'Sans réalisation' : 'Sans responsable',
-                          ),
-                          selected: person == 'none',
-                          onSelected: (_) => setState(() => person = 'none'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
+                    if (searching)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                         child: TextField(
+                          autofocus: true,
                           decoration: const InputDecoration(
                             hintText: 'Rechercher dans cette vue…',
                             prefixIcon: Icon(Icons.search),
@@ -758,89 +653,202 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           onChanged: (v) => setState(() => query = v),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      DropdownButton<String>(
-                        value: tag,
-                        onChanged: (v) => setState(() => tag = v!),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('Tous les tags'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (error != null)
+                            MaterialBanner(
+                              content: Text(error!),
+                              actions: [
+                                TextButton(
+                                  onPressed: refresh,
+                                  child: const Text('Réessayer'),
+                                ),
+                              ],
+                            ),
+                          if (update != null && !updateDismissed)
+                            MaterialBanner(
+                              leading: const Icon(Icons.system_update_outlined),
+                              content: Text(
+                                'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      setState(() => updateDismissed = true),
+                                  child: const Text('Plus tard'),
+                                ),
+                                FilledButton(
+                                  onPressed: installingUpdate
+                                      ? null
+                                      : installUpdate,
+                                  child: Text(
+                                    installingUpdate
+                                        ? 'Téléchargement…'
+                                        : 'Installer',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (data!['maintenance'] == true)
+                            const Padding(
+                              padding: EdgeInsets.all(8),
+                              child: Text(
+                                'Maintenance en cours : modifications temporairement suspendues.',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          FilterPill(
+                            label: 'Tout le foyer',
+                            selected: person == 'all',
+                            onTap: () => setState(() => person = 'all'),
                           ),
-                          ...maps(data!['tags']).map(
-                            (t) => DropdownMenuItem(
-                              value: t['id'] as String,
-                              child: Text(t['name']),
+                          // « Moi » d’abord, puis l’autre membre.
+                          for (final m in [
+                            ...members.where((m) => m['id'] == me['id']),
+                            ...members.where((m) => m['id'] != me['id']),
+                          ])
+                            FilterPill(
+                              label: m['id'] == me['id'] ? 'Moi' : m['name'],
+                              selected: person == m['id'],
+                              onTap: () => setState(() => person = m['id']),
+                            ),
+                          FilterPill(
+                            label: tab == 4 ? 'Sans réalisation' : 'Sans resp.',
+                            selected: person == 'none',
+                            onTap: () => setState(() => person = 'none'),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Filtrer par tag',
+                            initialValue: tag,
+                            onSelected: (v) => setState(() => tag = v),
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'all',
+                                child: Text('Tous les tags'),
+                              ),
+                              for (final t in maps(data!['tags']))
+                                PopupMenuItem(
+                                  value: t['id'] as String,
+                                  child: Text(t['name']),
+                                ),
+                            ],
+                            child: IgnorePointer(
+                              child: FilterPill(
+                                label: selectedTag == null
+                                    ? 'Tags'
+                                    : selectedTag['name'].toString(),
+                                icon: Icons.sell_outlined,
+                                selected: selectedTag != null,
+                                onTap: () {},
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  if (tab == 4)
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        TextButton.icon(
-                          icon: const Icon(Icons.calendar_month),
-                          label: Text(
-                            historyFrom == null
-                                ? 'Depuis…'
-                                : dateLabel(historyFrom!.toIso8601String()),
-                          ),
-                          onPressed: () async {
-                            final d = await showDatePicker(
-                              context: context,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2100),
-                              initialDate: historyFrom ?? DateTime.now(),
-                            );
-                            if (d != null) setState(() => historyFrom = d);
-                          },
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            final d = await showDatePicker(
-                              context: context,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2100),
-                              initialDate: historyTo ?? DateTime.now(),
-                            );
-                            if (d != null) setState(() => historyTo = d);
-                          },
-                          child: Text(
-                            historyTo == null
-                                ? 'Jusqu’au…'
-                                : dateLabel(historyTo!.toIso8601String()),
-                          ),
-                        ),
-                        if (historyFrom != null || historyTo != null)
-                          TextButton(
-                            onPressed: () => setState(() {
-                              historyFrom = null;
-                              historyTo = null;
-                            }),
-                            child: const Text('Effacer les dates'),
-                          ),
-                      ],
                     ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: tab == 2
-                        ? board(tickets)
-                        : tickets.isEmpty
-                        ? empty()
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 100),
-                            itemCount: tickets.length,
-                            itemBuilder: (_, i) => ticketCard(tickets[i]),
-                          ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (tab == 4)
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  icon: const Icon(Icons.calendar_month),
+                                  label: Text(
+                                    historyFrom == null
+                                        ? 'Depuis…'
+                                        : dateLabel(
+                                            historyFrom!.toIso8601String(),
+                                          ),
+                                  ),
+                                  onPressed: () async {
+                                    final d = await showDatePicker(
+                                      context: context,
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime(2100),
+                                      initialDate:
+                                          historyFrom ?? DateTime.now(),
+                                    );
+                                    if (d != null) {
+                                      setState(() => historyFrom = d);
+                                    }
+                                  },
+                                ),
+                                TextButton(
+                                  onPressed: () async {
+                                    final d = await showDatePicker(
+                                      context: context,
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime(2100),
+                                      initialDate: historyTo ?? DateTime.now(),
+                                    );
+                                    if (d != null) {
+                                      setState(() => historyTo = d);
+                                    }
+                                  },
+                                  child: Text(
+                                    historyTo == null
+                                        ? 'Jusqu’au…'
+                                        : dateLabel(
+                                            historyTo!.toIso8601String(),
+                                          ),
+                                  ),
+                                ),
+                                if (historyFrom != null || historyTo != null)
+                                  TextButton(
+                                    onPressed: () => setState(() {
+                                      historyFrom = null;
+                                      historyTo = null;
+                                    }),
+                                    child: const Text('Effacer les dates'),
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: tab == 2
+                          ? Padding(
+                              padding: const EdgeInsets.only(left: 20),
+                              child: board(tickets),
+                            )
+                          : tickets.isEmpty
+                          ? empty()
+                          : RefreshIndicator(
+                              onRefresh: refresh,
+                              child: ListView.builder(
+                                padding: EdgeInsets.fromLTRB(
+                                  20,
+                                  rows ? 0 : 4,
+                                  20,
+                                  100,
+                                ),
+                                itemCount: tickets.length,
+                                itemBuilder: (_, i) => ticketCard(tickets[i]),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -901,157 +909,59 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Widget ticketCard(Map<String, dynamic> t) {
+    final today =
+        DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
+    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
+    final due = DateTime.tryParse(t['dueDate']?.toString() ?? '');
+    final start = DateTime.tryParse(t['startDate']?.toString() ?? '');
     final overdue =
-        t['dueDate'] != null &&
+        due != null &&
         t['dueDate'].toString().compareTo(data!['today'].toString()) < 0 &&
-        t['stageId'] != 'done' &&
-        t['stageId'] != 'abandoned';
-    final check = maps(t['checklist']);
-    final names = strings(tab == 4 ? t['performers'] : t['assignees'])
-        .map(memberName)
-        .join(' + ');
+        !closed;
+    final members = maps(data!['members']);
+    final people = [
+      for (final id in strings(tab == 4 ? t['performers'] : t['assignees']))
+        (memberName(id), members.indexWhere((m) => m['id'] == id)),
+    ].where((p) => p.$2 >= 0).toList();
     final stage =
         maps(data!['stages'])
             .where((s) => s['id'] == t['stageId'])
-            .map((s) => s['name'])
+            .map((s) => s['name'].toString())
             .firstOrNull ??
-        {
-          'backlog': 'Backlog',
-          'done': 'Terminé',
-          'abandoned': 'Abandonné',
-        }[t['stageId']];
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => openTicket(t),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'F-${t['number']}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    t['kind'] == 'wish'
-                        ? Icons.auto_awesome
-                        : Icons.check_circle_outline,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    t['kind'] == 'wish' ? 'Envie' : 'Obligation',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                t['title'],
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 5,
-                children: [
-                  Text(
-                    priorityName(t['priority']),
-                    style: TextStyle(
-                      color: priorityColor(
-                        t['priority'],
-                        Theme.of(context).brightness,
-                      ),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (tab != 2)
-                    Text(
-                      stage?.toString() ?? '',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ...maps(data!['tags'])
-                      .where((tag) => strings(t['tagIds']).contains(tag['id']))
-                      .map(
-                        (tag) => Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Color(
-                              int.parse(
-                                tag['color'].toString().replaceFirst('#', 'FF'),
-                                radix: 16,
-                              ),
-                            ).withValues(alpha: .12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            tag['name'],
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 14,
-                runSpacing: 6,
-                children: [
-                  Text(
-                    names.isEmpty ? 'À attribuer' : names,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (t['startDate'] != null)
-                    Text(
-                      'Début ${dateLabel(t['startDate'])}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  if (t['dueDate'] != null)
-                    Text(
-                      '${overdue ? 'En retard · ' : ''}Échéance ${dateLabel(t['dueDate'])}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: overdue
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  if (check.isNotEmpty)
-                    Text(
-                      '${check.where((c) => c['done'] == true).length}/${check.length} étapes',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  if (maps(t['comments']).isNotEmpty)
-                    Text(
-                      '${maps(t['comments']).length} commentaires',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        {'backlog': 'Backlog'}[t['stageId']];
+    final firstTag = maps(data!['tags'])
+        .where((tag) => strings(t['tagIds']).contains(tag['id']))
+        .map((tag) => tag['name'].toString())
+        .firstOrNull;
+    final closedAt = DateTime.tryParse(t['closedAt']?.toString() ?? '');
+    final when = closed
+        ? (closedAt == null
+              ? null
+              : '${t['stageId'] == 'done' ? 'Fait' : 'Abandonné'} ${relativeDay(closedAt.toLocal(), today).toLowerCase()}')
+        : due != null
+        ? relativeDay(due, today)
+        : start != null
+        ? 'Dès ${relativeDay(start, today).toLowerCase()}'
+        : null;
+    final check = maps(t['checklist']);
+    return TaskTile(
+      onTap: () => openTicket(t),
+      task: TaskView(
+        title: t['title'].toString(),
+        meta: [?when, if (tab != 2 && !closed) ?stage, ?firstTag].join(' · '),
+        badge: overdue
+            ? TaskBadge.late
+            : closed
+            ? null
+            : switch (t['priority']) {
+                'urgent' => TaskBadge.urgent,
+                'high' => TaskBadge.high,
+                _ => null,
+              },
+        done: check.where((c) => c['done'] == true).length,
+        total: check.length,
+        comments: maps(t['comments']).length,
+        people: people,
       ),
     );
   }
