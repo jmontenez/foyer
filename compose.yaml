@@ -1,0 +1,71 @@
+name: foyer
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
+    environment:
+      POSTGRES_DB: foyer
+      POSTGRES_USER: foyer
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    secrets: [database_password]
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U foyer -d foyer]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      PublicOrigin: ${PUBLIC_ORIGIN:?Configure PUBLIC_ORIGIN}
+      AllowedEmails: ${ALLOWED_EMAILS:?Configure ALLOWED_EMAILS}
+      GoogleClientId: ${GOOGLE_CLIENT_ID:?Configure GOOGLE_CLIENT_ID}
+      GoogleAudiences: ${GOOGLE_CLIENT_ID}
+      GoogleClientSecret_FILE: /run/secrets/google_client_secret
+      DatabasePasswordFile: /run/secrets/database_password
+      DatabaseHost: db
+      ImagesPath: /data/images
+      FirebaseCredentialFile: /run/secrets/firebase_credentials
+      FirebaseProjectId: ${FIREBASE_PROJECT_ID:?Configure FIREBASE_PROJECT_ID}
+      WorkersEnabled: ${WORKERS_ENABLED:-false}
+    secrets: [database_password, google_client_secret, firebase_credentials]
+    ports: ["127.0.0.1:5080:8080"]
+    volumes: [images:/data/images, keyring:/home/app/.aspnet/DataProtection-Keys]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, outbound]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, /app/Foyer.Api, --healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  database:
+  images:
+  keyring:
+networks:
+  internal:
+    internal: true
+  outbound:
+secrets:
+  database_password:
+    file: ${FOYER_SECRETS_DIR:-./.secrets}/database-password
+  google_client_secret:
+    file: ${FOYER_SECRETS_DIR:-./.secrets}/google-client-secret
+  firebase_credentials:
+    file: ${FOYER_SECRETS_DIR:-./.secrets}/firebase-service-account.json
