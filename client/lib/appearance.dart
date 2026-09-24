@@ -159,6 +159,14 @@ const palettes = [
     bold: true,
   ),
   AppPalette(
+    'ink-coral',
+    'Encre & corail',
+    Color(0xFF2B59C3),
+    Color(0xFFC0512F),
+    Color(0xFFFBFAF7),
+    bold: true,
+  ),
+  AppPalette(
     'fuchsia-lemon',
     'Fuchsia & citron',
     Color(0xFFD6207C),
@@ -179,9 +187,158 @@ Color readableOn(Color background) {
 
 AppPalette paletteById(String? id) =>
     palettes.firstWhere((p) => p.id == id, orElse: () => palettes[1]);
-final selectedPalette = ValueNotifier<String>('sage');
 
-ThemeData buildAppTheme(AppPalette palette) {
+/// Couple de polices embarquées : titres ([display]) et texte courant ([body]).
+/// Null = police du système. Ajouter l’identifiant à Appearance.FontIds côté serveur.
+class FontPair {
+  final String id, name;
+  final String? display, body;
+  const FontPair(this.id, this.name, this.display, this.body);
+}
+
+const fontPairs = [
+  FontPair('system', 'Système', null, null),
+  FontPair('grotesk', 'Grotesk', 'SpaceGrotesk', 'DMSans'),
+  FontPair('serif', 'Fraunces', 'Fraunces', 'Atkinson'),
+  FontPair('manrope', 'Manrope', 'Manrope', 'Manrope'),
+];
+
+FontPair fontById(String? id) =>
+    fontPairs.firstWhere((f) => f.id == id, orElse: () => fontPairs.first);
+
+/// Jetons de design choisis par un membre ; tous les écrans les lisent via le thème.
+@immutable
+class AppAppearance {
+  final String paletteId, fontId, listStyle, density, corners;
+  const AppAppearance({
+    this.paletteId = 'sage',
+    this.fontId = 'system',
+    this.listStyle = 'cards',
+    this.density = 'comfortable',
+    this.corners = 'soft',
+  });
+
+  /// Valeurs inconnues ou absentes (anciennes données) : réglage neutre.
+  factory AppAppearance.fromMember(Map<dynamic, dynamic>? m) => AppAppearance(
+    paletteId: paletteById(m?['paletteId']?.toString()).id,
+    fontId: fontById(m?['fontId']?.toString()).id,
+    listStyle: m?['listStyle'] == 'rows' ? 'rows' : 'cards',
+    density: m?['density'] == 'compact' ? 'compact' : 'comfortable',
+    corners: m?['corners'] == 'sharp' ? 'sharp' : 'soft',
+  );
+
+  AppAppearance copyWith({
+    String? paletteId,
+    String? fontId,
+    String? listStyle,
+    String? density,
+    String? corners,
+  }) => AppAppearance(
+    paletteId: paletteId ?? this.paletteId,
+    fontId: fontId ?? this.fontId,
+    listStyle: listStyle ?? this.listStyle,
+    density: density ?? this.density,
+    corners: corners ?? this.corners,
+  );
+
+  Map<String, String> toJson() => {
+    'paletteId': paletteId,
+    'fontId': fontId,
+    'listStyle': listStyle,
+    'density': density,
+    'corners': corners,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppAppearance &&
+      other.paletteId == paletteId &&
+      other.fontId == fontId &&
+      other.listStyle == listStyle &&
+      other.density == density &&
+      other.corners == corners;
+
+  @override
+  int get hashCode =>
+      Object.hash(paletteId, fontId, listStyle, density, corners);
+}
+
+/// Styles prêts à l’emploi : un choix règle tous les jetons, affinables ensuite.
+class StylePreset {
+  final String id, name, description;
+  final AppAppearance appearance;
+  const StylePreset(this.id, this.name, this.description, this.appearance);
+}
+
+const stylePresets = [
+  StylePreset(
+    'braise',
+    'Braise',
+    'Sombre · cartes',
+    AppAppearance(paletteId: 'ember-night', fontId: 'grotesk'),
+  ),
+  StylePreset(
+    'sauge',
+    'Sauge',
+    'Clair · cartes',
+    AppAppearance(paletteId: 'sage', fontId: 'serif'),
+  ),
+  StylePreset(
+    'liste',
+    'Liste',
+    'Clair · lignes',
+    AppAppearance(
+      paletteId: 'ink-coral',
+      fontId: 'manrope',
+      listStyle: 'rows',
+      density: 'compact',
+    ),
+  ),
+];
+
+StylePreset? presetOf(AppAppearance a) =>
+    stylePresets.where((p) => p.appearance == a).firstOrNull;
+
+final selectedAppearance = ValueNotifier<AppAppearance>(const AppAppearance());
+
+/// Jetons non couverts par ThemeData, lus par les composants de Foyer.
+@immutable
+class FoyerTokens extends ThemeExtension<FoyerTokens> {
+  final double radius;
+  final bool compact;
+  final bool rows;
+  final String? displayFont;
+  const FoyerTokens({
+    required this.radius,
+    required this.compact,
+    required this.rows,
+    this.displayFont,
+  });
+
+  @override
+  FoyerTokens copyWith({
+    double? radius,
+    bool? compact,
+    bool? rows,
+    String? displayFont,
+  }) => FoyerTokens(
+    radius: radius ?? this.radius,
+    compact: compact ?? this.compact,
+    rows: rows ?? this.rows,
+    displayFont: displayFont ?? this.displayFont,
+  );
+
+  @override
+  FoyerTokens lerp(covariant FoyerTokens? other, double t) =>
+      other == null || t < .5 ? this : other;
+}
+
+ThemeData buildAppTheme(AppAppearance appearance) {
+  final palette = paletteById(appearance.paletteId);
+  final font = fontById(appearance.fontId);
+  final sharp = appearance.corners == 'sharp';
+  final radius = sharp ? 8.0 : 20.0;
+  final fieldRadius = sharp ? 6.0 : 14.0;
   final brightness = palette.dark ? Brightness.dark : Brightness.light;
   final accent = ColorScheme.fromSeed(
     seedColor: palette.accent,
@@ -213,8 +370,12 @@ ThemeData buildAppTheme(AppPalette palette) {
           palette.background,
         )
       : Colors.white;
-  return ThemeData(
+  final base = ThemeData(
     useMaterial3: true,
+    fontFamily: font.body,
+    visualDensity: appearance.density == 'compact'
+        ? VisualDensity.compact
+        : VisualDensity.standard,
     scaffoldBackgroundColor: palette.background,
     colorScheme: colors,
     appBarTheme: AppBarTheme(
@@ -226,7 +387,7 @@ ThemeData buildAppTheme(AppPalette palette) {
       color: card,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radius),
         side: BorderSide(color: colors.outlineVariant),
       ),
     ),
@@ -234,7 +395,7 @@ ThemeData buildAppTheme(AppPalette palette) {
       filled: true,
       fillColor: card,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(fieldRadius),
         borderSide: BorderSide(color: colors.outlineVariant),
       ),
     ),
@@ -245,8 +406,35 @@ ThemeData buildAppTheme(AppPalette palette) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: sharp
+            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+            : const StadiumBorder(),
       ),
     ),
+  );
+  // Titres dans la police d’affichage ; le texte courant garde la police de lecture.
+  final display = font.display;
+  final text = base.textTheme;
+  return base.copyWith(
+    textTheme: display == null
+        ? text
+        : text.copyWith(
+            displayLarge: text.displayLarge?.copyWith(fontFamily: display),
+            displayMedium: text.displayMedium?.copyWith(fontFamily: display),
+            displaySmall: text.displaySmall?.copyWith(fontFamily: display),
+            headlineLarge: text.headlineLarge?.copyWith(fontFamily: display),
+            headlineMedium: text.headlineMedium?.copyWith(fontFamily: display),
+            headlineSmall: text.headlineSmall?.copyWith(fontFamily: display),
+            titleLarge: text.titleLarge?.copyWith(fontFamily: display),
+          ),
+    extensions: [
+      FoyerTokens(
+        radius: radius,
+        compact: appearance.density == 'compact',
+        rows: appearance.listStyle == 'rows',
+        displayFont: display,
+      ),
+    ],
   );
 }
 
@@ -260,7 +448,7 @@ class _PalettePickerState extends State<PalettePicker> {
   @override
   Widget build(BuildContext context) => DefaultTabController(
     length: paletteTabs.length,
-    initialIndex: paletteById(selectedPalette.value).bold ? 1 : 0,
+    initialIndex: paletteById(selectedAppearance.value.paletteId).bold ? 1 : 0,
     child: SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -302,8 +490,10 @@ class _PalettePickerState extends State<PalettePicker> {
                 ),
                 const Spacer(),
                 FilledButton(
-                  onPressed: () =>
-                      Navigator.pop(context, selectedPalette.value),
+                  onPressed: () => Navigator.pop(
+                    context,
+                    selectedAppearance.value.paletteId,
+                  ),
                   child: const Text('Enregistrer mes couleurs'),
                 ),
               ],
@@ -315,7 +505,7 @@ class _PalettePickerState extends State<PalettePicker> {
   );
 
   Widget _tile(AppPalette p) {
-    final selected = selectedPalette.value == p.id;
+    final selected = selectedAppearance.value.paletteId == p.id;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Semantics(
@@ -349,7 +539,11 @@ class _PalettePickerState extends State<PalettePicker> {
           title: Text(p.name),
           subtitle: p.dark ? const Text('Thème sombre') : null,
           trailing: selected ? const Icon(Icons.check_circle) : null,
-          onTap: () => setState(() => selectedPalette.value = p.id),
+          onTap: () => setState(
+            () => selectedAppearance.value = selectedAppearance.value.copyWith(
+              paletteId: p.id,
+            ),
+          ),
         ),
       ),
     );
@@ -360,4 +554,215 @@ class _PalettePickerState extends State<PalettePicker> {
     height: 24,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
+}
+
+/// Écran Apparence : styles prêts à l’emploi puis réglages fins, prévisualisés en direct.
+/// Renvoie l’apparence à enregistrer, ou null si l’utilisateur annule.
+class AppearancePage extends StatefulWidget {
+  final AppAppearance initial;
+  const AppearancePage({super.key, required this.initial});
+  @override
+  State<AppearancePage> createState() => _AppearancePageState();
+}
+
+class _AppearancePageState extends State<AppearancePage> {
+  late AppAppearance current = widget.initial;
+
+  void choose(AppAppearance value) {
+    setState(() => current = value);
+    selectedAppearance.value = value;
+  }
+
+  Future<void> choosePalette() async {
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * .85,
+        child: const PalettePicker(),
+      ),
+    );
+    choose(id == null ? current : current.copyWith(paletteId: id));
+  }
+
+  Widget heading(String label) => Padding(
+    padding: const EdgeInsets.only(top: 20, bottom: 10),
+    child: Text(
+      label.toUpperCase(),
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: .8,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    ),
+  );
+
+  Widget segmented(
+    String label,
+    List<(String, String, String?)> options,
+    String value,
+    AppAppearance Function(String) apply,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label),
+        const SizedBox(height: 8),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: [
+            for (final (id, name, family) in options)
+              ButtonSegment(
+                value: id,
+                label: Text(name, style: TextStyle(fontFamily: family)),
+              ),
+          ],
+          selected: {value},
+          onSelectionChanged: (v) => choose(apply(v.first)),
+        ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Annuler',
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Apparence'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, current),
+              child: const Text('Enregistrer'),
+            ),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+        children: [
+          heading('Style'),
+          Row(
+            children: [
+              for (final preset in stylePresets) ...[
+                if (preset != stylePresets.first) const SizedBox(width: 10),
+                Expanded(child: presetCard(preset, colors)),
+              ],
+            ],
+          ),
+          heading('Réglages fins'),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Couleurs'),
+              subtitle: Text(paletteById(current.paletteId).name),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: choosePalette,
+            ),
+          ),
+          const SizedBox(height: 16),
+          segmented(
+            'Police',
+            [for (final f in fontPairs) (f.id, f.name, f.display)],
+            current.fontId,
+            (v) => current.copyWith(fontId: v),
+          ),
+          segmented(
+            'Densité',
+            [('comfortable', 'Aérée', null), ('compact', 'Compacte', null)],
+            current.density,
+            (v) => current.copyWith(density: v),
+          ),
+          segmented(
+            'Angles',
+            [('soft', 'Doux', null), ('sharp', 'Marqués', null)],
+            current.corners,
+            (v) => current.copyWith(corners: v),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Vos choix vous suivent sur vos appareils ; l’autre membre garde les siens.',
+            style: TextStyle(color: colors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget presetCard(StylePreset preset, ColorScheme colors) {
+    final palette = paletteById(preset.appearance.paletteId);
+    final selected = preset.appearance == current;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '${preset.name}, ${preset.description}',
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => choose(preset.appearance),
+        child: Ink(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardTheme.color,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected ? colors.primary : colors.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: palette.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: colors.outlineVariant),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final c in [palette.primary, palette.accent])
+                      Container(
+                        width: 18,
+                        height: 18,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                preset.name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontFamily: fontById(preset.appearance.fontId).display,
+                ),
+              ),
+              Text(
+                preset.description,
+                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

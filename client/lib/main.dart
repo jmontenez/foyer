@@ -63,6 +63,19 @@ Color priorityColor(String p, [Brightness brightness = Brightness.light]) =>
 Future<void> backgroundMessage(RemoteMessage message) async {}
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    for (final (family, file) in [
+      ('Space Grotesk', 'SpaceGrotesk'),
+      ('DM Sans', 'DMSans'),
+      ('Fraunces', 'Fraunces'),
+      ('Atkinson Hyperlegible', 'Atkinson'),
+      ('Manrope', 'Manrope'),
+    ]) {
+      yield LicenseEntryWithLineBreaks([
+        family,
+      ], await rootBundle.loadString('fonts/$file-OFL.txt'));
+    }
+  });
   await api.initialize();
   if (!kIsWeb && const bool.fromEnvironment('FIREBASE_ENABLED')) {
     await Firebase.initializeApp(
@@ -81,13 +94,13 @@ Future<void> main() async {
 class FoyerApp extends StatelessWidget {
   const FoyerApp({super.key});
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<String>(
-    valueListenable: selectedPalette,
-    builder: (context, paletteId, _) => MaterialApp(
+  Widget build(BuildContext context) => ValueListenableBuilder<AppAppearance>(
+    valueListenable: selectedAppearance,
+    builder: (context, appearance, _) => MaterialApp(
       title: 'Foyer',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: messenger,
-      theme: buildAppTheme(paletteById(paletteId)),
+      theme: buildAppTheme(appearance),
       home: const Home(),
     ),
   );
@@ -172,7 +185,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         setState(() {
           data = result;
           if (!choosingPalette) {
-            selectedPalette.value = paletteById(result['me']['paletteId']).id;
+            selectedAppearance.value = AppAppearance.fromMember(result['me']);
           }
           loading = false;
           error = null;
@@ -1046,27 +1059,21 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   Future<void> appearanceDialog() async {
     if (choosingPalette) return;
     choosingPalette = true;
+    final initial = selectedAppearance.value;
     try {
-      final choice = await showModalBottomSheet<String>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (context) => SizedBox(
-          height: MediaQuery.sizeOf(context).height * .85,
-          child: const PalettePicker(),
-        ),
+      final choice = await Navigator.push<AppAppearance>(
+        context,
+        MaterialPageRoute(builder: (_) => AppearancePage(initial: initial)),
       );
-      if (choice != null) {
-        final me = await api.call('PUT', '/api/v1/appearance', {
-          'paletteId': choice,
-        });
+      if (choice != null && choice != initial) {
+        final me = await api.call('PUT', '/api/v1/appearance', choice.toJson());
         if (mounted && data != null) setState(() => data!['me'] = me);
       }
     } catch (e) {
       message(e);
     } finally {
       choosingPalette = false;
-      selectedPalette.value = paletteById(data?['me']?['paletteId']).id;
+      selectedAppearance.value = AppAppearance.fromMember(data?['me']);
     }
   }
 
@@ -1135,8 +1142,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   ),
                   ListTile(
                     leading: const Icon(Icons.palette_outlined),
-                    title: const Text('Couleurs de l’application'),
-                    subtitle: Text(paletteById(me['paletteId']).name),
+                    title: const Text('Apparence'),
+                    subtitle: Text(
+                      presetOf(AppAppearance.fromMember(me))?.name ??
+                          paletteById(me['paletteId']).name,
+                    ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
                       Navigator.pop(c);

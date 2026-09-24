@@ -65,6 +65,41 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Polices embarquées (licence SIL OFL, textes dans fonts/) : aucune requête vers Google Fonts.
+  # Graisses fixes générées depuis les polices variables officielles (fontTools instancer).
+  assets:
+    - fonts/SpaceGrotesk-OFL.txt
+    - fonts/DMSans-OFL.txt
+    - fonts/Fraunces-OFL.txt
+    - fonts/Atkinson-OFL.txt
+    - fonts/Manrope-OFL.txt
+  fonts:
+    - family: SpaceGrotesk
+      fonts:
+        - asset: fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
+    - family: DMSans
+      fonts:
+        - asset: fonts/DMSans-Regular.ttf
+        - asset: fonts/DMSans-Bold.ttf
+          weight: 700
+    - family: Fraunces
+      fonts:
+        - asset: fonts/Fraunces-Bold.ttf
+          weight: 700
+    - family: Atkinson
+      fonts:
+        - asset: fonts/AtkinsonHyperlegible-Regular.ttf
+        - asset: fonts/AtkinsonHyperlegible-Bold.ttf
+          weight: 700
+    - family: Manrope
+      fonts:
+        - asset: fonts/Manrope-Regular.ttf
+        - asset: fonts/Manrope-Bold.ttf
+          weight: 700
+        - asset: fonts/Manrope-ExtraBold.ttf
+          weight: 800
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -71,6 +71,8 @@ Onze palettes livrées dans Réglages → Couleurs de l’application. Tests sup
 
 Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) et **Marquées** (huit palettes aux couleurs appliquées telles quelles, dont cinq thèmes sombres : Braise & nuit, Citron vert & charbon, Rubis & onyx, Violet électrique, Abysses & cyan). Le sélecteur s’ouvre sur l’onglet de la palette choisie. Tests : contraste ≥ 4,5 sur boutons, accents, fond et cartes pour les dix-neuf palettes, couleurs exactes et thème sombre effectif pour les palettes marquées, identifiants acceptés par le serveur ; recette Chromium de l’onglet Marquées (captures `palettes-marquees-mobile.png`, `ember-night-mobile.png`).
 
+**Jetons de design (2026-09-24)** : l’apparence de chaque membre = palette, police (Système, Grotesk = Space Grotesk + DM Sans, Fraunces = Fraunces + Atkinson Hyperlegible, Manrope), affichage des tâches (cartes/lignes, appliqué avec les nouveaux écrans), densité (aérée/compacte) et angles (doux/marqués). Écran **Réglages → Apparence** : styles prêts à l’emploi Braise, Sauge et Liste, puis réglages fins, aperçu en direct, Enregistrer/Annuler. Polices embarquées (graisses fixes générées depuis les polices variables officielles, licence OFL dans `client/fonts/`, visibles dans les licences de l’application) : aucune requête vers Google Fonts. Anciennes versions de l’application compatibles (palette seule).
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique

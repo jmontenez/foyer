@@ -96,6 +96,13 @@ assert updated["paletteId"] == "sky-orange"
 assert updated["digestTime"] == state["me"]["digestTime"]
 assert updated["digestEnabled"] == state["me"]["digestEnabled"]
 call("PUT", "/api/v1/appearance", {"paletteId": "unknown"}, a, expected=400)
+# Jetons de design : validés ensemble, conservés quand ils sont omis.
+tokens = call("PUT", "/api/v1/appearance", {"paletteId": "ember-night", "fontId": "grotesk", "listStyle": "rows", "density": "compact", "corners": "sharp"}, a)
+assert (tokens["fontId"], tokens["listStyle"], tokens["density"], tokens["corners"]) == ("grotesk", "rows", "compact", "sharp"), tokens
+call("PUT", "/api/v1/appearance", {"fontId": "comic-sans"}, a, expected=400)
+kept = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
+assert (kept["fontId"], kept["density"]) == ("grotesk", "compact"), kept
+call("PUT", "/api/v1/appearance", {"fontId": "system", "listStyle": "cards", "density": "comfortable", "corners": "soft"}, a)
 assert call("GET", "/api/v1/state", token=b)["me"]["paletteId"] == other_palette
 second_session = call("POST", "/auth/demo/0")["token"]
 assert (
