@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: foyer
+      POSTGRES_DB: foyer
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U foyer -d foyer]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [internal]
+  api:
+    image: foyer:local
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: 8080
+      PublicOrigin: http://localhost:5081
+      AllowedEmails: camille@example.invalid,alex@example.invalid
+      ConnectionStrings__Database: Host=db;Database=foyer;Username=foyer
+      DemoMode: 'false'
+      WorkersEnabled: 'false'
+      ImagesPath: /data/images
+    volumes: [images:/data/images]
+    networks: [internal]
+volumes:
+  database:
+  images:
+networks:
+  internal:
+    internal: true

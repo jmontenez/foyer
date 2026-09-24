@@ -1,0 +1,20 @@
+using Foyer;
+using Xunit;
+namespace Foyer.Tests;
+
+public class RulesTests
+{
+    private static Household Home() => new() { Members = [new() { Id = "a", Subject = "a", Name = "Alice" }, new() { Id = "b", Subject = "b", Name = "Bob" }] };
+    private static TicketInput Input(Ticket t, string stage = "todo", List<string>? performers = null) => new(t.Title, "", "obligation", "normal", stage, t.StartDate, t.DueDate, t.Assignees, performers ?? [], [], [], t.Version);
+    [Fact] public void UnscheduledTodoIsNotToday() { var h = Home(); var t = new Ticket { Title = "Peindre", StageId = "todo" }; Assert.False(Rules.TodayView(h, t, new(2026, 9, 24))); Assert.False(Rules.WeekView(h, t, new(2026, 9, 24))); }
+    [Fact] public void ClosingRequiresExplicitPerformers() { var h = Home(); var t = new Ticket { Title = "Peindre", Assignees = ["a"] }; Assert.Throws<RuleException>(() => Rules.Apply(h, t, Input(t, "done"), "a", DateTimeOffset.UtcNow)); Rules.Apply(h, t, Input(t, "done", ["b"]), "a", DateTimeOffset.UtcNow); Assert.Equal(["b"], t.Performers); Assert.Equal(["a"], t.Assignees); }
+    [Fact] public void StaleEditIsRejected() { var h = Home(); var t = new Ticket { Title = "Peindre", Version = 2 }; var ex = Assert.Throws<RuleException>(() => Rules.Apply(h, t, Input(t) with { Version = 1 }, "a", DateTimeOffset.UtcNow)); Assert.Equal(409, ex.Status); }
+    [Fact] public void DatesMustBeOrdered() { var h = Home(); var t = new Ticket { Title = "Peindre" }; Assert.Throws<RuleException>(() => Rules.Apply(h, t, Input(t) with { StartDate = new(2026, 10, 2), DueDate = new(2026, 10, 1) }, "a", DateTimeOffset.UtcNow)); }
+    [Fact] public void ActivationDoesNotDowngradeOtherStagesAndIsIdempotent() { var h = Home(); h.Members.ForEach(m => m.DigestEnabled = false); h.Tickets = [new() { StageId = "backlog", StartDate = new(2026, 9, 24) }, new() { StageId = "doing", StartDate = new(2026, 9, 24) }, new() { StageId = "done", StartDate = new(2026, 9, 24) }]; var now = new DateTimeOffset(2026, 9, 24, 8, 0, 0, TimeSpan.Zero); Rules.Schedule(h, now); Rules.Schedule(h, now); Assert.Equal("todo", h.Tickets[0].StageId); Assert.Equal("doing", h.Tickets[1].StageId); Assert.Equal("done", h.Tickets[2].StageId); Assert.Equal(2, h.Notifications.Count); }
+    [Fact] public void DigestIsPerMemberAndPerLocalDayEvenAcrossDst() { var h = Home(); h.Members[0].DigestTime = "02:30"; h.Members[1].DigestTime = "12:00"; Rules.Schedule(h, new(2026, 10, 25, 0, 35, 0, TimeSpan.Zero)); Rules.Schedule(h, new(2026, 10, 25, 1, 35, 0, TimeSpan.Zero)); Assert.Single(h.Notifications); Assert.Equal("a", h.Notifications[0].MemberId); }
+    [Fact] public void MaintenanceStopsAllSchedules() { var h = Home(); h.Maintenance = true; h.Tickets.Add(new() { StartDate = new(2020, 1, 1) }); Rules.Schedule(h, DateTimeOffset.UtcNow); Assert.Empty(h.Notifications); Assert.Equal("backlog", h.Tickets[0].StageId); }
+    [Fact] public void WeekStopsOnSunday() { var h = Home(); var monday = new DateOnly(2026, 9, 21); Assert.True(Rules.WeekView(h, new() { StartDate = monday.AddDays(6) }, monday)); Assert.False(Rules.WeekView(h, new() { StartDate = monday.AddDays(7) }, monday)); }
+    [Fact] public void ReopeningPreservesEvidenceAndClearsCurrentCompletion() { var h = Home(); var t = new Ticket { Title = "Peindre" }; Rules.Apply(h, t, Input(t, "done", ["a", "b"]), "a", DateTimeOffset.UtcNow); Rules.Apply(h, t, Input(t, "todo"), "b", DateTimeOffset.UtcNow); Assert.Empty(t.Performers); Assert.Null(t.ClosedAt); Assert.Contains(t.History, e => e.Action == "performers" && e.Detail.Contains("a")); }
+    [Fact] public void CustomDoingStageAppearsWithoutDates() { var h = Home(); h.Stages.Add(new("custom", "En cuisine", "doing", 3)); Assert.True(Rules.TodayView(h, new() { StageId = "custom" }, new(2026, 9, 24))); }
+    [Fact] public void DueBacklogTicketIsVisibleToday() { var h = Home(); Assert.True(Rules.TodayView(h, new() { StageId = "backlog", DueDate = new(2026, 9, 24) }, new(2026, 9, 24))); }
+}
