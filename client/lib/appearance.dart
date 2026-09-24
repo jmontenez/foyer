@@ -679,6 +679,12 @@ class _AppearancePageState extends State<AppearancePage> {
             (v) => current.copyWith(fontId: v),
           ),
           segmented(
+            'Affichage des tâches',
+            [('cards', 'Cartes', null), ('rows', 'Lignes', null)],
+            current.listStyle,
+            (v) => current.copyWith(listStyle: v),
+          ),
+          segmented(
             'Densité',
             [('comfortable', 'Aérée', null), ('compact', 'Compacte', null)],
             current.density,

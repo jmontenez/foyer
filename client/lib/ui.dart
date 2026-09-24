@@ -547,3 +547,291 @@ class FloatingNav extends StatelessWidget {
     );
   }
 }
+
+/// Titre de section d’une liste (« EN RETARD 1 »).
+class SectionLabel extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color? color;
+  const SectionLabel(this.label, this.count, {super.key, this.color});
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Semantics(
+      header: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
+        child: Row(
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: .8,
+                color: color ?? c.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$count',
+              style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bandeau de chiffres d’Aujourd’hui : total, retards (filtre), répartition par personne.
+class SummaryTiles extends StatelessWidget {
+  final int total, late;
+  final bool lateOnly;
+  final VoidCallback onLate;
+  final List<(String, int, int)> people;
+  const SummaryTiles({
+    super.key,
+    required this.total,
+    required this.late,
+    required this.lateOnly,
+    required this.onLate,
+    required this.people,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = tokensOf(context);
+    final number = TextStyle(
+      fontFamily: t.displayFont,
+      fontSize: 30,
+      fontWeight: FontWeight.w700,
+      height: 1,
+    );
+    Widget tile({
+      required Widget child,
+      Color? color,
+      VoidCallback? onTap,
+      bool selected = false,
+      required String label,
+    }) => Expanded(
+      child: Semantics(
+        label: label,
+        button: onTap != null,
+        selected: selected,
+        excludeSemantics: true,
+        child: Material(
+          color: color ?? Theme.of(context).cardTheme.color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(t.radius - 2),
+            side: BorderSide(
+              color: selected ? c.error : (color ?? c.outlineVariant),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(t.radius - 2),
+            onTap: onTap,
+            child: Padding(
+              padding: EdgeInsets.all(t.compact ? 10 : 14),
+              child: SizedBox(height: 56, child: child),
+            ),
+          ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Row(
+        children: [
+          tile(
+            label: '$total à faire',
+            color: c.primary,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$total', style: number.copyWith(color: c.onPrimary)),
+                Text(
+                  'à faire',
+                  style: TextStyle(
+                    color: c.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          tile(
+            label: '$late en retard${lateOnly ? ', filtre actif' : ''}',
+            onTap: onLate,
+            selected: lateOnly,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '$late',
+                  style: number.copyWith(
+                    color: late > 0 ? c.error : c.onSurface,
+                  ),
+                ),
+                Text('en retard', style: TextStyle(color: c.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          tile(
+            label: people.map((p) => '${p.$1} ${p.$3}').join(', '),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    for (final (i, (name, index, _)) in people.indexed)
+                      Padding(
+                        padding: EdgeInsets.only(left: i == 0 ? 0 : 4),
+                        child: MemberAvatar(name: name, index: index, size: 26),
+                      ),
+                  ],
+                ),
+                Text(
+                  people.map((p) => '${p.$3}').join(' · '),
+                  style: TextStyle(color: c.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Frise des 7 jours de la semaine, avec un point par tâche ; toucher un jour filtre la liste.
+class DayStrip extends StatelessWidget {
+  final List<(DateTime, int)> days;
+  final DateTime today;
+  final DateTime? selected;
+  final ValueChanged<DateTime?> onSelect;
+  const DayStrip({
+    super.key,
+    required this.days,
+    required this.today,
+    required this.selected,
+    required this.onSelect,
+  });
+  static const _letters = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = tokensOf(context);
+    bool same(DateTime a, DateTime? b) =>
+        b != null && a.year == b.year && a.month == b.month && a.day == b.day;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Row(
+        children: [
+          for (final (i, (day, count)) in days.indexed) ...[
+            if (i > 0) const SizedBox(width: 6),
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: same(day, selected),
+                label:
+                    '${relativeDay(day, today)} ${day.day}, ${plural(count, 'tâche')}',
+                excludeSemantics: true,
+                child: Material(
+                  color: same(day, selected)
+                      ? c.primary
+                      : Theme.of(context).cardTheme.color,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(t.radius - 4),
+                    side: BorderSide(
+                      color: same(day, today) && !same(day, selected)
+                          ? c.primary
+                          : c.outlineVariant,
+                    ),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(t.radius - 4),
+                    onTap: () => onSelect(same(day, selected) ? null : day),
+                    child: SizedBox(
+                      height: 64,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _letters[day.weekday - 1],
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: same(day, selected)
+                                  ? c.onPrimary
+                                  : c.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              fontFamily: t.displayFont,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: same(day, selected)
+                                  ? c.onPrimary
+                                  : c.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              for (var k = 0; k < (count > 3 ? 3 : count); k++)
+                                Container(
+                                  width: 5,
+                                  height: 5,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: same(day, selected)
+                                        ? c.onPrimary
+                                        : c.secondaryContainer,
+                                  ),
+                                ),
+                              if (count == 0) const SizedBox(height: 5),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Semaine civile (lundi → dimanche) contenant [day].
+List<DateTime> weekOf(DateTime day) {
+  final monday = _day(day).subtract(Duration(days: day.weekday - 1));
+  return [for (var i = 0; i < 7; i++) monday.add(Duration(days: i))];
+}
+
+/// Libellé de semaine pour l’historique : « Cette semaine », « Semaine dernière », « Semaine du 8 sept. ».
+String weekLabel(DateTime day, DateTime today) {
+  final start = weekOf(day).first, current = weekOf(today).first;
+  final weeks = current.difference(start).inDays ~/ 7;
+  return switch (weeks) {
+    0 => 'Cette semaine',
+    1 => 'Semaine dernière',
+    _ =>
+      'Semaine du ${start.day} ${_months[start.month - 1]}${start.year == today.year ? '' : ' ${start.year}'}',
+  };
+}
