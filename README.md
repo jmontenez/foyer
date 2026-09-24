@@ -1,6 +1,6 @@
 # Foyer
 
-Application personnelle pour deux personnes : APK Android Flutter natif et interface web, API ASP.NET Core 10 et PostgreSQL 17. Hébergement prévu sur le Mac via Docker Compose et HTTPS Tailscale.
+Application personnelle pour deux personnes : APK Android Flutter natif et interface web, API ASP.NET Core 10 et PostgreSQL 17. Hébergement prévu sur le Mac via Docker Compose et Cloudflare Tunnel, à l’adresse `https://foyer.jmops.fr`. Le guide distingue la préparation du tunnel et les adaptations encore requises avant exposition publique.
 
 ## Ce qui est implémenté
 
@@ -12,7 +12,7 @@ Application personnelle pour deux personnes : APK Android Flutter natif et inter
 - Automatisations serveur : activation à la date de début, résumé quotidien à une heure propre à chacun et notifications Android FCM avec reprises.
 - Export chiffré base/images, restauration sur cible vierge et procédure de retour arrière.
 
-Le code est fonctionnel en démonstration locale. **Les parcours Google, la réception FCM sur téléphone, la signature personnelle de l’APK et le déploiement sur le Mac Intel restent à configurer et à valider avec vos comptes et appareils.** Aucun secret de production n’est fourni.
+Le code est fonctionnel en démonstration locale. **Les parcours Google, la réception FCM sur téléphone, le durcissement pour exposition publique et le déploiement sur le Mac Intel restent à configurer et à valider avec vos comptes et appareils.** Aucun secret de production n’est fourni.
 
 ## Essayer sur le poste de développement
 
