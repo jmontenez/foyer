@@ -77,6 +77,8 @@ Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) e
 
 **Listes (2026-09-24)** : Aujourd’hui = bandeau (à faire, en retard — touche pour ne voir que les retards —, répartition par personne) puis sections En retard / Aujourd’hui ; Semaine = frise lundi → dimanche (un point par tâche, toucher un jour pour filtrer) puis tâches par jour (retards et « en cours » sans date rattachés à aujourd’hui) ; Backlog = Tout / Obligations / Envies / Avec date, sections Commence bientôt / Un jour ; Historique = 30 jours (par défaut) / 3 mois / Tout / Période…, regroupé par semaine avec qui a réalisé. Apparence : choix Cartes / Lignes.
 
+**Tableau (2026-09-24)** : sur mobile, sélecteur d’étape avec compteurs et une seule colonne ; glisser une carte à gauche ou à droite la déplace vers l’étape voisine (aperçu de la destination, seuil de 90 px ; mêmes déplacements en actions d’accessibilité) ; enregistrement avec contrôle de version. Colonnes côte à côte au-delà de 900 px. Vérifié dans Chromium : carte « À faire » glissée → « En cours », compteurs mis à jour.
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique

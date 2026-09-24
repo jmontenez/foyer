@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'appearance.dart';
 
@@ -834,4 +835,183 @@ String weekLabel(DateTime day, DateTime today) {
     _ =>
       'Semaine du ${start.day} ${_months[start.month - 1]}${start.year == today.year ? '' : ' ${start.year}'}',
   };
+}
+
+/// Sélecteur d’étape du tableau mobile : une colonne à la fois, avec compteurs.
+class StageSelector extends StatelessWidget {
+  final List<(String, String, int)> stages;
+  final String selected;
+  final ValueChanged<String> onSelect;
+  const StageSelector({
+    super.key,
+    required this.stages,
+    required this.selected,
+    required this.onSelect,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = tokensOf(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: c.surfaceContainerHighest.withValues(alpha: .6),
+        borderRadius: BorderRadius.circular(t.radius - 2),
+      ),
+      child: Row(
+        children: [
+          for (final (id, name, count) in stages)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: id == selected,
+                label: '$name, ${plural(count, 'tâche')}',
+                excludeSemantics: true,
+                child: Material(
+                  color: id == selected
+                      ? Theme.of(context).cardTheme.color
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(t.radius - 6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(t.radius - 6),
+                    onTap: () => onSelect(id),
+                    child: SizedBox(
+                      height: 48,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: id == selected
+                                    ? c.onSurface
+                                    : c.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 22),
+                            height: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: id == selected
+                                  ? c.primary
+                                  : c.outlineVariant,
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: Text(
+                              '$count',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: id == selected
+                                    ? c.onPrimary
+                                    : c.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Glisser une carte vers la gauche ou la droite pour la déplacer vers l’étape voisine.
+/// Les mêmes déplacements sont proposés en actions d’accessibilité (sans geste).
+class SwipeToMove extends StatefulWidget {
+  final Widget child;
+  final String? previous, next;
+  final VoidCallback? onPrevious, onNext;
+  const SwipeToMove({
+    super.key,
+    required this.child,
+    this.previous,
+    this.next,
+    this.onPrevious,
+    this.onNext,
+  });
+  @override
+  State<SwipeToMove> createState() => _SwipeToMoveState();
+}
+
+class _SwipeToMoveState extends State<SwipeToMove> {
+  double dx = 0;
+  static const threshold = 90.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final target = dx > 0 ? widget.previous : widget.next;
+    final armed = dx.abs() >= threshold && target != null;
+    return Semantics(
+      customSemanticsActions: {
+        if (widget.onPrevious != null)
+          CustomSemanticsAction(label: 'Déplacer vers ${widget.previous}'):
+              widget.onPrevious!,
+        if (widget.onNext != null)
+          CustomSemanticsAction(label: 'Déplacer vers ${widget.next}'):
+              widget.onNext!,
+      },
+      child: GestureDetector(
+        onHorizontalDragUpdate: (d) => setState(() {
+          final next = dx + d.delta.dx;
+          // Pas de glissement vers une étape qui n’existe pas.
+          dx =
+              (next > 0 && widget.onPrevious == null) ||
+                  (next < 0 && widget.onNext == null)
+              ? 0
+              : next.clamp(-160.0, 160.0);
+        }),
+        onHorizontalDragEnd: (_) {
+          final action = dx >= threshold
+              ? widget.onPrevious
+              : dx <= -threshold
+              ? widget.onNext
+              : null;
+          setState(() => dx = 0);
+          action?.call();
+        },
+        child: Stack(
+          children: [
+            if (dx != 0)
+              Positioned.fill(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  alignment: dx > 0
+                      ? Alignment.centerLeft
+                      : Alignment.centerRight,
+                  decoration: BoxDecoration(
+                    color: armed ? c.primary : c.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(
+                      tokensOf(context).radius,
+                    ),
+                  ),
+                  child: Text(
+                    '${dx > 0 ? '← ' : ''}${target ?? ''}${dx < 0 ? ' →' : ''}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: armed ? c.onPrimary : c.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            Transform.translate(offset: Offset(dx, 0), child: widget.child),
+          ],
+        ),
+      ),
+    );
+  }
 }
