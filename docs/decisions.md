@@ -13,3 +13,5 @@ Source : cadrage utilisateur et plan approuvé dans la conversation du 24 septem
 - Calendrier, récurrence, mode hors connexion en écriture et notifications web reportés.
 
 Choix techniques de cette implémentation : Flutter, ASP.NET Core 10, PostgreSQL 17, agrégat transactionnel pour deux utilisateurs et fichiers privés. Les sessions sont renouvelées lors d’une restauration ; les anciennes notifications sont neutralisées mais leur journal conservé. Voir architecture et migration pour les limites.
+
+- Accès cible actualisé le 2026-09-24 : Cloudflare Tunnel pour web et API sur `https://foyer.jmops.fr`, domaine conservé chez IONOS et DNS géré par Cloudflare. Remplace Tailscale obligatoire pour les utilisateurs de Foyer ; adaptation/recette publique à réaliser avant activation de la route.
