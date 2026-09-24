@@ -55,7 +55,7 @@ python3 scripts/tests/migration.py
 - [ ] Configurer les deux comptes Google, l’origine HTTPS et les credentials serveur ; valider navigateur et APK avec identités réelles, troisième compte refusé.
 - [ ] Configurer Firebase côté Android/serveur et vérifier commentaire à l’autre personne seulement, résumé aux deux horaires, notification app fermée/verrouillée et ouverture de la bonne vue.
 - [ ] Signer personnellement l’APK, déclarer son certificat OAuth et tester installation puis mise à jour sur les deux téléphones.
-- [ ] Déployer et vérifier le Mac Intel : accès Tailscale simultané avec les usages existants, veille, santé après reboot/déverrouillage, absence de port DB exposé.
+- [ ] Déployer et vérifier le Mac Intel : tunnel Cloudflare sain (y compris après reboot/déverrouillage), veille, absence de port DB exposé, binding API loopback uniquement.
 - [ ] Choisir la destination hors Mac, configurer la sauvegarde quotidienne et tester une restauration depuis cette destination.
 - [ ] Recette navigateur Windows/Mac ; seule la session Chromium locale a été automatisée ici.
 - [ ] Revue humaine et MR sur un dépôt distant à créer/configurer : branche locale `feat/initial-application`, aucune publication ni fusion effectuée.
@@ -67,6 +67,17 @@ Les tests locaux valident le code et les scripts avec des données fictives. Ils
 Onze palettes livrées dans Réglages → Couleurs de l’application. Tests supplémentaires : indépendance entre comptes, persistance dans une nouvelle session, préférences de résumé préservées, identifiants invalides refusés et compatibilité des données antérieures. Recette Chromium mobile : choix violet/bleu nuit, rechargement, aperçu ciel/orange, annulation et enregistrement ; captures `artifacts/browser/palettes-violet-mobile.png` et `sky-orange-mobile.png`. APK debug reconstruit avec numéro de build 2 et signature vérifiée.
 
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
+
+## Adaptation Cloudflare Tunnel — exposition publique
+
+Changements du 2026-09-24 : résolution de l’adresse visiteur via `CLIENT_IP_HEADER` (`CF-Connecting-IP`), limitation de requêtes par visiteur au lieu du pair réseau, budget dédié 30 req/min sur `/auth/*` et `/signin-google`, `no-store` étendu au callback OAuth.
+
+Tests automatisés ajoutés :
+
+- Unitaires : en-tête usurpé ignoré sans proxy configuré, résolution via l’en-tête configuré, retour au pair réseau si valeur absente/non parsable, dernière valeur retenue en cas d’en-têtes multiples, périmètre des routes d’authentification.
+- Intégration : `Cache-Control: no-store` et en-têtes de sécurité sur `/auth/config` et `/api/v1/state`, 429 au 31ᵉ appel d’authentification d’un même visiteur, budgets indépendants entre visiteurs et trafic local, valeur non parsable sans création de partition arbitraire, contrôle « démo locale » insensible à l’en-tête.
+
+Ces tests valident le code sur données fictives ; la recette publique réelle (étape 7 de l’installation) reste à faire avant toute donnée familiale.
 
 ## Correctif Android — build 3
 

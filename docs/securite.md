@@ -6,7 +6,8 @@ Données familiales privées, potentiellement sensibles (santé, habitudes et ph
 
 | Menace | Mesure implémentée | Limite / exploitation |
 |---|---|---|
-| Accès depuis Internet ou LAN | API liée à loopback, entrée HTTPS Tailscale | ACL et partage Tailscale à configurer et tester sur le serveur réel |
+| Accès depuis Internet ou LAN | API liée à loopback, HTTPS public terminé par Cloudflare et acheminé par un tunnel sortant (`cloudflared` local) | Cloudflare voit le trafic en clair et devient un intermédiaire de confiance ; aucun port entrant ouvert sur la box |
+| Abus depuis Internet (force brute, déni applicatif) | Limitation par adresse visiteur `CF-Connecting-IP` (180 req/min), budget dédié plus strict sur `/auth/*` et `/signin-google` (30 req/min) | La confiance dans l’en-tête repose sur le binding loopback du port API : si ce binding change, revoir `CLIENT_IP_HEADER`. Les protections DDoS Cloudflare dépendent de l’offre |
 | Troisième compte | Allowlist de deux emails, identité Google validée et sujet stable | Protéger les comptes Google par MFA/passkeys ; changement de compte à traiter explicitement |
 | Vol de session | Jeton opaque aléatoire, SHA-256 côté base, expiration 30 jours ; cookie HttpOnly/Secure/SameSite, coffre Android | Session utilisable jusqu’à révocation si appareil déverrouillé compromis |
 | Révocation/concurrence | Sessions listées et révocables, revalidation transactionnelle, version des tickets | L’écran distant peut rester affiché jusqu’au prochain polling ; prochaine requête refusée |

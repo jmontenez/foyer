@@ -80,6 +80,7 @@ Copier `.env.example` en `.env`, puis renseigner localement les valeurs suivante
 | `FIREBASE_PROJECT_ID` | `foyer-d02dc` |
 | `ALLOWED_EMAILS` | Les deux adresses Google autorisées, séparées par une virgule |
 | `GOOGLE_CLIENT_ID` | Identifiant du client OAuth Web créé à l’étape 3 |
+| `CLIENT_IP_HEADER` | `CF-Connecting-IP` — adresse visiteur transmise par Cloudflare, utilisée pour la limitation de requêtes. Ne le renseigner que si l’API reste liée à la boucle locale derrière le connecteur ; laisser vide en accès direct sans proxy |
 | `FOYER_SECRETS_DIR` | Chemin absolu du répertoire privé de secrets sur le Mac serveur |
 | `WORKERS_ENABLED` | `false` pendant la première validation |
 
@@ -124,12 +125,13 @@ Si la configuration Android Firebase est retéléchargée après création des c
 
 ## 6. Avant de publier la route Internet
 
-**État au 2026-09-24 : le code actuel a été conçu et testé derrière une entrée privée Tailscale. Ce guide prépare le nouveau déploiement ; il ne signifie pas que les adaptations pour Internet ont été implémentées ou validées.** Le tunnel peut être installé en attendant, mais garder sa route publique désactivée jusqu’à validation de ces points :
+**État au 2026-09-24 (mis à jour) : les adaptations code pour l’exposition publique sont implémentées et couvertes par les tests automatisés.** La limitation de requêtes partitionne par adresse visiteur `CF-Connecting-IP` quand `CLIENT_IP_HEADER` est configuré (fiable uniquement parce que le port API n’est joignable que depuis la boucle locale du Mac, par le connecteur) ; les routes d’authentification (`/auth/*`, `/signin-google`) ont un budget dédié plus strict et toutes les réponses privées portent `Cache-Control: no-store`. Un en-tête usurpé sans proxy configuré est ignoré ; une valeur non parsable retombe sur le pair réseau ; le mode démo reste refusé hors boucle locale et n’existe qu’en Development.
 
-- Gestion du proxy et de l’origine HTTPS revue pour Cloudflare. Le code fixe actuellement l’origine canonique et limite les requêtes par adresse du pair réseau ; derrière le tunnel, cette adresse peut être celle du connecteur pour tous les visiteurs. Adapter et tester la limitation, sans faire confiance à des en-têtes client usurpables.
-- Limites sur les routes d’authentification, taille des requêtes et uploads ; refus anonyme et refus d’un troisième compte testés avec les clients OAuth réels.
-- Pas de mise en cache Cloudflare des réponses privées (`/api/*`, `/auth/*`, `/signin-google`) ; préserver les cookies et les protections applicatives. Les protections Cloudflare disponibles dépendent de l’offre/règles configurées et ne remplacent pas l’autorisation côté Foyer.
-- Validation de la connexion Google et des sessions, révocation, images privées et comportement après erreurs/perte de réseau. Le mode démo ne doit jamais être exposé via le tunnel.
+Garder la route publique désactivée jusqu’à validation de ces points restants, qui exigent les services réels :
+
+- Configuration réelle des clients Google OAuth (web + Android) et du serveur (`.env`, secrets), avec `CLIENT_IP_HEADER=CF-Connecting-IP`.
+- Recette du parcours public avec les vrais comptes : refus anonyme, refus d’un troisième compte, cookies, sessions, révocation, uploads et images privées (étape 7).
+- Vérifier après publication qu’aucune règle de cache Cloudflare ne surcharge le `no-store` applicatif et que l’offre/règles Cloudflare configurées n’interceptent pas l’API de l’APK. Les protections Cloudflare ne remplacent pas l’autorisation côté Foyer.
 
 Une fois ces adaptations livrées et les contrôles préparatoires validés, publier pour la recette réelle, avant toute donnée familiale :
 

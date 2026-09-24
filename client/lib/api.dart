@@ -38,7 +38,7 @@ class Api {
         uri.fragment.isNotEmpty ||
         (uri.path.isNotEmpty && uri.path != '/')) {
       throw ApiError(
-        'Saisissez une adresse HTTPS sans chemin, par exemple https://foyer.votre-reseau.ts.net',
+        'Saisissez une adresse HTTPS sans chemin, par exemple https://foyer.jmops.fr',
         400,
       );
     }
@@ -81,7 +81,7 @@ class Api {
       rethrow;
     } catch (_) {
       throw ApiError(
-        'Serveur injoignable. Vérifiez Tailscale et la connexion du Mac.',
+        'Serveur injoignable. Vérifiez votre connexion et celle du serveur.',
         0,
       );
     }

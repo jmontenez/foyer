@@ -30,6 +30,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_HTTP_PORTS: 8080
       PublicOrigin: ${PUBLIC_ORIGIN:?Configure PUBLIC_ORIGIN}
+      ClientIpHeader: ${CLIENT_IP_HEADER:-}
       AllowedEmails: ${ALLOWED_EMAILS:?Configure ALLOWED_EMAILS}
       GoogleClientId: ${GOOGLE_CLIENT_ID:?Configure GOOGLE_CLIENT_ID}
       GoogleAudiences: ${GOOGLE_CLIENT_ID}
