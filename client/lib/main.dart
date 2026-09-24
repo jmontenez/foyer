@@ -122,6 +122,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   String person = 'all', query = '', tag = 'all';
   bool searching = false;
   DateTime? historyFrom, historyTo;
+  // Filtres propres aux vues : retards (Aujourd’hui), jour (Semaine), type (Backlog), période (Historique).
+  bool lateOnly = false;
+  DateTime? weekDay;
+  String backlogKind = 'all', period = '30';
   Timer? timer;
   bool refreshing = false;
   bool pushInitialized = false;
@@ -438,6 +442,20 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         return false;
       }
       if (tag != 'all' && !strings(t['tagIds']).contains(tag)) return false;
+      if (tab == 3 && backlogKind != 'all') {
+        if (backlogKind == 'dated'
+            ? t['startDate'] == null
+            : t['kind'] != backlogKind) {
+          return false;
+        }
+      }
+      if (tab == 4 && (period == '30' || period == '90')) {
+        final when = DateTime.tryParse(t['closedAt'] ?? '');
+        final limit = DateTime.now().subtract(
+          Duration(days: int.parse(period)),
+        );
+        if (when == null || when.isBefore(limit)) return false;
+      }
       if (tab == 4) {
         final when = DateTime.tryParse(t['closedAt'] ?? '');
         if (historyFrom != null &&
@@ -706,118 +724,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Row(
-                        children: [
-                          FilterPill(
-                            label: 'Tout le foyer',
-                            selected: person == 'all',
-                            onTap: () => setState(() => person = 'all'),
-                          ),
-                          // « Moi » d’abord, puis l’autre membre.
-                          for (final m in [
-                            ...members.where((m) => m['id'] == me['id']),
-                            ...members.where((m) => m['id'] != me['id']),
-                          ])
-                            FilterPill(
-                              label: m['id'] == me['id'] ? 'Moi' : m['name'],
-                              selected: person == m['id'],
-                              onTap: () => setState(() => person = m['id']),
-                            ),
-                          FilterPill(
-                            label: tab == 4 ? 'Sans réalisation' : 'Sans resp.',
-                            selected: person == 'none',
-                            onTap: () => setState(() => person = 'none'),
-                          ),
-                          PopupMenuButton<String>(
-                            tooltip: 'Filtrer par tag',
-                            initialValue: tag,
-                            onSelected: (v) => setState(() => tag = v),
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(
-                                value: 'all',
-                                child: Text('Tous les tags'),
-                              ),
-                              for (final t in maps(data!['tags']))
-                                PopupMenuItem(
-                                  value: t['id'] as String,
-                                  child: Text(t['name']),
-                                ),
-                            ],
-                            child: IgnorePointer(
-                              child: FilterPill(
-                                label: selectedTag == null
-                                    ? 'Tags'
-                                    : selectedTag['name'].toString(),
-                                icon: Icons.sell_outlined,
-                                selected: selectedTag != null,
-                                onTap: () {},
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (tab == 4)
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                TextButton.icon(
-                                  icon: const Icon(Icons.calendar_month),
-                                  label: Text(
-                                    historyFrom == null
-                                        ? 'Depuis…'
-                                        : dateLabel(
-                                            historyFrom!.toIso8601String(),
-                                          ),
-                                  ),
-                                  onPressed: () async {
-                                    final d = await showDatePicker(
-                                      context: context,
-                                      firstDate: DateTime(2020),
-                                      lastDate: DateTime(2100),
-                                      initialDate:
-                                          historyFrom ?? DateTime.now(),
-                                    );
-                                    if (d != null) {
-                                      setState(() => historyFrom = d);
-                                    }
-                                  },
-                                ),
-                                TextButton(
-                                  onPressed: () async {
-                                    final d = await showDatePicker(
-                                      context: context,
-                                      firstDate: DateTime(2020),
-                                      lastDate: DateTime(2100),
-                                      initialDate: historyTo ?? DateTime.now(),
-                                    );
-                                    if (d != null) {
-                                      setState(() => historyTo = d);
-                                    }
-                                  },
-                                  child: Text(
-                                    historyTo == null
-                                        ? 'Jusqu’au…'
-                                        : dateLabel(
-                                            historyTo!.toIso8601String(),
-                                          ),
-                                  ),
-                                ),
-                                if (historyFrom != null || historyTo != null)
-                                  TextButton(
-                                    onPressed: () => setState(() {
-                                      historyFrom = null;
-                                      historyTo = null;
-                                    }),
-                                    child: const Text('Effacer les dates'),
-                                  ),
-                              ],
-                            ),
-                        ],
+                        children: filterPills(members, me, selectedTag),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -827,19 +734,16 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                               padding: const EdgeInsets.only(left: 20),
                               child: board(tickets),
                             )
-                          : tickets.isEmpty
-                          ? empty()
                           : RefreshIndicator(
                               onRefresh: refresh,
-                              child: ListView.builder(
+                              child: ListView(
                                 padding: EdgeInsets.fromLTRB(
-                                  20,
+                                  0,
                                   rows ? 0 : 4,
-                                  20,
+                                  0,
                                   100,
                                 ),
-                                itemCount: tickets.length,
-                                itemBuilder: (_, i) => ticketCard(tickets[i]),
+                                children: listFor(tickets, members, today),
                               ),
                             ),
                     ),
@@ -851,6 +755,241 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  bool isLate(Map<String, dynamic> t) =>
+      t['dueDate'] != null &&
+      t['dueDate'].toString().compareTo(data!['today'].toString()) < 0 &&
+      t['stageId'] != 'done' &&
+      t['stageId'] != 'abandoned';
+
+  // Jour de rattachement dans la semaine : échéance, sinon début ; retard et « en cours » sans date = aujourd’hui.
+  DateTime weekKey(Map<String, dynamic> t, DateTime today) {
+    final d = DateTime.tryParse(
+      (t['dueDate'] ?? t['startDate'] ?? '').toString(),
+    );
+    final day = DateTime(today.year, today.month, today.day);
+    return d == null || d.isBefore(day)
+        ? day
+        : DateTime(d.year, d.month, d.day);
+  }
+
+  List<Widget> filterPills(
+    List<Map<String, dynamic>> members,
+    Map<String, dynamic> me,
+    Map<String, dynamic>? selectedTag,
+  ) {
+    FilterPill pill(String label, bool selected, VoidCallback onTap) =>
+        FilterPill(label: label, selected: selected, onTap: onTap);
+    return [
+      if (tab == 3)
+        for (final (id, label) in [
+          ('all', 'Tout'),
+          ('obligation', 'Obligations'),
+          ('wish', 'Envies'),
+          ('dated', 'Avec date'),
+        ])
+          pill(
+            label,
+            backlogKind == id,
+            () => setState(() => backlogKind = id),
+          ),
+      if (tab == 4) ...[
+        for (final (id, label) in [
+          ('30', '30 jours'),
+          ('90', '3 mois'),
+          ('all', 'Tout'),
+        ])
+          pill(
+            label,
+            period == id,
+            () => setState(() {
+              period = id;
+              historyFrom = historyTo = null;
+            }),
+          ),
+        pill(
+          period == 'custom' && historyFrom != null
+              ? '${dateLabel(historyFrom!.toIso8601String())} → ${dateLabel(historyTo!.toIso8601String())}'
+              : 'Période…',
+          period == 'custom',
+          choosePeriod,
+        ),
+      ],
+      if (tab != 3) ...[
+        if (tab != 4)
+          pill(
+            'Tout le foyer',
+            person == 'all',
+            () => setState(() => person = 'all'),
+          ),
+        // « Moi » d’abord, puis l’autre membre.
+        for (final m in [
+          ...members.where((m) => m['id'] == me['id']),
+          ...members.where((m) => m['id'] != me['id']),
+        ])
+          pill(
+            m['id'] == me['id'] ? 'Moi' : m['name'].toString(),
+            person == m['id'],
+            () => setState(() => person = person == m['id'] ? 'all' : m['id']),
+          ),
+        pill(
+          tab == 4 ? 'Sans réalisation' : 'Sans resp.',
+          person == 'none',
+          () => setState(() => person = person == 'none' ? 'all' : 'none'),
+        ),
+      ],
+      PopupMenuButton<String>(
+        tooltip: 'Filtrer par tag',
+        initialValue: tag,
+        onSelected: (v) => setState(() => tag = v),
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'all', child: Text('Tous les tags')),
+          for (final t in maps(data!['tags']))
+            PopupMenuItem(value: t['id'] as String, child: Text(t['name'])),
+        ],
+        child: IgnorePointer(
+          child: FilterPill(
+            label: selectedTag == null
+                ? 'Tags'
+                : selectedTag['name'].toString(),
+            icon: Icons.sell_outlined,
+            selected: selectedTag != null,
+            onTap: () {},
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Future<void> choosePeriod() async {
+    final now = DateTime.now();
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: historyFrom == null
+          ? null
+          : DateTimeRange(start: historyFrom!, end: historyTo!),
+    );
+    if (range != null) {
+      setState(() {
+        period = 'custom';
+        historyFrom = range.start;
+        historyTo = range.end;
+      });
+    }
+  }
+
+  List<Widget> listFor(
+    List<Map<String, dynamic>> tickets,
+    List<Map<String, dynamic>> members,
+    DateTime today,
+  ) {
+    final c = Theme.of(context).colorScheme;
+    Widget padded(Widget w) =>
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: w);
+    List<Widget> section(
+      String label,
+      List<Map<String, dynamic>> items, [
+      Color? color,
+    ]) => items.isEmpty
+        ? []
+        : [
+            padded(SectionLabel(label, items.length, color: color)),
+            for (final t in items) padded(ticketCard(t)),
+          ];
+    final top = <Widget>[];
+    var shown = tickets;
+    switch (tab) {
+      case 0:
+        final late = tickets.where(isLate).toList();
+        top.add(
+          SummaryTiles(
+            total: tickets.length,
+            late: late.length,
+            lateOnly: lateOnly,
+            onLate: () => setState(() => lateOnly = !lateOnly),
+            people: [
+              for (final (i, m) in members.indexed)
+                (
+                  m['name'].toString(),
+                  i,
+                  tickets
+                      .where((t) => strings(t['assignees']).contains(m['id']))
+                      .length,
+                ),
+            ],
+          ),
+        );
+        shown = lateOnly ? late : tickets;
+        final body = [
+          ...section('En retard', shown.where(isLate).toList(), c.error),
+          ...section('Aujourd’hui', shown.where((t) => !isLate(t)).toList()),
+        ];
+        return [...top, if (body.isEmpty) empty() else ...body];
+      case 1:
+        final days = weekOf(today);
+        final all = maps(data!['tickets'])
+            .where((t) => strings(data!['weekIds']).contains(t['id']))
+            .toList();
+        top.add(
+          DayStrip(
+            today: today,
+            selected: weekDay,
+            onSelect: (d) => setState(() => weekDay = d),
+            days: [
+              for (final d in days)
+                (d, all.where((t) => weekKey(t, today) == d).length),
+            ],
+          ),
+        );
+        final body = <Widget>[
+          for (final d in days.where((d) => weekDay == null || d == weekDay))
+            ...section(
+              d == DateTime(today.year, today.month, today.day)
+                  ? 'Aujourd’hui · ${headerDay(d).toLowerCase()}'
+                  : headerDay(d),
+              tickets.where((t) => weekKey(t, today) == d).toList(),
+            ),
+        ];
+        return [...top, if (body.isEmpty) empty() else ...body];
+      case 3:
+        final dated = tickets.where((t) => t['startDate'] != null).toList()
+          ..sort(
+            (a, b) =>
+                a['startDate'].toString().compareTo(b['startDate'].toString()),
+          );
+        final body = [
+          ...section('Commence bientôt', dated),
+          ...section(
+            'Un jour',
+            tickets.where((t) => t['startDate'] == null).toList(),
+          ),
+        ];
+        return body.isEmpty ? [empty()] : body;
+      default:
+        final byWeek = <String, List<Map<String, dynamic>>>{};
+        final sorted = [...tickets]
+          ..sort(
+            (a, b) => (b['closedAt'] ?? '').toString().compareTo(
+              (a['closedAt'] ?? '').toString(),
+            ),
+          );
+        for (final t in sorted) {
+          final when = DateTime.tryParse(t['closedAt']?.toString() ?? '');
+          byWeek
+              .putIfAbsent(
+                when == null ? 'Sans date' : weekLabel(when.toLocal(), today),
+                () => [],
+              )
+              .add(t);
+        }
+        final body = [
+          for (final e in byWeek.entries) ...section(e.key, e.value),
+        ];
+        return body.isEmpty ? [empty()] : body;
+    }
   }
 
   Widget empty() => Center(
