@@ -1,6 +1,6 @@
 # GitHub privé et builds
 
-Dépôt : `jmontenez/foyer`, privé. Travail dans des branches et pull requests ; la branche principale initiale ne contient que le README de création. La première PR apporte le code et la CI, sans fusion automatique.
+Dépôt : `jmontenez/foyer`, privé. Travail dans des branches et pull requests ; la PR initiale #1 a été fusionnée à la demande de l’utilisateur. `main` contient le code et la CI.
 
 ## Pipeline
 
@@ -26,6 +26,6 @@ Les APK release utilisent une clé RSA dédiée persistante via les secrets Acti
 
 Clé de secours locale : `~/.local/share/foyer-signing/foyer-release.p12` (répertoire 700, fichier 600). Mot de passe dans le Trousseau macOS, service `fr.foyer.android.signing`, compte `foyer`. Ne jamais coller ces secrets dans une conversation. Prévoir une sauvegarde personnelle indépendante avant usage durable ; ne pas remplacer cette clé sous peine de casser les mises à jour.
 
-La migration depuis l’APK debug local nécessite une désinstallation unique. Les APK CI signés suivants s’installent en mise à jour. Déclarer la nouvelle empreinte SHA-1 dans le client OAuth Android et les réglages Firebase avant la connexion Google réelle. Les préversions automatiques portent le tag `ci-N` et restent privées.
+La migration depuis l’APK debug local nécessite une désinstallation unique. Les APK CI signés suivants s’installent en mise à jour. Déclarer l’empreinte SHA-1 indiquée dans le [guide d’installation](installation.md#3-google-et-firebase) dans le client OAuth Android et les réglages Firebase avant la connexion Google réelle. Les préversions automatiques portent le tag `ci-N` et restent privées.
 
 Les tests restent des tests sur données fictives. La CI ne valide pas à elle seule les parcours Google réels, les notifications sur téléphone, le bouton Retour Android, ni le déploiement Mac. La recette et les limites détaillées sont dans [validation.md](validation.md).
