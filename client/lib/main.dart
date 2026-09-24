@@ -46,11 +46,18 @@ String priorityName(String p) =>
       'urgent': 'Urgente',
     }[p] ??
     p;
-Color priorityColor(String p) => switch (p) {
-  'urgent' => const Color(0xFFAA4036),
-  'high' => const Color(0xFFAD6932),
-  _ => const Color(0xFF52606D),
-};
+Color priorityColor(String p, [Brightness brightness = Brightness.light]) =>
+    brightness == Brightness.dark
+    ? switch (p) {
+        'urgent' => const Color(0xFFFF8A7A),
+        'high' => const Color(0xFFFFB870),
+        _ => const Color(0xFFA9B4C0),
+      }
+    : switch (p) {
+        'urgent' => const Color(0xFFAA4036),
+        'high' => const Color(0xFFAD6932),
+        _ => const Color(0xFF52606D),
+      };
 
 @pragma('vm:entry-point')
 Future<void> backgroundMessage(RemoteMessage message) async {}
@@ -463,7 +470,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Text(
                             error!,
-                            style: const TextStyle(color: Colors.red),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
                           ),
                         ),
                       FilledButton.icon(
@@ -891,7 +900,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 children: [
                   Text(
                     'F-${t['number']}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                   const Spacer(),
                   Icon(
@@ -925,14 +937,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   Text(
                     priorityName(t['priority']),
                     style: TextStyle(
-                      color: priorityColor(t['priority']),
+                      color: priorityColor(
+                        t['priority'],
+                        Theme.of(context).brightness,
+                      ),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   if (tab != 2)
                     Text(
                       stage?.toString() ?? '',
-                      style: const TextStyle(color: Colors.grey),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ...maps(data!['tags'])
                       .where((tag) => strings(t['tagIds']).contains(tag['id']))
@@ -981,7 +998,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       '${overdue ? 'En retard · ' : ''}Échéance ${dateLabel(t['dueDate'])}',
                       style: TextStyle(
                         fontSize: 12,
-                        color: overdue ? Colors.red : Colors.black54,
+                        color: overdue
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   if (check.isNotEmpty)

@@ -4,13 +4,19 @@ import 'package:flutter/material.dart';
 class AppPalette {
   final String id, name;
   final Color primary, accent, background;
+
+  /// Marquée : couleurs appliquées telles quelles, sans les tons adoucis de Material 3.
+  final bool bold;
+  final bool dark;
   const AppPalette(
     this.id,
     this.name,
     this.primary,
     this.accent,
-    this.background,
-  );
+    this.background, {
+    this.bold = false,
+    this.dark = false,
+  });
 }
 
 const palettes = [
@@ -91,17 +97,100 @@ const palettes = [
     Color(0xFFC2855F),
     Color(0xFFF5F7F8),
   ),
+  AppPalette(
+    'ember-night',
+    'Braise & nuit',
+    Color(0xFFFF7A1A),
+    Color(0xFFFFC247),
+    Color(0xFF0F0F11),
+    bold: true,
+    dark: true,
+  ),
+  AppPalette(
+    'lime-charcoal',
+    'Citron vert & charbon',
+    Color(0xFFB8F02B),
+    Color(0xFF22D3EE),
+    Color(0xFF111412),
+    bold: true,
+    dark: true,
+  ),
+  AppPalette(
+    'ruby-onyx',
+    'Rubis & onyx',
+    Color(0xFFFF3D5E),
+    Color(0xFFFF9F1C),
+    Color(0xFF120D0F),
+    bold: true,
+    dark: true,
+  ),
+  AppPalette(
+    'electric-violet',
+    'Violet électrique',
+    Color(0xFFA459F5),
+    Color(0xFFF472B6),
+    Color(0xFF0E0B15),
+    bold: true,
+    dark: true,
+  ),
+  AppPalette(
+    'abyss-cyan',
+    'Abysses & cyan',
+    Color(0xFF16B4F2),
+    Color(0xFF2DD4BF),
+    Color(0xFF08131B),
+    bold: true,
+    dark: true,
+  ),
+  AppPalette(
+    'tomato-teal',
+    'Tomate & canard',
+    Color(0xFFE03A3E),
+    Color(0xFF13807A),
+    Color(0xFFFFF7F2),
+    bold: true,
+  ),
+  AppPalette(
+    'royal-sun',
+    'Bleu roi & soleil',
+    Color(0xFF1F4FE0),
+    Color(0xFFFACC15),
+    Color(0xFFF4F7FF),
+    bold: true,
+  ),
+  AppPalette(
+    'fuchsia-lemon',
+    'Fuchsia & citron',
+    Color(0xFFD6207C),
+    Color(0xFFF9C80E),
+    Color(0xFFFFF5FA),
+    bold: true,
+  ),
 ];
+
+/// Onglets du sélecteur : palettes douces d’origine, puis palettes marquées.
+const paletteTabs = [('Douces', false), ('Marquées', true)];
+
+/// Texte noir ou blanc, le plus lisible sur [background] (contraste ≥ 4,5 garanti).
+Color readableOn(Color background) {
+  final l = background.computeLuminance();
+  return (l + .05) / .05 >= 1.05 / (l + .05) ? Colors.black : Colors.white;
+}
 
 AppPalette paletteById(String? id) =>
     palettes.firstWhere((p) => p.id == id, orElse: () => palettes[1]);
 final selectedPalette = ValueNotifier<String>('sage');
 
 ThemeData buildAppTheme(AppPalette palette) {
-  final accent = ColorScheme.fromSeed(seedColor: palette.accent);
-  final colors =
+  final brightness = palette.dark ? Brightness.dark : Brightness.light;
+  final accent = ColorScheme.fromSeed(
+    seedColor: palette.accent,
+    brightness: brightness,
+  );
+  var colors =
       ColorScheme.fromSeed(
         seedColor: palette.primary,
+        brightness: brightness,
         surface: palette.background,
       ).copyWith(
         secondary: accent.primary,
@@ -109,6 +198,21 @@ ThemeData buildAppTheme(AppPalette palette) {
         secondaryContainer: accent.primaryContainer,
         onSecondaryContainer: accent.onPrimaryContainer,
       );
+  if (palette.bold) {
+    colors = colors.copyWith(
+      primary: palette.primary,
+      onPrimary: readableOn(palette.primary),
+      secondaryContainer: palette.accent,
+      onSecondaryContainer: readableOn(palette.accent),
+    );
+  }
+  // Cartes et champs : blancs sur fond clair, légèrement éclaircis sur fond sombre.
+  final card = palette.dark
+      ? Color.alphaBlend(
+          Colors.white.withValues(alpha: .07),
+          palette.background,
+        )
+      : Colors.white;
   return ThemeData(
     useMaterial3: true,
     scaffoldBackgroundColor: palette.background,
@@ -119,7 +223,7 @@ ThemeData buildAppTheme(AppPalette palette) {
       centerTitle: false,
     ),
     cardTheme: CardThemeData(
-      color: Colors.white,
+      color: card,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
@@ -128,7 +232,7 @@ ThemeData buildAppTheme(AppPalette palette) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: card,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: colors.outlineVariant),
@@ -154,80 +258,106 @@ class PalettePicker extends StatefulWidget {
 
 class _PalettePickerState extends State<PalettePicker> {
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-      child: Column(
-        children: [
-          Text(
-            'Vos couleurs',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Un aperçu immédiat, un choix rien que pour vous. Vos couleurs vous suivent sur vos appareils.',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView(
-              children: palettes
-                  .map(
-                    (p) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Semantics(
-                        selected: selectedPalette.value == p.id,
-                        child: ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          tileColor: selectedPalette.value == p.id
-                              ? Theme.of(context).colorScheme.primaryContainer
-                              : Colors.white,
-                          leading: SizedBox(
-                            width: 64,
-                            child: Row(
-                              children: [
-                                _swatch(p.primary),
-                                const SizedBox(width: 6),
-                                _swatch(p.accent),
-                              ],
-                            ),
-                          ),
-                          title: Text(p.name),
-                          trailing: selectedPalette.value == p.id
-                              ? const Icon(Icons.check_circle)
-                              : null,
-                          onTap: () =>
-                              setState(() => selectedPalette.value = p.id),
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+  Widget build(BuildContext context) => DefaultTabController(
+    length: paletteTabs.length,
+    initialIndex: paletteById(selectedPalette.value).bold ? 1 : 0,
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: Column(
+          children: [
+            Text(
+              'Vos couleurs',
+              style: Theme.of(context).textTheme.headlineSmall,
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
+            const SizedBox(height: 8),
+            const Text(
+              'Un aperçu immédiat, un choix rien que pour vous. Vos couleurs vous suivent sur vos appareils.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TabBar(
+              tabs: [for (final (label, _) in paletteTabs) Tab(text: label)],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  for (final (_, bold) in paletteTabs)
+                    ListView(
+                      children: palettes
+                          .where((p) => p.bold == bold)
+                          .map(_tile)
+                          .toList(),
+                    ),
+                ],
               ),
-              const Spacer(),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, selectedPalette.value),
-                child: const Text('Enregistrer mes couleurs'),
-              ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Annuler'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: () =>
+                      Navigator.pop(context, selectedPalette.value),
+                  child: const Text('Enregistrer mes couleurs'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   );
+
+  Widget _tile(AppPalette p) {
+    final selected = selectedPalette.value == p.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        selected: selected,
+        child: ListTile(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          tileColor: selected
+              ? Theme.of(context).colorScheme.primaryContainer
+              : Theme.of(context).cardTheme.color,
+          leading: Container(
+            width: 72,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: p.background,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _swatch(p.primary),
+                const SizedBox(width: 6),
+                _swatch(p.accent),
+              ],
+            ),
+          ),
+          title: Text(p.name),
+          subtitle: p.dark ? const Text('Thème sombre') : null,
+          trailing: selected ? const Icon(Icons.check_circle) : null,
+          onTap: () => setState(() => selectedPalette.value = p.id),
+        ),
+      ),
+    );
+  }
+
   Widget _swatch(Color color) => Container(
-    width: 28,
-    height: 28,
+    width: 24,
+    height: 24,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
 }
