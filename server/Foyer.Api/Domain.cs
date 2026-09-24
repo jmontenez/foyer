@@ -14,6 +14,8 @@ public sealed class Household
     public List<LoginSession> Sessions { get; set; } = [];
     public List<Device> Devices { get; set; } = [];
     public List<Notification> Notifications { get; set; } = [];
+    // Dernier versionCode Android annoncé par notification : une seule annonce par version.
+    public long AnnouncedAndroidVersion { get; set; }
 }
 public sealed class Member
 {
@@ -56,7 +58,8 @@ public record Comment(string Id, string AuthorId, string Text, DateTimeOffset At
 public record Attachment(string Id, string FileName, string Sha256, long Bytes, DateTimeOffset At);
 public record Activity(string Id, string ActorId, string Action, string Detail, DateTimeOffset At);
 public record LoginSession(string Hash, string MemberId, string DeviceName, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
-public record Device(string Id, string MemberId, string SessionHash, string Token, DateTimeOffset UpdatedAt);
+// AppVersion : versionCode Android déclaré par l’appareil (absent pour les versions antérieures).
+public record Device(string Id, string MemberId, string SessionHash, string Token, DateTimeOffset UpdatedAt, long? AppVersion = null);
 public sealed class Notification
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -70,6 +73,8 @@ public sealed class Notification
     public int Attempts { get; set; }
     public List<string> DeliveredDeviceIds { get; set; } = [];
     public bool Finished { get; set; }
+    // Annonce de mise à jour : seuls les appareils de version inférieure (ou inconnue) la reçoivent.
+    public long? BelowVersion { get; set; }
 }
 public record TicketInput(string Title, string Description, string Kind, string Priority, string StageId,
     DateOnly? StartDate, DateOnly? DueDate, List<string> Assignees, List<string> Performers,
@@ -128,6 +133,23 @@ public static class Rules
         t.StartDate = i.StartDate; t.DueDate = i.DueDate; t.Assignees = i.Assignees.Distinct().ToList(); t.Performers = i.StageId == "done" ? i.Performers.Distinct().ToList() : [];
         t.TagIds = i.TagIds.Distinct().ToList(); t.Checklist = i.Checklist; t.UpdatedAt = now;
         t.ClosedAt = Closed(t) ? t.ClosedAt ?? now : null;
+    }
+    // Appareils du destinataire concernés par une notification.
+    public static IEnumerable<Device> Recipients(Household h, Notification n) =>
+        h.Devices.Where(d => d.MemberId == n.MemberId && (n.BelowVersion is not { } below || d.AppVersion is not { } version || version < below));
+
+    // Annonce une version Android publiée plus récente que la dernière annoncée, aux seuls membres
+    // ayant un appareil en retard ; une annonce encore en attente est remplacée par la nouvelle.
+    public static void AnnounceUpdate(Household h, long? versionCode, DateTimeOffset now)
+    {
+        if (h.Maintenance || versionCode is not { } version || version <= h.AnnouncedAndroidVersion) return;
+        h.AnnouncedAndroidVersion = version;
+        foreach (var old in h.Notifications.Where(n => n.Kind == "update" && !n.Finished)) old.Finished = true;
+        foreach (var m in h.Members)
+        {
+            var n = new Notification { MemberId = m.Id, Kind = "update", Title = "Une nouvelle version de Foyer est disponible", CreatedAt = now, ExpiresAt = now.AddDays(3), NextAttempt = now, BelowVersion = version };
+            if (Recipients(h, n).Any()) h.Notifications.Add(n);
+        }
     }
     public static void Schedule(Household h, DateTimeOffset now)
     {

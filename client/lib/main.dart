@@ -136,7 +136,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) refresh();
+    if (state == AppLifecycleState.resumed) {
+      refresh();
+      checkUpdate(maxAge: const Duration(seconds: 30));
+    }
   }
 
   Future<void> checkRevision() async {
@@ -198,13 +201,15 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if (data != null) unawaited(checkUpdate());
   }
 
-  // Au plus une vérification automatique toutes les 6 h ; silencieuse sauf demande explicite.
-  Future<void> checkUpdate({bool manual = false}) async {
+  // Vérification au retour dans l’application (au plus toutes les 30 s), sinon au plus une
+  // fois par heure lors des rafraîchissements ; silencieuse sauf demande explicite.
+  Future<void> checkUpdate({
+    bool manual = false,
+    Duration maxAge = const Duration(hours: 1),
+  }) async {
     if (!Updater.supported) return;
     final last = updateCheckedAt;
-    if (!manual &&
-        last != null &&
-        DateTime.now().difference(last) < const Duration(hours: 6)) {
+    if (!manual && last != null && DateTime.now().difference(last) < maxAge) {
       return;
     }
     updateCheckedAt = DateTime.now();
@@ -306,23 +311,35 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         );
         return;
       }
+      // Le build installé permet au serveur de n’annoncer une mise à jour qu’aux appareils en retard.
+      final appVersion = await Updater.installedVersionOrNull();
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
-        await api.call('POST', '/api/v1/devices', {'token': token});
+        await api.call('POST', '/api/v1/devices', {
+          'token': token,
+          'appVersion': ?appVersion,
+        });
       }
       await tokenRefresh?.cancel();
       tokenRefresh = FirebaseMessaging.instance.onTokenRefresh.listen((t) {
-        api.call('POST', '/api/v1/devices', {'token': t}).catchError((
-          Object e,
-        ) {
-          message(e);
-          return null;
-        });
+        api
+            .call('POST', '/api/v1/devices', {
+              'token': t,
+              'appVersion': ?appVersion,
+            })
+            .catchError((Object e) {
+              message(e);
+              return null;
+            });
       });
       await pushOpen?.cancel();
       pushOpen = FirebaseMessaging.onMessageOpenedApp.listen(openPush);
       await pushForeground?.cancel();
       pushForeground = FirebaseMessaging.onMessage.listen((m) {
+        if (m.data['kind'] == 'update') {
+          checkUpdate(manual: true);
+          return;
+        }
         message(m.notification?.body ?? 'Nouvelle activité');
         refresh();
       });
@@ -334,6 +351,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> openPush(RemoteMessage m) async {
+    if (m.data['kind'] == 'update') {
+      await checkUpdate(manual: true);
+      return;
+    }
     await refresh();
     if (!mounted || data == null) return;
     final ticket = maps(data!['tickets'])

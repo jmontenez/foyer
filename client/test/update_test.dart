@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foyer/api.dart';
@@ -40,6 +41,31 @@ void main() {
     expect(await Updater.available(FakeApi((_) => published), 2108), isNull);
     expect(await Updater.available(FakeApi((_) => published), 2200), isNull);
   });
+
+  test(
+    'Build installé : lu sur Android, null ailleurs ou si le natif échoue',
+    () async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        messenger.setMockMethodCallHandler(Updater.channel, null);
+      });
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      expect(await Updater.installedVersionOrNull(), isNull);
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      messenger.setMockMethodCallHandler(
+        Updater.channel,
+        (call) async => {'versionCode': 2116, 'versionName': '1.0.0'},
+      );
+      expect(await Updater.installedVersionOrNull(), 2116);
+      messenger.setMockMethodCallHandler(
+        Updater.channel,
+        (call) async => throw PlatformException(code: 'x'),
+      );
+      expect(await Updater.installedVersionOrNull(), isNull);
+    },
+  );
 
   test('Rien de publié sur le serveur (404) : pas d’erreur', () async {
     final api = FakeApi((_) => ApiError('Introuvable', 404));

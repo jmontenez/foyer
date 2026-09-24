@@ -1,8 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Mises à jour hors store : Android demande toujours la confirmation de l’utilisateur. -->
+    <!-- Mises à jour hors store, installées par Foyer lui-même (PackageInstaller). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 14 : Foyer reste l’installateur attitré de ses propres mises à jour. -->
+    <uses-permission android:name="android.permission.ENFORCE_UPDATE_OWNERSHIP" />
     <application
         android:label="Foyer"
         android:allowBackup="false"
@@ -32,15 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <provider
-            android:name=".UpdateFileProvider"
-            android:authorities="${applicationId}.updates"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/update_paths" />
-        </provider>
+        <receiver android:name=".UpdateStatusReceiver" android:exported="false" />
+        <receiver android:name=".UpdatedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
