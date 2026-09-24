@@ -56,6 +56,7 @@ python3 scripts/tests/migration.py
 - [ ] Configurer Firebase côté Android/serveur et vérifier commentaire à l’autre personne seulement, résumé aux deux horaires, notification app fermée/verrouillée et ouverture de la bonne vue.
 - [ ] Signer personnellement l’APK, déclarer son certificat OAuth et tester installation puis mise à jour sur les deux téléphones.
 - [ ] Déploiement automatique : jeton en place, `--check` indique la bonne release, merge sur `main` déployé en ~10 min (journal, `/health`, version servie), puis APK proposé dans l’application. Recette locale : `python3 scripts/tests/auto_update.py` (succès, rien à faire, rollback, empreinte falsifiée, commit hors `main`, auteur non CI, reprise).
+- [ ] Notification de mise à jour : publication d’une version → notification sur les seuls téléphones en retard, une fois ; tap → bannière → installation ; deuxième mise à jour sans écran de confirmation (Android 12+), notification « Foyer est à jour ».
 - [ ] Mise à jour depuis l’application : publier ci-N, installer, publier ci-N+1 avec `scripts/android_update.py`, vérifier bannière, autorisation Android, installation sans perte de session, puis « Foyer est à jour ». Tester aussi un fichier altéré (refus avant installateur).
 - [ ] Déployer et vérifier le Mac Intel : tunnel Cloudflare sain (y compris après reboot/déverrouillage), veille, absence de port DB exposé, binding API loopback uniquement.
 - [ ] Choisir la destination hors Mac, configurer la sauvegarde quotidienne et tester une restauration depuis cette destination.

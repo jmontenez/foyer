@@ -172,7 +172,8 @@ api.MapPost("/devices", async (DeviceInput input, HttpContext ctx, Store store) 
 {
     var me = Security.Member(ctx, h); if (input.Token is null || input.Token.Length is < 20 or > 4096) throw new RuleException("Jeton appareil invalide.");
     h.Devices.RemoveAll(d => d.Token == input.Token || (d.MemberId == me.Id && d.SessionHash == Security.Hash(Security.Token(ctx)!)));
-    h.Devices.Add(new(Guid.NewGuid().ToString("N"), me.Id, Security.Hash(Security.Token(ctx)!), input.Token, DateTimeOffset.UtcNow)); return Results.NoContent();
+    if (input.AppVersion is <= 0) throw new RuleException("Version d’application invalide.");
+    h.Devices.Add(new(Guid.NewGuid().ToString("N"), me.Id, Security.Hash(Security.Token(ctx)!), input.Token, DateTimeOffset.UtcNow, input.AppVersion)); return Results.NoContent();
 }));
 api.MapPost("/tickets", async (TicketInput input, HttpContext ctx, Store store) => await store.Update(h =>
 {
@@ -237,7 +238,7 @@ app.Run();
 static Ticket Find(Household h, string id) => h.Tickets.FirstOrDefault(t => t.Id == id) ?? throw new RuleException("Ticket introuvable.", 404);
 public record GoogleLogin(string IdToken);
 public record PreferenceInput(string DigestTime, bool DigestEnabled);
-public record DeviceInput(string Token);
+public record DeviceInput(string Token, long? AppVersion = null);
 public record CommentInput(string Text);
 public record TagInput(string Name, string Color);
 public record StageInput(List<Stage> Stages, long Revision);

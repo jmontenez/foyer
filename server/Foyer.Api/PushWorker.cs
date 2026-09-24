@@ -19,7 +19,8 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
         {
             try
             {
-                await store.Update(h => { Rules.Schedule(h, DateTimeOffset.UtcNow); return true; });
+                var release = Updates.Android(settings.Updates);
+                await store.Update(h => { var now = DateTimeOffset.UtcNow; Rules.Schedule(h, now); Rules.AnnounceUpdate(h, release?.VersionCode, now); return true; });
                 if (messaging != null) await Deliver(messaging);
             }
             catch (Exception ex) { log.LogError("Traitement différé : {Type}", ex.GetType().Name); }
@@ -28,7 +29,7 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
     }
     private async Task Deliver(FirebaseMessaging messaging)
     {
-        var jobs = await store.Read(h => h.Maintenance ? [] : h.Notifications.Where(n => !n.Finished && n.NextAttempt <= DateTimeOffset.UtcNow).Select(n => (Notification: n, Devices: h.Devices.Where(d => d.MemberId == n.MemberId && !n.DeliveredDeviceIds.Contains(d.Id)).ToList())).Take(20).ToList());
+        var jobs = await store.Read(h => h.Maintenance ? [] : h.Notifications.Where(n => !n.Finished && n.NextAttempt <= DateTimeOffset.UtcNow).Select(n => (Notification: n, Devices: Rules.Recipients(h, n).Where(d => !n.DeliveredDeviceIds.Contains(d.Id)).ToList())).Take(20).ToList());
         foreach (var (n, devices) in jobs)
         {
             if (n.ExpiresAt <= DateTimeOffset.UtcNow) { await Finish(n.Id); continue; }
@@ -55,7 +56,8 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
             await store.Update(h =>
             {
                 var current = h.Notifications.First(x => x.Id == n.Id); current.Attempts++;
-                current.Finished = devices.Count > 0 && h.Devices.Where(d => d.MemberId == n.MemberId).All(d => current.DeliveredDeviceIds.Contains(d.Id));
+                // Sans appareil concerné (jamais enregistré, ou déjà à jour), rien ne reste en attente.
+                current.Finished = Rules.Recipients(h, current).All(d => current.DeliveredDeviceIds.Contains(d.Id));
                 current.NextAttempt = DateTimeOffset.UtcNow.AddMinutes(Math.Min(60, Math.Pow(2, Math.Min(current.Attempts, 6)))); return true;
             });
         }

@@ -35,6 +35,16 @@ class Updater {
     return (info!['versionCode'] as num).toInt();
   }
 
+  /// versionCode installé, ou null hors Android ou si le canal natif ne répond pas.
+  static Future<int?> installedVersionOrNull() async {
+    if (!supported) return null;
+    try {
+      return await installedVersion();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Version plus récente publiée par le serveur, sinon null (y compris si rien n’est publié).
   static Future<AndroidUpdate?> available(Api api, int installed) async {
     final dynamic body;
@@ -48,8 +58,9 @@ class Updater {
     return update.versionCode > installed ? update : null;
   }
 
-  /// true si l’installateur Android s’est ouvert, false s’il faut d’abord autoriser Foyer
-  /// à installer des applications. Lève PlatformException avec un message affichable.
+  /// true si l’installation a démarré (confirmation Android éventuelle, puis Foyer se ferme),
+  /// false s’il faut d’abord autoriser Foyer à installer des applications.
+  /// Lève PlatformException avec un message affichable.
   static Future<bool> install(Api api, AndroidUpdate update) async {
     final outcome = await channel.invokeMethod<String>('install', {
       'url': api.uri('/api/v1/app/android.apk').toString(),
