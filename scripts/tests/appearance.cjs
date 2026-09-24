@@ -38,7 +38,24 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/sky-orange-mobile.png'});
   state=await page.evaluate(async()=> (await fetch('/api/v1/state')).json());
   if(state.me.paletteId !== 'sky-orange') throw Error('Palette ciel non enregistrée');
+  // Onglet des palettes marquées : thème sombre orange/noir appliqué et conservé.
+  await picker();
+  await page.getByRole('tab',{name:'Marquées'}).click();
+  await page.getByText('Braise & nuit',{exact:false}).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({path:'artifacts/browser/palettes-marquees-mobile.png'});
+  await page.getByRole('button',{name:'Enregistrer mes couleurs',exact:true}).click();
+  await page.waitForTimeout(700);
+  await page.screenshot({path:'artifacts/browser/ember-night-mobile.png'});
+  state=await page.evaluate(async()=> (await fetch('/api/v1/state')).json());
+  if(state.me.paletteId !== 'ember-night') throw Error('Palette marquée non enregistrée');
+  await page.reload();
+  await semantics();
+  await picker();
+  // Réouverture sur l’onglet de la palette choisie.
+  await page.getByText('Braise & nuit',{exact:false}).waitFor();
+  await page.getByRole('button',{name:'Annuler',exact:true}).click();
   if(errors.length) throw Error(errors.join('\n'));
-  console.log('PASS : choix violet/ciel, aperçu mobile, persistance après rechargement et annulation.');
+  console.log('PASS : choix violet/ciel puis palette marquée, aperçu mobile, persistance après rechargement et annulation.');
   await browser.close();
 })();

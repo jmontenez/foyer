@@ -154,7 +154,8 @@ public static class Rules
 
 public static class Appearance
 {
-    public static readonly HashSet<string> PaletteIds = ["sky-orange", "sage", "violet-navy", "rose-plum", "navy-gold", "turquoise-coral", "forest-mint", "terracotta-sand", "cherry-cream", "indigo-ice", "slate-copper"];
+    public static readonly HashSet<string> PaletteIds = ["sky-orange", "sage", "violet-navy", "rose-plum", "navy-gold", "turquoise-coral", "forest-mint", "terracotta-sand", "cherry-cream", "indigo-ice", "slate-copper",
+        "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon"];
     public static void Apply(Member member, string? paletteId)
     {
         if (paletteId is null || !PaletteIds.Contains(paletteId)) throw new RuleException("Palette inconnue.");
