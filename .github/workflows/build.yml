@@ -86,6 +86,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            client/android/*.gradle.kts
+            client/android/app/build.gradle.kts
+            client/android/gradle/wrapper/gradle-wrapper.properties
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: '3.47.5'
@@ -96,13 +101,30 @@ jobs:
       - name: Restaurer les dépendances
         working-directory: client
         run: flutter pub get --enforce-lockfile
-      - name: Compiler un APK de test
+      - name: Installer la clé de signature dédiée
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/foyer-release.p12"
+          chmod 600 "$RUNNER_TEMP/foyer-release.p12"
+      - name: Compiler l’APK signé
         working-directory: client
-        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi --build-number=$((100 + GITHUB_RUN_NUMBER)) --dart-define-from-file=.config/android.json
+        env:
+          FOYER_KEYSTORE: ${{ runner.temp }}/foyer-release.p12
+          FOYER_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          FOYER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          FOYER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi --build-number=$((100 + GITHUB_RUN_NUMBER)) --dart-define-from-file=.config/android.json
+      - name: Effacer la copie temporaire de la clé
+        if: always()
+        run: rm -f "$RUNNER_TEMP/foyer-release.p12"
       - name: Préparer la distribution
         run: |
           mkdir -p artifacts/android
-          cp client/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk artifacts/android/foyer-arm64.apk
+          cp client/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk artifacts/android/foyer-arm64.apk
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          "$signer" verify --print-certs artifacts/android/foyer-arm64.apk
           cd artifacts/android
           sha256sum foyer-arm64.apk > SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -113,7 +135,7 @@ jobs:
           if-no-files-found: error
   release:
     name: Release privée sur tag
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/initial-application'
     needs: android
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -129,6 +151,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_REF_NAME: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
-          gh release create "$RELEASE_TAG" distribution/* --verify-tag --title "Foyer $RELEASE_TAG" --generate-notes --prerelease
+          if [[ "$SOURCE_REF" == refs/tags/v* ]]; then
+            release_tag="$SOURCE_REF_NAME"
+          else
+            release_tag="ci-$GITHUB_RUN_NUMBER"
+          fi
+          gh release create "$release_tag" distribution/* --target "$SOURCE_SHA" --title "Foyer $release_tag" --generate-notes --prerelease
