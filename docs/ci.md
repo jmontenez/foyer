@@ -8,7 +8,7 @@ Chaque push lance les tests .NET, les requêtes API sur PostgreSQL éphémère, 
 
 Le workflow est également lançable manuellement depuis Actions une fois présent sur la branche par défaut. Les exécutions précédentes d’une même branche sont annulées si un nouveau push arrive.
 
-Les artefacts privés `foyer-android-N`, `foyer-web-N` et `validation-N` sont conservés 7 jours pour limiter le stockage. Le numéro de build Android est `100 + github.run_number`, auquel Flutter ajoute le préfixe d’architecture. Les relances du même run conservent le même numéro. Le SHA-256 de l’APK accompagne le fichier.
+Les artefacts privés `foyer-android-N`, `foyer-web-N` et `validation-N` sont conservés 7 jours pour limiter le stockage. Le numéro de build Android est `100 + github.run_number`, auquel Flutter ajoute le préfixe d’architecture. Les relances du même run conservent le même numéro. Le SHA-256 de l’APK accompagne le fichier, ainsi que `foyer-android.json` (versionCode réel lu par `aapt2`, versionName, SHA-256, taille) utilisé par le serveur pour proposer la mise à jour dans l’application.
 
 ## Télécharger sur téléphone
 

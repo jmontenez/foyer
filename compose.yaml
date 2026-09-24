@@ -38,12 +38,17 @@ services:
       DatabasePasswordFile: /run/secrets/database_password
       DatabaseHost: db
       ImagesPath: /data/images
+      UpdatesPath: /data/updates
       FirebaseCredentialFile: /run/secrets/firebase_credentials
       FirebaseProjectId: ${FIREBASE_PROJECT_ID:?Configure FIREBASE_PROJECT_ID}
       WorkersEnabled: ${WORKERS_ENABLED:-false}
     secrets: [database_password, google_client_secret, firebase_credentials]
     ports: ["127.0.0.1:5080:8080"]
-    volumes: [images:/data/images, keyring:/home/app/.aspnet/DataProtection-Keys]
+    volumes:
+      - images:/data/images
+      - keyring:/home/app/.aspnet/DataProtection-Keys
+      # APK signé + manifeste déposés par scripts/android_update.py ; lecture seule pour l’API.
+      - ${FOYER_UPDATES_DIR:-./updates}:/data/updates:ro
     depends_on:
       db:
         condition: service_healthy

@@ -121,6 +121,19 @@ Désinstaller une seule fois l’ancienne version **debug** si elle est encore p
 
 Après mise en service du serveur, choisir **Configurer le serveur** et saisir `https://foyer.jmops.fr`. La variable GitHub Actions `FOYER_API_URL` peut intégrer cette adresse aux futurs builds ; elle n’est pas présumée configurée par cette documentation. Changer l’adresse dans l’application efface la session locale et impose une reconnexion.
 
+### Mises à jour depuis l’application
+
+Les releases GitHub étant privées, le serveur distribue lui-même la dernière version aux seuls membres connectés (`/api/v1/app/android`, `/api/v1/app/android.apk`). Publier une release CI sur le Mac serveur, depuis un compte authentifié par `gh`, puis déposer ses fichiers dans le répertoire `FOYER_UPDATES_DIR` du compte de service :
+
+```sh
+gh release download ci-N -R jmontenez/foyer -p foyer-arm64.apk -p foyer-android.json -p SHA256SUMS -D /tmp/foyer-ci-N
+python3 scripts/android_update.py /tmp/foyer-ci-N "$FOYER_UPDATES_DIR"
+```
+
+Le script vérifie taille et SHA-256 contre le manifeste et `SHA256SUMS`, refuse une version plus ancienne (`--allow-downgrade` pour republier volontairement) et remplace les fichiers sans exposer de copie partielle. Aucun redémarrage n’est nécessaire : l’API lit le répertoire, monté en lecture seule, à chaque demande. Sans fichier publié, l’application ne propose rien.
+
+L’application vérifie au démarrage et au retour au premier plan, au plus toutes les 6 heures, ou via **Réglages → Rechercher une mise à jour**. Une bannière propose l’installation : téléchargement avec la session, contrôle de la taille, du SHA-256, du paquet et du numéro de version, puis écran de confirmation d’Android, qui vérifie aussi la signature. La première fois, Android demande d’autoriser Foyer à installer des applications ; conserver cette autorisation pour Foyer seulement, ou la réactiver à chaque mise à jour. Les releases antérieures à `foyer-android.json` ne peuvent pas être publiées ainsi.
+
 Si la configuration Android Firebase est retéléchargée après création des clients OAuth, actualiser la variable Actions `FIREBASE_ANDROID_JSON` avec la configuration **cliente**, jamais avec une clé de compte de service. Cette configuration est distincte des credentials FCM du serveur.
 
 ## 6. Avant de publier la route Internet
