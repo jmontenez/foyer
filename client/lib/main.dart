@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -12,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'update.dart';
 
 final messenger = GlobalKey<ScaffoldMessengerState>();
 final api = Api();
@@ -102,6 +104,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   bool refreshing = false;
   bool pushInitialized = false;
   bool choosingPalette = false;
+  AndroidUpdate? update;
+  bool updateDismissed = false, installingUpdate = false;
+  DateTime? updateCheckedAt;
   StreamSubscription<RemoteMessage>? pushOpen, pushForeground;
   StreamSubscription<String>? tokenRefresh;
   @override
@@ -183,7 +188,76 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       pushInitialized = true;
       await setupPush();
     }
+    if (data != null) unawaited(checkUpdate());
   }
+
+  // Au plus une vérification automatique toutes les 6 h ; silencieuse sauf demande explicite.
+  Future<void> checkUpdate({bool manual = false}) async {
+    if (!Updater.supported) return;
+    final last = updateCheckedAt;
+    if (!manual &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(hours: 6)) {
+      return;
+    }
+    updateCheckedAt = DateTime.now();
+    try {
+      final installed = await Updater.installedVersion();
+      final found = await Updater.available(api, installed);
+      if (mounted) {
+        setState(() {
+          update = found;
+          if (manual) updateDismissed = false;
+        });
+      }
+      if (manual && found == null) {
+        message('Foyer est à jour (build $installed).');
+      }
+    } catch (e) {
+      if (manual) message(e);
+    }
+  }
+
+  Future<void> installUpdate() async {
+    final available = update;
+    if (available == null || installingUpdate) return;
+    setState(() => installingUpdate = true);
+    try {
+      if (!await Updater.install(api, available)) {
+        await updatePermissionDialog();
+      }
+    } on PlatformException catch (e) {
+      message(e.message ?? 'Mise à jour impossible.');
+    } catch (e) {
+      message(e);
+    } finally {
+      if (mounted) setState(() => installingUpdate = false);
+    }
+  }
+
+  Future<void> updatePermissionDialog() => showDialog<void>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Autoriser les mises à jour'),
+      content: const Text(
+        'Android doit autoriser Foyer à installer des applications. '
+        'Activez « Autoriser cette source », revenez dans Foyer puis relancez la mise à jour.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(c),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(c);
+            Updater.openPermission();
+          },
+          child: const Text('Ouvrir les réglages'),
+        ),
+      ],
+    ),
+  );
 
   Future<void> login({int? demo}) async {
     setState(() => signing = true);
@@ -563,6 +637,26 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         TextButton(
                           onPressed: refresh,
                           child: const Text('Réessayer'),
+                        ),
+                      ],
+                    ),
+                  if (update != null && !updateDismissed)
+                    MaterialBanner(
+                      leading: const Icon(Icons.system_update_outlined),
+                      content: Text(
+                        'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              setState(() => updateDismissed = true),
+                          child: const Text('Plus tard'),
+                        ),
+                        FilledButton(
+                          onPressed: installingUpdate ? null : installUpdate,
+                          child: Text(
+                            installingUpdate ? 'Téléchargement…' : 'Installer',
+                          ),
                         ),
                       ],
                     ),
@@ -1030,6 +1124,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     },
                     child: const Text('Appareils connectés'),
                   ),
+                  if (Updater.supported)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(c);
+                        checkUpdate(manual: true);
+                      },
+                      child: const Text('Rechercher une mise à jour'),
+                    ),
                   if (!kIsWeb)
                     TextButton(
                       onPressed: () {

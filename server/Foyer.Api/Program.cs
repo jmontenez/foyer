@@ -148,6 +148,11 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     notificationsEnabled = settings.WorkersEnabled
 }));
+// Mise à jour Android : réservée aux membres connectés (filtre du groupe), réponses no-store.
+api.MapGet("/app/android", () => Updates.Android(settings.Updates) is { } release ? Results.Ok(release) : Results.NotFound());
+api.MapGet("/app/android.apk", () => Updates.Android(settings.Updates) is null
+    ? Results.NotFound()
+    : Results.File(Path.Combine(settings.Updates, Updates.Apk), "application/vnd.android.package-archive", Updates.Apk, enableRangeProcessing: true));
 api.MapGet("/revision", async (Store store) => await store.Read(h => new { h.Revision, h.Maintenance }));
 api.MapGet("/sessions", async (HttpContext ctx, Store store) => await store.Read(h => { var me = Security.Member(ctx, h); return h.Sessions.Where(s => s.MemberId == me.Id).Select(s => new { id = s.Hash, s.DeviceName, s.CreatedAt, s.ExpiresAt, current = s.Hash == Security.Hash(Security.Token(ctx)!) }).ToList(); }));
 api.MapDelete("/sessions/{id}", async (string id, HttpContext ctx, Store store) => await store.Update(h => { var me = Security.Member(ctx, h); h.Sessions.RemoveAll(s => s.Hash == id && s.MemberId == me.Id); h.Devices.RemoveAll(d => d.SessionHash == id && d.MemberId == me.Id); return Results.NoContent(); }));
