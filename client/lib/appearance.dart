@@ -400,8 +400,8 @@ ThemeData buildAppTheme(AppAppearance appearance) {
       ),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: colors.secondaryContainer,
-      foregroundColor: colors.onSecondaryContainer,
+      backgroundColor: colors.primary,
+      foregroundColor: colors.onPrimary,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(

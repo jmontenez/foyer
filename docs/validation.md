@@ -73,6 +73,8 @@ Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) e
 
 **Jetons de design (2026-09-24)** : l’apparence de chaque membre = palette, police (Système, Grotesk = Space Grotesk + DM Sans, Fraunces = Fraunces + Atkinson Hyperlegible, Manrope), affichage des tâches (cartes/lignes, appliqué avec les nouveaux écrans), densité (aérée/compacte) et angles (doux/marqués). Écran **Réglages → Apparence** : styles prêts à l’emploi Braise, Sauge et Liste, puis réglages fins, aperçu en direct, Enregistrer/Annuler. Polices embarquées (graisses fixes générées depuis les polices variables officielles, licence OFL dans `client/fonts/`, visibles dans les licences de l’application) : aucune requête vers Google Fonts. Anciennes versions de l’application compatibles (palette seule).
 
+**Cadre commun (2026-09-24)** : barre de navigation flottante (onglet actif nommé ; rail latéral conservé sur grand écran), en-tête compact (date ou sous-titre, recherche repliable, profil = réglages), une seule ligne de filtres (Tout le foyer, Moi d’abord, l’autre membre, Sans responsable, Tags), bouton rond de création, tâches en carte ou en ligne selon le jeton d’affichage, dates relatives (Aujourd’hui, Demain, Samedi, Il y a 3 jours…), badges EN RETARD/URGENT/HAUTE, une couleur stable par membre, tirer pour actualiser. Pluriel corrigé (« 1 commentaire »).
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique
