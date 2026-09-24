@@ -73,6 +73,12 @@ void main() {
     expect(find.text('URGENT'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('2/3 · 1 commentaire'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Réparer la fuite, urgent, Aujourd’hui · En cours, Camille, 2 sur 3 étapes, 1 commentaire',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Tâche en ligne selon le jeton d’affichage', (tester) async {

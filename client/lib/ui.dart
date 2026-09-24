@@ -203,8 +203,33 @@ class TaskTile extends StatelessWidget {
           ],
         );
 
+  /// Lecture d’écran : le titre d’abord, puis l’essentiel, sans initiales ni pourcentages.
+  String get semanticLabel => [
+    task.title,
+    if (task.badge != null)
+      switch (task.badge!) {
+        TaskBadge.late => 'en retard',
+        TaskBadge.urgent => 'urgent',
+        TaskBadge.high => 'priorité haute',
+      },
+    if (task.meta.isNotEmpty) task.meta,
+    task.people.isEmpty
+        ? 'sans responsable'
+        : task.people.map((p) => p.$1).join(' et '),
+    if (task.total > 0) '${task.done} sur ${plural(task.total, 'étape')}',
+    if (task.comments > 0) plural(task.comments, 'commentaire'),
+  ].join(', ');
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: semanticLabel,
+    onTap: onTap,
+    excludeSemantics: true,
+    child: _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     final t = tokensOf(context);
     final c = Theme.of(context).colorScheme;
     final muted = TextStyle(fontSize: 13, color: c.onSurfaceVariant);
