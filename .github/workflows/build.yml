@@ -53,6 +53,8 @@ jobs:
           node artifacts/browser/node_modules/playwright/cli.js install --with-deps chromium
       - name: Recette API et navigateur sur données fictives
         run: scripts/ci/integration.sh
+      - name: Recette du déploiement automatique
+        run: python3 scripts/tests/auto_update.py
       - name: Conserver les rapports et captures
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -64,6 +66,8 @@ jobs:
             artifacts/ci/
             artifacts/browser/*.png
       - name: Publier le build web
+        # Builds publiés seulement pour main, les tags v* ou un lancement manuel.
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: foyer-web-${{ github.run_number }}
@@ -73,6 +77,8 @@ jobs:
   android:
     name: APK Android
     needs: validation
+    # Les branches ne construisent pas d’APK, sauf lancement manuel (Actions → Run workflow).
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -151,7 +157,7 @@ jobs:
           if-no-files-found: error
   release:
     name: Release privée sur tag
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/initial-application'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     needs: android
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -163,6 +169,14 @@ jobs:
         with:
           name: foyer-android-${{ github.run_number }}
           path: distribution
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: foyer-web-${{ github.run_number }}
+          path: web
+      - name: Joindre le build web (déploiement automatique du serveur)
+        run: |
+          tar -czf distribution/foyer-web.tar.gz -C web .
+          (cd distribution && sha256sum foyer-web.tar.gz >> SHA256SUMS && cat SHA256SUMS)
       - name: Publier l’APK et son empreinte
         env:
           GH_TOKEN: ${{ github.token }}
