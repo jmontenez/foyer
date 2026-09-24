@@ -18,6 +18,21 @@ public class AppearanceTests
         Assert.Throws<RuleException>(() => Appearance.Apply(a, null));
         Assert.Equal("sky-orange", a.PaletteId);
     }
+    [Theory]
+    [InlineData("ember-night")]
+    [InlineData("lime-charcoal")]
+    [InlineData("ruby-onyx")]
+    [InlineData("electric-violet")]
+    [InlineData("abyss-cyan")]
+    [InlineData("tomato-teal")]
+    [InlineData("royal-sun")]
+    [InlineData("fuchsia-lemon")]
+    public void BoldPalettesAreAccepted(string id)
+    {
+        var member = new Member();
+        Appearance.Apply(member, id);
+        Assert.Equal(id, member.PaletteId);
+    }
     [Fact]
     public void PreviousDataUsesOriginalPalette()
     {

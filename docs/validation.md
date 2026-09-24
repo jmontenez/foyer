@@ -67,6 +67,8 @@ Les tests locaux valident le code et les scripts avec des données fictives. Ils
 
 Onze palettes livrées dans Réglages → Couleurs de l’application. Tests supplémentaires : indépendance entre comptes, persistance dans une nouvelle session, préférences de résumé préservées, identifiants invalides refusés et compatibilité des données antérieures. Recette Chromium mobile : choix violet/bleu nuit, rechargement, aperçu ciel/orange, annulation et enregistrement ; captures `artifacts/browser/palettes-violet-mobile.png` et `sky-orange-mobile.png`. APK debug reconstruit avec numéro de build 2 et signature vérifiée.
 
+Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) et **Marquées** (huit palettes aux couleurs appliquées telles quelles, dont cinq thèmes sombres : Braise & nuit, Citron vert & charbon, Rubis & onyx, Violet électrique, Abysses & cyan). Le sélecteur s’ouvre sur l’onglet de la palette choisie. Tests : contraste ≥ 4,5 sur boutons, accents, fond et cartes pour les dix-neuf palettes, couleurs exactes et thème sombre effectif pour les palettes marquées, identifiants acceptés par le serveur ; recette Chromium de l’onglet Marquées (captures `palettes-marquees-mobile.png`, `ember-night-mobile.png`).
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique
