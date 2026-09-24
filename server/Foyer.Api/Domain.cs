@@ -24,6 +24,11 @@ public sealed class Member
     public string Name { get; set; } = "";
     public string Email { get; set; } = "";
     public string PaletteId { get; set; } = "sage";
+    // Jetons de design choisis par le membre (apparence propre à chacun).
+    public string FontId { get; set; } = "system";
+    public string ListStyle { get; set; } = "cards";
+    public string Density { get; set; } = "comfortable";
+    public string Corners { get; set; } = "soft";
     public string DigestTime { get; set; } = "08:00";
     public bool DigestEnabled { get; set; } = true;
     public string? LastDigestDate { get; set; }
@@ -177,10 +182,25 @@ public static class Rules
 public static class Appearance
 {
     public static readonly HashSet<string> PaletteIds = ["sky-orange", "sage", "violet-navy", "rose-plum", "navy-gold", "turquoise-coral", "forest-mint", "terracotta-sand", "cherry-cream", "indigo-ice", "slate-copper",
-        "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon"];
-    public static void Apply(Member member, string? paletteId)
+        "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon", "ink-coral"];
+    public static readonly HashSet<string> FontIds = ["system", "grotesk", "serif", "manrope"];
+    public static readonly HashSet<string> ListStyles = ["cards", "rows"];
+    public static readonly HashSet<string> Densities = ["comfortable", "compact"];
+    public static readonly HashSet<string> CornerStyles = ["soft", "sharp"];
+    public static void Apply(Member member, string? paletteId) => Apply(member, new AppearanceInput(paletteId));
+    // Chaque jeton est facultatif (les anciennes versions n’envoient que la palette) ; tout est validé avant d’appliquer.
+    public static void Apply(Member member, AppearanceInput input)
     {
-        if (paletteId is null || !PaletteIds.Contains(paletteId)) throw new RuleException("Palette inconnue.");
-        member.PaletteId = paletteId;
+        if (input.PaletteId is null && input.FontId is null && input.ListStyle is null && input.Density is null && input.Corners is null) throw new RuleException("Palette inconnue.");
+        if (input.PaletteId is not null && !PaletteIds.Contains(input.PaletteId)) throw new RuleException("Palette inconnue.");
+        if (input.FontId is not null && !FontIds.Contains(input.FontId)) throw new RuleException("Police inconnue.");
+        if (input.ListStyle is not null && !ListStyles.Contains(input.ListStyle)) throw new RuleException("Affichage inconnu.");
+        if (input.Density is not null && !Densities.Contains(input.Density)) throw new RuleException("Densité inconnue.");
+        if (input.Corners is not null && !CornerStyles.Contains(input.Corners)) throw new RuleException("Angles inconnus.");
+        member.PaletteId = input.PaletteId ?? member.PaletteId;
+        member.FontId = input.FontId ?? member.FontId;
+        member.ListStyle = input.ListStyle ?? member.ListStyle;
+        member.Density = input.Density ?? member.Density;
+        member.Corners = input.Corners ?? member.Corners;
     }
 }

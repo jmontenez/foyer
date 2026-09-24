@@ -160,7 +160,7 @@ api.MapPost("/logout", async (HttpContext ctx, Store store) => { await store.Upd
 api.MapPut("/appearance", async (AppearanceInput input, HttpContext ctx, Store store) => await store.Update(h =>
 {
     var me = Security.Member(ctx, h);
-    Appearance.Apply(me, input.PaletteId);
+    Appearance.Apply(me, input);
     return Security.PublicMember(me);
 }));
 api.MapPut("/preferences", async (PreferenceInput input, HttpContext ctx, Store store) => await store.Update(h =>
@@ -244,4 +244,4 @@ public record TagInput(string Name, string Color);
 public record StageInput(List<Stage> Stages, long Revision);
 public partial class Program { }
 
-public record AppearanceInput(string PaletteId);
+public record AppearanceInput(string? PaletteId, string? FontId = null, string? ListStyle = null, string? Density = null, string? Corners = null);
