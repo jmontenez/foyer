@@ -53,8 +53,9 @@ builder.Services.AddRateLimiter(o =>
 });
 var googleConfigured = !string.IsNullOrEmpty(settings.GoogleClientId) && !string.IsNullOrEmpty(builder.Configuration["GoogleClientSecret"]);
 var auth = builder.Services.AddAuthentication("google-temp").AddCookie("google-temp", o => { o.Cookie.Name = "foyer_google"; o.ExpireTimeSpan = TimeSpan.FromMinutes(5); });
+// Le handler .NET interroge userinfo v3 (`email_verified`) ; `verified_email` est le nom v2.
 if (googleConfigured)
-    auth.AddGoogle(o => { o.ClientId = settings.GoogleClientId!; o.ClientSecret = builder.Configuration["GoogleClientSecret"]!; o.SignInScheme = "google-temp"; o.CallbackPath = "/signin-google"; o.SaveTokens = false; o.Events.OnCreatingTicket = ctx => { if (!ctx.User.TryGetProperty("verified_email", out var verified) || verified.ValueKind != JsonValueKind.True) throw new RuleException("Adresse Google non vérifiée.", 403); return Task.CompletedTask; }; o.Events.OnRemoteFailure = ctx => { ctx.Response.Redirect("/?login=failed"); ctx.HandleResponse(); return Task.CompletedTask; }; });
+    auth.AddGoogle(o => { o.ClientId = settings.GoogleClientId!; o.ClientSecret = builder.Configuration["GoogleClientSecret"]!; o.SignInScheme = "google-temp"; o.CallbackPath = "/signin-google"; o.SaveTokens = false; o.Events.OnCreatingTicket = ctx => { if (!(ctx.User.TryGetProperty("email_verified", out var verified) || ctx.User.TryGetProperty("verified_email", out verified)) || verified.ValueKind != JsonValueKind.True) throw new RuleException("Adresse Google non vérifiée.", 403); return Task.CompletedTask; }; o.Events.OnRemoteFailure = ctx => { ctx.Response.Redirect("/?login=failed"); ctx.HandleResponse(); return Task.CompletedTask; }; });
 var app = builder.Build();
 await app.Services.GetRequiredService<Store>().Initialize();
 app.Use(async (ctx, next) =>
