@@ -40,7 +40,7 @@ Adapter `deploy/fr.foyer.backup.plist.example` aux chemins réels, au contexte D
    ```
 
 4. Vérifier santé API, nombre de tickets, photos, auteurs, réalisateurs et historique, puis les deux connexions Google. Tester l’accès anonyme et un troisième compte. Laisser les workers désactivés pendant toute la recette ; les données modifiées sur cette cible de recette ne retournent pas implicitement à la source.
-5. Si l’URL change : adapter `PUBLIC_ORIGIN`, les redirections OAuth, Tailscale et l’adresse dans les clients Android. Une URL stable ne doit être déplacée qu’après arrêt de la source. Ne jamais exécuter deux sources de vérité en parallèle.
+5. Si l’URL change : adapter `PUBLIC_ORIGIN`, les redirections OAuth, la route du tunnel Cloudflare et l’adresse dans les clients Android. Une URL stable ne doit être déplacée qu’après arrêt de la source. Ne jamais exécuter deux sources de vérité en parallèle.
 6. Après validation : ouvrir la cible aux utilisateurs, activer `WORKERS_ENABLED=true` et recréer l’API, enregistrer les appareils reconnectés, tester commentaire et résumé. Noter fin d’interruption et effectuer une sauvegarde de la nouvelle source.
 
 `FOYER_COMPOSE_FILE=/chemin/compose.yaml` et `FOYER_PROJECT=nom-isole` permettent de cibler une autre installation ; `DOCKER_CONTEXT` choisit son moteur. Ces paramètres sont obligatoires pour un exercice sur le même moteur afin de ne pas toucher la source.

@@ -9,6 +9,7 @@ public sealed class Settings(IConfiguration c, IWebHostEnvironment env)
     public string[] AllowedEmails { get; } = (c["AllowedEmails"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public string[] GoogleAudiences { get; } = (c["GoogleAudiences"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     public string? GoogleClientId { get; } = c["GoogleClientId"];
+    public string ClientIpHeader { get; } = c["ClientIpHeader"]?.Trim() ?? "";
     public bool WorkersEnabled { get; } = c.GetValue("WorkersEnabled", false);
     public bool Secure { get; } = !env.IsDevelopment();
     public string ConnectionString { get; } = Connection(c);
@@ -24,6 +25,17 @@ public static class Security
 {
     public const string Cookie = "foyer_session";
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    // L’en-tête n’est digne de confiance que parce que le port API n’est joignable
+    // que depuis la boucle locale de l’hôte (connecteur cloudflared sur le même Mac).
+    // Sans en-tête configuré ou avec une valeur non parsable, on retombe sur le pair réseau.
+    public static string ClientIp(HttpContext ctx, Settings settings)
+    {
+        var peer = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (settings.ClientIpHeader.Length == 0) return peer;
+        var values = ctx.Request.Headers[settings.ClientIpHeader];
+        return values.Count > 0 && System.Net.IPAddress.TryParse(values[^1]?.Trim(), out var ip) ? ip.ToString() : peer;
+    }
+    public static bool AuthPath(PathString path) => path.StartsWithSegments("/auth") || path.StartsWithSegments("/signin-google");
     public static string? Token(HttpContext ctx)
     {
         var auth = ctx.Request.Headers.Authorization.ToString();
