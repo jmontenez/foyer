@@ -1,0 +1,134 @@
+name: Tests et builds Foyer
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: foyer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validation:
+    name: Tests serveur, API, Flutter et navigateur
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: foyer_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d foyer_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Tests serveur
+        run: |
+          dotnet restore server/Foyer.Tests --locked-mode
+          dotnet test server/Foyer.Tests --no-restore --logger trx --results-directory artifacts/test-results
+      - name: Analyse et tests Flutter
+        working-directory: client
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test
+      - name: Compiler le web et le serveur
+        run: scripts/build.sh
+      - name: Installer le navigateur de test
+        run: |
+          npm install --prefix artifacts/browser playwright@1.63.0 --no-audit --no-fund
+          node artifacts/browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Recette API et navigateur sur données fictives
+        run: scripts/ci/integration.sh
+      - name: Conserver les rapports et captures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validation-${{ github.run_number }}
+          retention-days: 7
+          path: |
+            artifacts/test-results/
+            artifacts/ci/
+            artifacts/browser/*.png
+      - name: Publier le build web
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: foyer-web-${{ github.run_number }}
+          path: client/build/web/
+          retention-days: 7
+          if-no-files-found: error
+  android:
+    name: APK Android
+    needs: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FIREBASE_ANDROID_JSON: ${{ vars.FIREBASE_ANDROID_JSON }}
+      FOYER_API_URL: ${{ vars.FOYER_API_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Configurer Firebase Android
+        run: python3 scripts/ci/firebase.py
+      - name: Restaurer les dépendances
+        working-directory: client
+        run: flutter pub get --enforce-lockfile
+      - name: Compiler un APK de test
+        working-directory: client
+        run: flutter build apk --debug --target-platform android-arm64 --split-per-abi --build-number=$((100 + GITHUB_RUN_NUMBER)) --dart-define-from-file=.config/android.json
+      - name: Préparer la distribution
+        run: |
+          mkdir -p artifacts/android
+          cp client/build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk artifacts/android/foyer-arm64.apk
+          cd artifacts/android
+          sha256sum foyer-arm64.apk > SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: foyer-android-${{ github.run_number }}
+          path: artifacts/android/
+          retention-days: 7
+          if-no-files-found: error
+  release:
+    name: Release privée sur tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: foyer-android-${{ github.run_number }}
+          path: distribution
+      - name: Publier l’APK et son empreinte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" distribution/* --verify-tag --title "Foyer $RELEASE_TAG" --generate-notes --prerelease

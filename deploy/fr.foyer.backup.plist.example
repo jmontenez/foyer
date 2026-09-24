@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>fr.foyer.backup</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/local/bin/python3</string>
+    <string>/CHEMIN/foyer/scripts/backup.py</string>
+    <string>--destination</string><string>/Volumes/SAUVEGARDES/Foyer</string>
+    <string>--recipient</string><string>age1_REMPLACER_PAR_CLE_PUBLIQUE</string>
+  </array>
+  <key>WorkingDirectory</key><string>/CHEMIN/foyer</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>DOCKER_CONTEXT</key><string>colima-foyer</string>
+  </dict>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>15</integer></dict>
+  <key>StandardOutPath</key><string>/CHEMIN/foyer/artifacts/backup.log</string>
+  <key>StandardErrorPath</key><string>/CHEMIN/foyer/artifacts/backup-error.log</string>
+</dict></plist>
