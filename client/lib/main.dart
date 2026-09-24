@@ -124,6 +124,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   DateTime? historyFrom, historyTo;
   // Filtres propres aux vues : retards (Aujourd’hui), jour (Semaine), type (Backlog), période (Historique).
   bool lateOnly = false;
+  String? boardStage;
   DateTime? weekDay;
   String backlogKind = 'all', period = '30';
   Timer? timer;
@@ -730,10 +731,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     const SizedBox(height: 12),
                     Expanded(
                       child: tab == 2
-                          ? Padding(
-                              padding: const EdgeInsets.only(left: 20),
-                              child: board(tickets),
-                            )
+                          ? board(tickets)
                           : RefreshIndicator(
                               onRefresh: refresh,
                               child: ListView(
@@ -1011,39 +1009,125 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       ],
     ),
   );
+  // Déplacer une carte d’étape : même enregistrement que la fiche, avec contrôle de version.
+  Future<void> moveTicket(Map<String, dynamic> t, String stageId) async {
+    try {
+      await api.call('PUT', '/api/v1/tickets/${t['id']}', {
+        for (final key in [
+          'title',
+          'description',
+          'kind',
+          'priority',
+          'startDate',
+          'dueDate',
+          'assignees',
+          'performers',
+          'tagIds',
+          'checklist',
+          'version',
+        ])
+          key: t[key],
+        'stageId': stageId,
+      });
+    } catch (e) {
+      message(e);
+    }
+    await refresh();
+  }
+
   Widget board(List<Map<String, dynamic>> tickets) {
     final stages = maps(data!['stages'])
       ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
-    return ListView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.only(bottom: 90),
-      children: stages.map((s) {
-        final items = tickets.where((t) => t['stageId'] == s['id']).toList();
-        return SizedBox(
-          width: 310,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    if (stages.isEmpty) return empty();
+    List<Map<String, dynamic>> itemsOf(String id) =>
+        tickets.where((t) => t['stageId'] == id).toList();
+    Widget card(Map<String, dynamic> t, int i) => SwipeToMove(
+      previous: i > 0 ? stages[i - 1]['name'].toString() : null,
+      next: i < stages.length - 1 ? stages[i + 1]['name'].toString() : null,
+      onPrevious: i > 0 ? () => moveTicket(t, stages[i - 1]['id']) : null,
+      onNext: i < stages.length - 1
+          ? () => moveTicket(t, stages[i + 1]['id'])
+          : null,
+      child: ticketCard(t),
+    );
+    // Grand écran : toutes les colonnes côte à côte.
+    if (MediaQuery.sizeOf(context).width > 900) {
+      return ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 90),
+        children: [
+          for (final (i, s) in stages.indexed)
+            SizedBox(
+              width: 320,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SectionLabel(s['name'].toString(), itemsOf(s['id']).length),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (final t in itemsOf(s['id'])) card(t, i),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+    // Mobile : une étape à la fois.
+    final index = stages.indexWhere((s) => s['id'] == boardStage);
+    final i = index < 0 ? 0 : index;
+    final items = itemsOf(stages[i]['id']);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: StageSelector(
+            selected: stages[i]['id'],
+            onSelect: (id) => setState(() => boardStage = id),
+            stages: [
+              for (final s in stages)
+                (
+                  s['id'].toString(),
+                  s['name'].toString(),
+                  itemsOf(s['id']).length,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: refresh,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Text(
-                    '${s['name']}  ·  ${items.length}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
+                if (items.isEmpty)
+                  empty()
+                else ...[
+                  for (final t in items) card(t, i),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Glisser une carte vers la gauche ou la droite pour changer d’étape.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: ListView(children: items.map(ticketCard).toList()),
-                ),
+                ],
               ],
             ),
           ),
-        );
-      }).toList(),
+        ),
+      ],
     );
   }
 
