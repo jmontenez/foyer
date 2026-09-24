@@ -84,4 +84,52 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('Glisser une carte : déplacement au-delà du seuil seulement', (
+    tester,
+  ) async {
+    final moves = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: SwipeToMove(
+            next: 'En cours',
+            onNext: () => moves.add('next'),
+            child: const SizedBox(height: 80, width: 300, child: Text('Carte')),
+          ),
+        ),
+      ),
+    );
+    await tester.drag(find.text('Carte'), const Offset(-40, 0));
+    await tester.pumpAndSettle();
+    expect(moves, isEmpty);
+    await tester.drag(find.text('Carte'), const Offset(200, 0));
+    await tester.pumpAndSettle();
+    expect(moves, isEmpty, reason: 'pas d’étape précédente');
+    await tester.drag(find.text('Carte'), const Offset(-200, 0));
+    await tester.pumpAndSettle();
+    expect(moves, ['next']);
+    final semantics = tester.getSemantics(find.byType(SwipeToMove));
+    expect(semantics.getSemanticsData().customSemanticsActionIds, isNotEmpty);
+  });
+
+  testWidgets('Sélecteur d’étape : compteurs et choix', (tester) async {
+    String? chosen;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: StageSelector(
+            selected: 'todo',
+            onSelect: (id) => chosen = id,
+            stages: const [('todo', 'À faire', 3), ('doing', 'En cours', 1)],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('3'), findsOneWidget);
+    await tester.tap(find.text('En cours'));
+    expect(chosen, 'doing');
+  });
 }
