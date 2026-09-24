@@ -8,10 +8,11 @@ namespace Foyer.Tests;
 
 public class SecurityTests
 {
-    private static Settings Settings() => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    private static Settings Settings(string? clientIpHeader = null) => new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
         ["AllowedEmails"] = "a@example.invalid,b@example.invalid",
-        ["PublicOrigin"] = "https://foyer.test"
+        ["PublicOrigin"] = "https://foyer.test",
+        ["ClientIpHeader"] = clientIpHeader
     }).Build(), new TestEnvironment());
 
     [Fact]
@@ -68,6 +69,60 @@ public class SecurityTests
         ctx.Request.Headers.Authorization = "Bearer test";
         ctx.Request.Headers["X-Foyer-CSRF"] = "1";
         Security.CheckWrite(ctx, Settings());
+    }
+
+    private static DefaultHttpContext Peer(string ip)
+    {
+        var ctx = new DefaultHttpContext();
+        ctx.Connection.RemoteIpAddress = System.Net.IPAddress.Parse(ip);
+        return ctx;
+    }
+
+    [Fact]
+    public void SpoofedClientIpHeaderIsIgnoredWithoutConfiguredProxy()
+    {
+        var ctx = Peer("10.0.0.9");
+        ctx.Request.Headers["CF-Connecting-IP"] = "203.0.113.7";
+        Assert.Equal("10.0.0.9", Security.ClientIp(ctx, Settings()));
+    }
+
+    [Fact]
+    public void ConfiguredProxyHeaderResolvesVisitorAddress()
+    {
+        var ctx = Peer("10.0.0.9");
+        ctx.Request.Headers["CF-Connecting-IP"] = "203.0.113.7";
+        Assert.Equal("203.0.113.7", Security.ClientIp(ctx, Settings("CF-Connecting-IP")));
+    }
+
+    [Fact]
+    public void MissingOrUnparseableHeaderFallsBackToNetworkPeer()
+    {
+        var settings = Settings("CF-Connecting-IP");
+        Assert.Equal("10.0.0.9", Security.ClientIp(Peer("10.0.0.9"), settings));
+        var ctx = Peer("10.0.0.9");
+        ctx.Request.Headers["CF-Connecting-IP"] = "not-an-address";
+        Assert.Equal("10.0.0.9", Security.ClientIp(ctx, settings));
+    }
+
+    [Fact]
+    public void LastHeaderValueWinsWhenSeveralArePresent()
+    {
+        // Seule la valeur écrite par le proxy de confiance (la dernière) fait foi.
+        var ctx = Peer("10.0.0.9");
+        ctx.Request.Headers.Append("CF-Connecting-IP", "198.51.100.1");
+        ctx.Request.Headers.Append("CF-Connecting-IP", "203.0.113.7");
+        Assert.Equal("203.0.113.7", Security.ClientIp(ctx, Settings("CF-Connecting-IP")));
+    }
+
+    [Fact]
+    public void AuthPathsCoverAuthenticationAndOauthCallback()
+    {
+        Assert.True(Security.AuthPath("/auth/google/start"));
+        Assert.True(Security.AuthPath("/auth/config"));
+        Assert.True(Security.AuthPath("/signin-google"));
+        Assert.False(Security.AuthPath("/api/v1/state"));
+        Assert.False(Security.AuthPath("/"));
+        Assert.False(Security.AuthPath("/authother"));
     }
 
     private sealed class TestEnvironment : IWebHostEnvironment

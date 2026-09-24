@@ -39,7 +39,18 @@ builder.Services.AddHostedService<PushWorker>();
 builder.Services.AddOpenApi();
 builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = 10 * 1024 * 1024);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 11 * 1024 * 1024);
-builder.Services.AddRateLimiter(o => { o.RejectionStatusCode = 429; o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx => RateLimitPartition.GetFixedWindowLimiter(ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new() { PermitLimit = 180, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })); });
+// Derrière Cloudflare Tunnel, le pair réseau est toujours le connecteur : les partitions
+// utilisent l’adresse visiteur résolue par Security.ClientIp, et les routes d’authentification
+// (coûteuses et sensibles à la force brute) ont leur propre budget, plus strict.
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = 429;
+    o.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+        PartitionedRateLimiter.Create<HttpContext, string>(ctx => RateLimitPartition.GetFixedWindowLimiter("global:" + Security.ClientIp(ctx, settings), _ => new() { PermitLimit = 180, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })),
+        PartitionedRateLimiter.Create<HttpContext, string>(ctx => Security.AuthPath(ctx.Request.Path)
+            ? RateLimitPartition.GetFixedWindowLimiter("auth:" + Security.ClientIp(ctx, settings), _ => new() { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
+            : RateLimitPartition.GetNoLimiter("auth:none")));
+});
 var googleConfigured = !string.IsNullOrEmpty(settings.GoogleClientId) && !string.IsNullOrEmpty(builder.Configuration["GoogleClientSecret"]);
 var auth = builder.Services.AddAuthentication("google-temp").AddCookie("google-temp", o => { o.Cookie.Name = "foyer_google"; o.ExpireTimeSpan = TimeSpan.FromMinutes(5); });
 if (googleConfigured)
@@ -49,7 +60,7 @@ await app.Services.GetRequiredService<Store>().Initialize();
 app.Use(async (ctx, next) =>
 {
     // Canonical configured origin, never trust caller-controlled forwarded headers.
-    // Production listener is bound to host loopback behind Tailscale Serve.
+    // Production listener is bound to host loopback behind the local cloudflared connector.
     if (settings.Secure)
     {
         var origin = new Uri(settings.Origin); ctx.Request.Scheme = origin.Scheme; ctx.Request.Host = new(origin.Authority);
@@ -59,7 +70,7 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["X-Frame-Options"] = "DENY";
     ctx.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
     if (settings.Secure) ctx.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
-    if (ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/auth")) ctx.Response.Headers.CacheControl = "no-store";
+    if (ctx.Request.Path.StartsWithSegments("/api") || Security.AuthPath(ctx.Request.Path)) ctx.Response.Headers.CacheControl = "no-store";
     try { await next(); }
     catch (RuleException ex) { ctx.Response.StatusCode = ex.Status; await ctx.Response.WriteAsJsonAsync(new { error = ex.Message }); }
     catch (BadHttpRequestException) { ctx.Response.StatusCode = 400; await ctx.Response.WriteAsJsonAsync(new { error = "Requête invalide." }); }

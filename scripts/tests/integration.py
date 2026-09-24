@@ -27,9 +27,12 @@ def call(
     origin=BASE,
     raw=None,
     content="application/json",
+    extra_headers=None,
 ):
     global checks
     headers = {"Content-Type": content}
+    if extra_headers:
+        headers.update(extra_headers)
     if csrf:
         headers["X-Foyer-CSRF"] = "1"
     if origin:
@@ -207,6 +210,50 @@ current = next(s for s in sessions if s["current"])
 call("DELETE", "/api/v1/sessions/" + current["id"], token=a, expected=204)
 call("GET", "/api/v1/state", token=a, expected=401)
 call("GET", "/api/v1/state", token=b)
+
+
+# En-têtes de sécurité et absence de cache sur les réponses privées,
+# indispensables devant le cache Cloudflare.
+def response_headers(path, token=None):
+    global checks
+    headers = {"Authorization": "Bearer " + token} if token else {}
+    req = urllib.request.Request(BASE + path, headers=headers)
+    try:
+        response = urllib.request.urlopen(req)  # nosec B310
+    except urllib.error.HTTPError as error:
+        response = error
+    response.read()
+    checks += 1
+    return response.headers
+
+
+for private_path in ("/auth/config", "/api/v1/state"):
+    got = response_headers(private_path, token=b if "api" in private_path else None)
+    assert got["Cache-Control"] == "no-store", f"{private_path}: {got['Cache-Control']}"
+    assert got["X-Content-Type-Options"] == "nosniff"
+    assert got["X-Frame-Options"] == "DENY"
+
+# Derrière le tunnel, chaque visiteur doit être limité sur sa propre adresse
+# CF-Connecting-IP, pas sur celle, partagée, du connecteur.
+visitor = {"CF-Connecting-IP": "203.0.113.10"}
+for _ in range(30):
+    call("GET", "/auth/config", extra_headers=visitor)
+call("GET", "/auth/config", extra_headers=visitor, expected=429)
+# Un autre visiteur et le trafic local (sans en-tête) gardent leur propre budget.
+call("GET", "/auth/config", extra_headers={"CF-Connecting-IP": "203.0.113.11"})
+call("GET", "/auth/config")
+# Une valeur non parsable retombe sur le pair réseau au lieu d'ouvrir
+# une partition arbitraire par requête.
+call("GET", "/auth/config", extra_headers={"CF-Connecting-IP": "pas-une-adresse"})
+# L'en-tête visiteur n'influence pas le contrôle « démo locale uniquement »,
+# qui repose sur le pair réseau réel.
+call(
+    "POST",
+    "/auth/demo/0",
+    extra_headers={"CF-Connecting-IP": "203.0.113.12"},
+)
 print(
-    f"{checks} requêtes validées : contrôle d’accès, CSRF, concurrence, clôture, commentaires, images, préférences et révocation."
+    f"{checks} requêtes validées : contrôle d’accès, CSRF, concurrence, clôture, "
+    "commentaires, images, préférences, révocation, en-têtes de cache et "
+    "limitation par visiteur derrière le tunnel."
 )
