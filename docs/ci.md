@@ -4,7 +4,7 @@ Dépôt : `jmontenez/foyer`, privé. Travail dans des branches et pull requests 
 
 ## Pipeline
 
-Chaque push lance les tests .NET, les requêtes API sur PostgreSQL éphémère, Flutter analyze/test, le build web, puis les recettes Chromium ordinateur/mobile. Le build Android ARM64 ne commence qu’après ces validations. Les versions Flutter (.NET via global.json) et Playwright sont fixées ; les actions sont épinglées à leurs SHA complets. Permissions de lecture par défaut ; le job de Release seul peut publier.
+Chaque push lance les tests .NET, les requêtes API sur PostgreSQL éphémère, Flutter analyze/test, le build web, les recettes Chromium ordinateur/mobile et la recette du déploiement automatique. Le build Android ARM64 ne commence qu’après ces validations, et **seulement sur `main`, un tag `v*` ou un lancement manuel** : les branches sont testées (build web compris, nécessaire aux recettes navigateur) sans publier d’artefact web ni construire d’APK. Pour compiler l’APK d’une branche, lancer le workflow manuellement sur cette branche (**Actions → Run workflow**). Les versions Flutter (.NET via global.json) et Playwright sont fixées ; les actions sont épinglées à leurs SHA complets. Permissions de lecture par défaut ; le job de Release seul peut publier.
 
 Le workflow est également lançable manuellement depuis Actions une fois présent sur la branche par défaut. Les exécutions précédentes d’une même branche sont annulées si un nouveau push arrive.
 
@@ -14,7 +14,7 @@ Les artefacts privés `foyer-android-N`, `foyer-web-N` et `validation-N` sont co
 
 Se connecter au compte GitHub autorisé, ouvrir **Actions → Tests et builds Foyer → exécution réussie → Artifacts → foyer-android-N**. Extraire le ZIP, puis ouvrir `foyer-arm64.apk`.
 
-Un push sur `main`, sur la branche initiale `feat/initial-application`, ou un tag `v*` lance la même validation puis crée une préversion dans **Releases**, avec l’APK téléchargeable directement. Le dépôt étant privé, ces fichiers nécessitent aussi un accès au dépôt. Ce workflow ne publie rien sur Google Play et ne déploie pas le serveur.
+Un push sur `main` ou un tag `v*` lance la même validation puis crée une préversion dans **Releases** : APK, `foyer-android.json`, build web `foyer-web.tar.gz` et `SHA256SUMS` couvrant l’APK et le build web. Le dépôt étant privé, ces fichiers nécessitent aussi un accès au dépôt. Ce workflow ne publie rien sur Google Play et n’accède jamais au serveur : c’est le Mac qui récupère les releases `ci-N` (voir [déploiement automatique](installation.md#8-déploiement-automatique)).
 
 ## Configuration
 

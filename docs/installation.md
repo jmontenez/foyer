@@ -168,3 +168,23 @@ En cas d’anomalie pendant la recette publique, retirer/désactiver **la route 
 - Sauvegarde chiffrée hors Mac, puis restauration isolée depuis cette destination. Le DS216j peut recevoir des sauvegardes ; il n’est pas l’hôte de cette stack.
 
 Voir [validation](validation.md) et [migration](migration.md) pour les contrôles détaillés. Les tests CI ne remplacent pas cette recette sur les vrais comptes, appareils et réseau public.
+
+## 8. Déploiement automatique
+
+Le Mac serveur récupère lui-même les releases : aucun accès entrant, aucun runner, aucun secret du serveur chez GitHub. Toutes les 10 minutes, `scripts/deploy/auto_update.py`, lancé par launchd **sous le compte de service** (jamais root), cherche la release `ci-N` la plus récente et, si elle est plus récente que la version déployée :
+
+1. n’accepte qu’une release publiée par `github-actions[bot]`, complète (APK, manifeste, build web, `SHA256SUMS`), dont le commit appartient à `main` ; vérifie les empreintes ;
+2. place le dépôt au commit de la release (`git reset --hard`, `.env` et fichiers ignorés conservés), remplace le build web, garde l’image API courante sous `foyer-api:rollback`, reconstruit et redémarre (`docker compose up -d --wait`) ;
+3. vérifie `/health` ; en cas d’échec, revient au commit, au build web et à l’image précédents, et ne retente plus cette release ;
+4. publie ensuite seulement l’APK aux membres (`android_update.py`), pour ne jamais proposer une application plus récente que l’API.
+
+Les tags `v*` ne sont pas déployés automatiquement. Tout merge sur `main` part donc en production en une dizaine de minutes : la CI est le garde-fou, et un retour arrière manuel reste possible (`docker image tag foyer-api:rollback foyer-api:latest`, puis `docker compose up -d --no-build`).
+
+Mise en place, une fois :
+
+1. Créer un jeton GitHub **fine-grained** : *Settings → Developer settings → Fine-grained tokens*, dépôt `jmontenez/foyer` uniquement, permission **Contents : Read-only** (Metadata en lecture ajoutée d’office), expiration courte avec rappel de renouvellement. Il permet de lire le code et les releases, jamais de les modifier.
+2. Le déposer sans l’afficher : `sudo -u foyer sh -c 'umask 077; cat > /Users/foyer/.foyer-secrets/github-token'` (coller, Entrée, Ctrl-D) ; `chmod 400` ensuite.
+3. Installer `deploy/fr.foyer.update.plist.example` dans `/Library/LaunchDaemons/fr.foyer.update.plist` (root:wheel, 644), puis `launchctl bootstrap system` ; journal dans `~foyer/Library/Logs/foyer-update.log`, état dans `~foyer/.foyer-deploy.json`.
+4. Vérifier sans déployer : `sudo -u foyer … auto_update.py … --check`.
+
+Renouveler le jeton avant expiration ; un jeton expiré arrête les déploiements (erreur 401 au journal) sans toucher au service en place.
