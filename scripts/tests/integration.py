@@ -83,6 +83,11 @@ state = call("GET", "/api/v1/state", token=a)
 call("GET", "/api/v1/app/android", token=a, expected=404)
 call("GET", "/api/v1/app/android.apk", token=a, expected=404)
 assert "sessions" not in state and "devices" not in state
+# Appareil Android : version déclarée optionnelle (anciennes versions), jamais négative.
+device_token = "fcm-" + "x" * 40
+call("POST", "/api/v1/devices", {"token": device_token}, token=a, expected=204)
+call("POST", "/api/v1/devices", {"token": device_token, "appVersion": 2116}, token=a, expected=204)
+call("POST", "/api/v1/devices", {"token": device_token, "appVersion": -1}, token=a, expected=400)
 assert all("email" not in m and "subject" not in m for m in state["members"])
 original_palette = state["me"]["paletteId"]
 other_palette = call("GET", "/api/v1/state", token=b)["me"]["paletteId"]
