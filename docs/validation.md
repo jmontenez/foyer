@@ -75,6 +75,8 @@ Deux onglets depuis le 2026-09-24 : **Douces** (les onze palettes d’origine) e
 
 **Cadre commun (2026-09-24)** : barre de navigation flottante (onglet actif nommé ; rail latéral conservé sur grand écran), en-tête compact (date ou sous-titre, recherche repliable, profil = réglages), une seule ligne de filtres (Tout le foyer, Moi d’abord, l’autre membre, Sans responsable, Tags), bouton rond de création, tâches en carte ou en ligne selon le jeton d’affichage, dates relatives (Aujourd’hui, Demain, Samedi, Il y a 3 jours…), badges EN RETARD/URGENT/HAUTE, une couleur stable par membre, tirer pour actualiser. Pluriel corrigé (« 1 commentaire »).
 
+**Listes (2026-09-24)** : Aujourd’hui = bandeau (à faire, en retard — touche pour ne voir que les retards —, répartition par personne) puis sections En retard / Aujourd’hui ; Semaine = frise lundi → dimanche (un point par tâche, toucher un jour pour filtrer) puis tâches par jour (retards et « en cours » sans date rattachés à aujourd’hui) ; Backlog = Tout / Obligations / Envies / Avec date, sections Commence bientôt / Un jour ; Historique = 30 jours (par défaut) / 3 mois / Tout / Période…, regroupé par semaine avec qui a réalisé. Apparence : choix Cartes / Lignes.
+
 Rejouer le parcours visuel : `node scripts/tests/appearance.cjs` sur la démonstration locale. Il laisse le compte fictif Camille sur Ciel & orange.
 
 ## Adaptation Cloudflare Tunnel — exposition publique
