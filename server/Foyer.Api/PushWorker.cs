@@ -29,8 +29,10 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
     }
     private async Task Deliver(FirebaseMessaging messaging)
     {
-        var jobs = await store.Read(h => h.Maintenance ? [] : h.Notifications.Where(n => !n.Finished && n.NextAttempt <= DateTimeOffset.UtcNow).Select(n => (Notification: n, Devices: Rules.Recipients(h, n).Where(d => !n.DeliveredDeviceIds.Contains(d.Id)).ToList())).Take(20).ToList());
-        foreach (var (n, devices) in jobs)
+        var jobs = await store.Read(h => h.Maintenance ? [] : h.Notifications.Where(n => !n.Finished && n.NextAttempt <= DateTimeOffset.UtcNow).Select(n => (Notification: n, n.Count, Devices: Rules.Recipients(h, n).Where(d => !n.DeliveredDeviceIds.Contains(d.Id)).ToList())).Take(20).ToList());
+        // Count relevé avant l’envoi : une notification reprise entre-temps (rafale) n’est pas
+        // marquée reçue avec l’ancien texte ; elle repartira au tour suivant.
+        foreach (var (n, count, devices) in jobs)
         {
             if (n.ExpiresAt <= DateTimeOffset.UtcNow) { await Finish(n.Id); continue; }
             foreach (var d in devices)
@@ -44,9 +46,9 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
                         Token = d.Token,
                         Notification = new FirebaseAdmin.Messaging.Notification { Title = title, Body = body },
                         Data = new Dictionary<string, string> { ["notificationId"] = n.Id, ["kind"] = n.Kind, ["ticketId"] = n.TicketId ?? "" },
-                        Android = new AndroidConfig { Priority = Priority.High, CollapseKey = n.Id, TimeToLive = n.ExpiresAt - DateTimeOffset.UtcNow, Notification = new AndroidNotification { Tag = n.Id, ChannelId = "foyer_activity" } }
+                        Android = new AndroidConfig { Priority = Priority.High, CollapseKey = n.Id, TimeToLive = n.ExpiresAt - DateTimeOffset.UtcNow, Notification = new AndroidNotification { Tag = n.Id, ChannelId = Notify.Channel(n.Kind) } }
                     });
-                    await store.Update(h => { h.Notifications.First(x => x.Id == n.Id).DeliveredDeviceIds.Add(d.Id); return true; });
+                    await store.Update(h => { var current = h.Notifications.First(x => x.Id == n.Id); if (current.Count == count) current.DeliveredDeviceIds.Add(d.Id); return true; });
                 }
                 catch (FirebaseMessagingException ex) when (ex.MessagingErrorCode == MessagingErrorCode.Unregistered)
                 {
@@ -56,7 +58,9 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
             }
             await store.Update(h =>
             {
-                var current = h.Notifications.First(x => x.Id == n.Id); current.Attempts++;
+                var current = h.Notifications.First(x => x.Id == n.Id);
+                if (current.Count != count) return true;
+                current.Attempts++;
                 // Sans appareil concerné (jamais enregistré, ou déjà à jour), rien ne reste en attente.
                 current.Finished = Rules.Recipients(h, current).All(d => current.DeliveredDeviceIds.Contains(d.Id));
                 current.NextAttempt = DateTimeOffset.UtcNow.AddMinutes(Math.Min(60, Math.Pow(2, Math.Min(current.Attempts, 6)))); return true;

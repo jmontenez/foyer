@@ -89,6 +89,8 @@ public sealed class Notification
     // Nombre d’événements regroupés dans cette notification, et qui les a déclenchés.
     public int Count { get; set; } = 1;
     public string? ActorId { get; set; }
+    // Titres des tâches regroupées (attributions en rafale).
+    public List<string> Subjects { get; set; } = [];
     public string? TicketId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
