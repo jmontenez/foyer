@@ -84,4 +84,94 @@ public class NotifyTests
         Assert.Equal(("Foyer", "Votre résumé est prêt"), Notify.Text(new Notification { Title = "Votre résumé est prêt" }));
         Assert.Equal(("Titre", "Corps"), Notify.Text(new Notification { Title = "Titre", Body = "Corps" }));
     }
+
+    // Heure de Paris (UTC+2 fin septembre).
+    private static DateTimeOffset Paris(int day, int hour, int minute = 0) => new(2026, 9, day, hour, minute, 0, TimeSpan.FromHours(2));
+    private static Ticket Backlog(Household h, string title, DateOnly start, List<string>? who = null)
+    {
+        var t = new Ticket { Title = title, StageId = "backlog", StartDate = start, DueDate = start, Assignees = who ?? [] };
+        h.Tickets.Add(t);
+        return t;
+    }
+
+    [Fact]
+    public void AtMidnightTheMorningDigestAnnouncesTheDay()
+    {
+        var h = Home();
+        var bins = Backlog(h, "Sortir les poubelles", new(2026, 9, 26));
+        Rules.Schedule(h, Paris(26, 0, 5));
+        Assert.Equal("todo", bins.StageId);
+        Assert.Empty(h.Notifications);
+        Rules.Schedule(h, Paris(26, 8, 0));
+        var digest = h.Notifications.Where(n => n.Kind == "digest").ToList();
+        Assert.Equal(2, digest.Count);
+        Assert.All(digest, n => Assert.Equal(("Aujourd’hui : Sortir les poubelles", "La seule tâche du jour", bins.Id), (n.Title, n.Body, n.TicketId)));
+    }
+
+    [Fact]
+    public void WithoutDigestTheNightReminderWaitsForTheMorning()
+    {
+        var h = Home();
+        h.Members.ForEach(m => m.DigestEnabled = false);
+        h.Members[1].DigestTime = "07:15";
+        Backlog(h, "Sortir les poubelles", new(2026, 9, 26));
+        Rules.Schedule(h, Paris(26, 0, 5));
+        Assert.Equal(new DateTimeOffset(2026, 9, 26, 6, 0, 0, TimeSpan.Zero), h.Notifications.Single(n => n.MemberId == "a").NextAttempt);
+        Assert.Equal(new DateTimeOffset(2026, 9, 26, 5, 15, 0, TimeSpan.Zero), h.Notifications.Single(n => n.MemberId == "b").NextAttempt);
+        // À 22 h 30 : le lendemain matin.
+        Assert.Equal(new DateTimeOffset(2026, 9, 27, 6, 0, 0, TimeSpan.Zero), Notify.WakeAt(h, h.Members[0], Paris(26, 22, 30)));
+    }
+
+    [Fact]
+    public void DaytimeRemindersLeaveRightAway()
+    {
+        var h = Home();
+        h.Members.ForEach(m => m.DigestEnabled = false);
+        var t = Backlog(h, "Faire les courses", new(2026, 9, 25), ["a"]);
+        t.Shopping = true;
+        t.Checklist = [new("1", "Lait", false), new("2", "Pain", true), new("3", "Œufs", false)];
+        Rules.Schedule(h, Paris(25, 15));
+        var n = Assert.Single(h.Notifications);
+        Assert.Equal(("À faire aujourd’hui", "Faire les courses · 2 articles", Paris(25, 15)), (n.Title, n.Body, n.NextAttempt));
+        Backlog(h, "A", new(2026, 9, 25)); Backlog(h, "B", new(2026, 9, 25)); Backlog(h, "C", new(2026, 9, 25)); Backlog(h, "D", new(2026, 9, 25));
+        Rules.Schedule(h, Paris(25, 16));
+        var many = h.Notifications.Last(x => x.MemberId == "a");
+        Assert.Equal(("4 tâches à faire aujourd’hui", "A · B · C (+1)"), (many.Title, many.Body));
+    }
+
+    [Fact]
+    public void DigestListsLateFirstAndSkipsEmptyDays()
+    {
+        var h = Home();
+        var today = new DateOnly(2026, 9, 25);
+        Assert.Null(Notify.Digest(h, h.Members[0], today, Now));
+        h.Tickets.Add(new() { Title = "Laver la couette", StageId = "todo", DueDate = today });
+        h.Tickets.Add(new() { Title = "Papiers École", StageId = "todo", DueDate = today.AddDays(-2), Assignees = ["a"] });
+        var courses = new Ticket { Title = "Faire les courses", StageId = "todo", StartDate = today, Shopping = true, Checklist = [new("1", "Lait", false)] };
+        h.Tickets.Add(courses);
+        h.Tickets.Add(new() { Title = "Pour Clemence", StageId = "todo", DueDate = today, Assignees = ["b"] });
+        var d = Notify.Digest(h, h.Members[0], today, Now)!;
+        Assert.Equal("Aujourd’hui : 3 tâches, dont 1 en retard", d.Title);
+        Assert.Equal("Papiers École · Laver la couette · Courses (1 article)", d.Body);
+    }
+
+    [Fact]
+    public void CommentsSayWhoAndOnWhatButNeverTheText()
+    {
+        var h = Home();
+        var t = Create(h, "a", ["a"]);
+        Notify.Commented(h, t, "b", Now);
+        var n = Assert.Single(h.Notifications, x => x.Kind == "comment");
+        Assert.Equal(("a", "Clemence a commenté", "Papiers École"), (n.MemberId, n.Title, n.Body));
+    }
+
+    [Fact]
+    public void UpdateAnnouncementsWaitForTheMorning()
+    {
+        var h = Home();
+        h.Devices = [new("p", "a", "s", "token", Now, 1)];
+        Rules.AnnounceUpdate(h, 2, Paris(25, 23, 30));
+        var n = Assert.Single(h.Notifications);
+        Assert.Equal(("Mise à jour de Foyer", new DateTimeOffset(2026, 9, 26, 6, 0, 0, TimeSpan.Zero)), (n.Title, n.NextAttempt));
+    }
 }

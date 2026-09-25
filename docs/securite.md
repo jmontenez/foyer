@@ -19,7 +19,7 @@ Données familiales privées, potentiellement sensibles (santé, habitudes et ph
 | Fuite via images | Route authentifiée, volume hors webroot, réponses sans cache | Les utilisateurs peuvent volontairement enregistrer/capturer une image |
 | Fuite par logs | Pas de corps/token dans les logs applicatifs ; logs ASP.NET restreints | Ne pas activer les logs HTTP détaillés en production, notamment sur OAuth |
 | Données perdues | PostgreSQL transactionnel, sauvegarde base + images cohérente et chiffrée | Destination hors Mac et rotation à configurer ; RPO correspondant à la dernière sauvegarde réussie |
-| Exposition push | Résumé générique, commentaires sans leur contenu | Le sujet est transmis à Google/FCM et peut apparaître sur l’écran verrouillé ; réglage Android masquable |
+| Exposition push | Titres des tâches seulement (rappels, résumé, attributions, commentaires) ; jamais le texte des commentaires ni les descriptions | Le sujet est transmis à Google/FCM et peut apparaître sur l’écran verrouillé ; réglage Android masquable |
 
 Le compte DB utilisé est propriétaire de la base domestique dédiée ; PostgreSQL n’est pas publié sur le réseau de production. L’API tourne avec l’utilisateur non root de l’image .NET, capacités supprimées. Les secrets montés et la clé de signature APK ne font pas partie du code ni de l’export de configuration.
 
