@@ -449,212 +449,225 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (c) => StatefulBuilder(
-        builder: (c, change) {
-          Widget chip({
-            required IconData icon,
-            required String label,
-            required bool active,
-            required List<(String, Object?)> options,
-            required void Function(Object?) onPick,
-          }) => PopupMenuButton<int>(
-            tooltip: label,
-            onSelected: (i) => change(() => onPick(options[i].$2)),
-            itemBuilder: (_) => [
-              for (final (i, (name, _)) in options.indexed)
-                PopupMenuItem(value: i, child: Text(name)),
-            ],
-            child: IgnorePointer(
-              child: FilterPill(
-                label: label,
-                icon: icon,
-                selected: active,
-                onTap: () {},
+      builder: (c) => KeyboardBack(
+        child: StatefulBuilder(
+          builder: (c, change) {
+            Widget chip({
+              required IconData icon,
+              required String label,
+              required bool active,
+              required List<(String, Object?)> options,
+              required void Function(Object?) onPick,
+            }) => PopupMenuButton<int>(
+              tooltip: label,
+              onSelected: (i) => change(() => onPick(options[i].$2)),
+              itemBuilder: (_) => [
+                for (final (i, (name, _)) in options.indexed)
+                  PopupMenuItem(value: i, child: Text(name)),
+              ],
+              child: IgnorePointer(
+                child: FilterPill(
+                  label: label,
+                  icon: icon,
+                  selected: active,
+                  onTap: () {},
+                ),
               ),
-            ),
-          );
-          final due = DateTime.tryParse(ticket['dueDate'] ?? '');
-          final who = strings(ticket['assignees']);
-          final tag = maps(data!['tags'])
-              .where((g) => strings(ticket['tagIds']).contains(g['id']))
-              .firstOrNull;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              0,
-              20,
-              20 + MediaQuery.viewInsetsOf(c).bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (shortcuts.isNotEmpty) ...[
+            );
+            final due = DateTime.tryParse(ticket['dueDate'] ?? '');
+            final who = strings(ticket['assignees']);
+            final tag = maps(data!['tags'])
+                .where((g) => strings(ticket['tagIds']).contains(g['id']))
+                .firstOrNull;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                20 + MediaQuery.viewInsetsOf(c).bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (shortcuts.isNotEmpty) ...[
+                    Text(
+                      'RACCOURCIS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8,
+                        color: Theme.of(c).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 72,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: shortcuts.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (_, i) => ShortcutChip(
+                          shortcut: shortcuts[i],
+                          today: day,
+                          onTap: () => Navigator.pop(
+                            c,
+                            'shortcut:${shortcuts[i]['id']}',
+                          ),
+                          // Appui long : on préremplit pour étoffer avant de créer.
+                          onLongPress: () => change(() {
+                            final s = shortcuts[i];
+                            title.text = s['title'].toString();
+                            ticket['shortcutId'] = s['id'];
+                            ticket['description'] = s['description'] ?? '';
+                            ticket['kind'] = s['kind'];
+                            ticket['priority'] = s['priority'];
+                            ticket['tagIds'] = strings(s['tagIds']);
+                            ticket['checklist'] = [
+                              for (final (k, text) in strings(
+                                s['checklist'],
+                              ).indexed)
+                                {'id': 's$k', 'text': text, 'done': false},
+                            ];
+                            final d = s['dueInDays'] as int?;
+                            ticket['dueDate'] = d == null
+                                ? null
+                                : iso(day.add(Duration(days: d)));
+                            ticket['assignees'] = switch (s['assign']) {
+                              'none' => <String>[],
+                              'member' => [s['assigneeId'].toString()],
+                              _ => [me.toString()],
+                            };
+                          }),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
-                    'RACCOURCIS',
+                    'Nouvelle tâche',
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .8,
                       color: Theme.of(c).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 72,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: shortcuts.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) => ShortcutChip(
-                        shortcut: shortcuts[i],
-                        today: day,
-                        onTap: () =>
-                            Navigator.pop(c, 'shortcut:${shortcuts[i]['id']}'),
-                        // Appui long : on préremplit pour étoffer avant de créer.
-                        onLongPress: () => change(() {
-                          final s = shortcuts[i];
-                          title.text = s['title'].toString();
-                          ticket['shortcutId'] = s['id'];
-                          ticket['description'] = s['description'] ?? '';
-                          ticket['kind'] = s['kind'];
-                          ticket['priority'] = s['priority'];
-                          ticket['tagIds'] = strings(s['tagIds']);
-                          ticket['checklist'] = [
-                            for (final (k, text) in strings(
-                              s['checklist'],
-                            ).indexed)
-                              {'id': 's$k', 'text': text, 'done': false},
-                          ];
-                          final d = s['dueInDays'] as int?;
-                          ticket['dueDate'] = d == null
-                              ? null
-                              : iso(day.add(Duration(days: d)));
-                          ticket['assignees'] = switch (s['assign']) {
-                            'none' => <String>[],
-                            'member' => [s['assigneeId'].toString()],
-                            _ => [me.toString()],
-                          };
-                        }),
-                      ),
+                  TextField(
+                    controller: title,
+                    autofocus: true,
+                    maxLength: 160,
+                    textCapitalization: TextCapitalization.sentences,
+                    style: TextStyle(
+                      fontFamily: tokensOf(c).displayFont,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
                     ),
+                    decoration: const InputDecoration(
+                      hintText: 'Qu’est-ce qu’on a en tête ?',
+                      counterText: '',
+                    ),
+                    onSubmitted: (_) => Navigator.pop(c, 'create'),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    runSpacing: 8,
+                    children: [
+                      chip(
+                        icon: Icons.event_outlined,
+                        label: due == null
+                            ? 'Quand ?'
+                            : relativeDay(due, today),
+                        active: due != null,
+                        options: [
+                          ('Sans date', null),
+                          ('Aujourd’hui', day),
+                          ('Demain', day.add(const Duration(days: 1))),
+                          (
+                            'Dans une semaine',
+                            day.add(const Duration(days: 7)),
+                          ),
+                        ],
+                        onPick: (d) => ticket['dueDate'] = d == null
+                            ? null
+                            : iso(d as DateTime),
+                      ),
+                      chip(
+                        icon: Icons.person_outline,
+                        label: who.isEmpty
+                            ? 'Qui ?'
+                            : who
+                                  .map(
+                                    (id) => id == me ? 'Moi' : memberName(id),
+                                  )
+                                  .join(' + '),
+                        active: who.isNotEmpty,
+                        options: [
+                          ('Personne pour l’instant', <String>[]),
+                          ('Moi', [me]),
+                          for (final m in members.where((m) => m['id'] != me))
+                            (m['name'].toString(), [m['id']]),
+                          if (members.length > 1)
+                            ('Nous deux', [for (final m in members) m['id']]),
+                        ],
+                        onPick: (v) =>
+                            ticket['assignees'] = List<String>.from(v as List),
+                      ),
+                      chip(
+                        icon: Icons.auto_awesome_outlined,
+                        label: ticket['kind'] == 'wish'
+                            ? 'Envie'
+                            : 'Obligation',
+                        active: ticket['kind'] == 'wish',
+                        options: [
+                          ('Obligation', 'obligation'),
+                          ('Envie', 'wish'),
+                        ],
+                        onPick: (k) => ticket['kind'] = k,
+                      ),
+                      chip(
+                        icon: Icons.flag_outlined,
+                        label: ticket['priority'] == 'normal'
+                            ? 'Priorité'
+                            : priorityName(ticket['priority']),
+                        active: ticket['priority'] != 'normal',
+                        options: [
+                          for (final p in ['low', 'normal', 'high', 'urgent'])
+                            (priorityName(p), p),
+                        ],
+                        onPick: (p) => ticket['priority'] = p,
+                      ),
+                      chip(
+                        icon: Icons.sell_outlined,
+                        label: tag == null ? 'Tag' : tag['name'].toString(),
+                        active: tag != null,
+                        options: [
+                          ('Aucun', null),
+                          for (final g in maps(data!['tags']))
+                            (g['name'].toString(), g['id']),
+                        ],
+                        onPick: (id) => ticket['tagIds'] = [?id as String?],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                ],
-                Text(
-                  'Nouvelle tâche',
-                  style: TextStyle(
-                    color: Theme.of(c).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                TextField(
-                  controller: title,
-                  autofocus: true,
-                  maxLength: 160,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: TextStyle(
-                    fontFamily: tokensOf(c).displayFont,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'Qu’est-ce qu’on a en tête ?',
-                    counterText: '',
-                  ),
-                  onSubmitted: (_) => Navigator.pop(c, 'create'),
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  runSpacing: 8,
-                  children: [
-                    chip(
-                      icon: Icons.event_outlined,
-                      label: due == null ? 'Quand ?' : relativeDay(due, today),
-                      active: due != null,
-                      options: [
-                        ('Sans date', null),
-                        ('Aujourd’hui', day),
-                        ('Demain', day.add(const Duration(days: 1))),
-                        ('Dans une semaine', day.add(const Duration(days: 7))),
-                      ],
-                      onPick: (d) => ticket['dueDate'] = d == null
-                          ? null
-                          : iso(d as DateTime),
-                    ),
-                    chip(
-                      icon: Icons.person_outline,
-                      label: who.isEmpty
-                          ? 'Qui ?'
-                          : who
-                                .map((id) => id == me ? 'Moi' : memberName(id))
-                                .join(' + '),
-                      active: who.isNotEmpty,
-                      options: [
-                        ('Personne pour l’instant', <String>[]),
-                        ('Moi', [me]),
-                        for (final m in members.where((m) => m['id'] != me))
-                          (m['name'].toString(), [m['id']]),
-                        if (members.length > 1)
-                          ('Nous deux', [for (final m in members) m['id']]),
-                      ],
-                      onPick: (v) =>
-                          ticket['assignees'] = List<String>.from(v as List),
-                    ),
-                    chip(
-                      icon: Icons.auto_awesome_outlined,
-                      label: ticket['kind'] == 'wish' ? 'Envie' : 'Obligation',
-                      active: ticket['kind'] == 'wish',
-                      options: [
-                        ('Obligation', 'obligation'),
-                        ('Envie', 'wish'),
-                      ],
-                      onPick: (k) => ticket['kind'] = k,
-                    ),
-                    chip(
-                      icon: Icons.flag_outlined,
-                      label: ticket['priority'] == 'normal'
-                          ? 'Priorité'
-                          : priorityName(ticket['priority']),
-                      active: ticket['priority'] != 'normal',
-                      options: [
-                        for (final p in ['low', 'normal', 'high', 'urgent'])
-                          (priorityName(p), p),
-                      ],
-                      onPick: (p) => ticket['priority'] = p,
-                    ),
-                    chip(
-                      icon: Icons.sell_outlined,
-                      label: tag == null ? 'Tag' : tag['name'].toString(),
-                      active: tag != null,
-                      options: [
-                        ('Aucun', null),
-                        for (final g in maps(data!['tags']))
-                          (g['name'].toString(), g['id']),
-                      ],
-                      onPick: (id) => ticket['tagIds'] = [?id as String?],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: () => Navigator.pop(c, 'details'),
-                      child: const Text('Plus de détails'),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.pop(c, 'create'),
-                        child: const Text('Créer'),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => Navigator.pop(c, 'details'),
+                        child: const Text('Plus de détails'),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.pop(c, 'create'),
+                          child: const Text('Créer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
     ticket['title'] = title.text.trim();
