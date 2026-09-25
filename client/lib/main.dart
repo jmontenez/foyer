@@ -1546,6 +1546,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         comments: maps(t['comments']).length,
         people: people,
         wish: t['kind'] == 'wish',
+        repeat:
+            activeRepeat(
+              maps(data!['shortcuts'])
+                  .where((s) => s['id'] == t['shortcutId'])
+                  .firstOrNull,
+            ) !=
+            null,
       ),
     );
   }
@@ -2500,13 +2507,73 @@ class _TicketPageState extends State<TicketPage> {
     ],
   );
 
+  Map<String, dynamic>? get shortcut =>
+      maps(widget.data['shortcuts'])
+          .where((s) => s['id'] == t['shortcutId'])
+          .firstOrNull;
+
+  Future<void> skip() async {
+    try {
+      await api.call('POST', '/api/v1/tickets/${t['id']}/skip');
+      message('Passée cette fois : la suivante est prévue.');
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      message(e);
+    }
+  }
+
+  Future<void> editRepeat() async {
+    final s = shortcut;
+    if (s == null) return;
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ShortcutEditor(api: api, data: widget.data, shortcut: s),
+      ),
+    );
+  }
+
   List<Widget> summary() {
     final c = Theme.of(context).colorScheme;
+    final repeat = activeRepeat(shortcut);
+    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
     return [
       Text(
         'F-${t['number']} · $stageName',
         style: TextStyle(color: c.onSurfaceVariant),
       ),
+      if (repeat != null) ...[
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Icon(Icons.repeat, size: 18, color: c.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                repeatLabel(repeat),
+                style: TextStyle(color: c.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+        Wrap(
+          spacing: 4,
+          children: [
+            if (!closed)
+              TextButton.icon(
+                onPressed: saving ? null : skip,
+                icon: const Icon(Icons.skip_next_outlined),
+                label: const Text('Passer cette fois'),
+              ),
+            TextButton.icon(
+              onPressed: editRepeat,
+              icon: const Icon(Icons.tune),
+              label: const Text('Modifier la répétition'),
+            ),
+          ],
+        ),
+      ],
       const SizedBox(height: 6),
     ];
   }
