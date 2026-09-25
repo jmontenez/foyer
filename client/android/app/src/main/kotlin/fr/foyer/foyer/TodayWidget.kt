@@ -10,32 +10,17 @@ import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 // Widget « Aujourd’hui » : affiche l’instantané écrit par l’application (lib/widgets.dart).
-// Aucun appel réseau ici : s’il est ancien, on demande à Dart de le rafraîchir (foyer://refresh).
+// Aucun appel réseau ici : s’il est ancien, on demande à Dart de le rafraîchir (WidgetRefresh.kt).
 private data class Row(val row: Int, val check: Int, val text: Int, val title: Int, val meta: Int)
 
 class TodayWidget : HomeWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray, widgetData: SharedPreferences) {
-        val raw = widgetData.getString("today", null)
-        val today = raw?.let { runCatching { JSONObject(it) }.getOrNull() }
-        val fetchedAt = widgetData.getString("fetchedAt", null)?.toLongOrNull() ?: 0L
-        val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
-        if (System.currentTimeMillis() - fetchedAt > STALE_MS || today?.optString("date") != date) requestRefresh(context)
+        val today = widgetData.getString("today", null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        if (widgetDataStale(widgetData)) requestWidgetRefresh(context)
         val notice = widgetData.getString("notice", null)?.takeIf { it.isNotEmpty() }
         for (id in appWidgetIds) appWidgetManager.updateAppWidget(id, render(context, today, notice))
-    }
-
-    // Au plus une demande toutes les 5 minutes : un échec (hors ligne, déconnecté) ne boucle pas.
-    private fun requestRefresh(context: Context) {
-        val prefs = context.getSharedPreferences("foyer_widgets", Context.MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        if (now - prefs.getLong("refreshRequestedAt", 0L) < RETRY_MS) return
-        prefs.edit().putLong("refreshRequestedAt", now).apply()
-        runCatching { HomeWidgetBackgroundIntent.getBroadcast(context, Uri.parse("foyer://refresh")).send() }
     }
 
     private fun open(context: Context, link: String) =
@@ -88,8 +73,6 @@ class TodayWidget : HomeWidgetProvider() {
     }
 
     private companion object {
-        const val STALE_MS = 15 * 60_000L
-        const val RETRY_MS = 5 * 60_000L
         val ROWS = listOf(
             Row(R.id.row0, R.id.row0_check, R.id.row0_text, R.id.row0_title, R.id.row0_meta),
             Row(R.id.row1, R.id.row1_check, R.id.row1_text, R.id.row1_title, R.id.row1_meta),

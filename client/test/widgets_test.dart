@@ -7,6 +7,12 @@ void main() {
   test('Liens des widgets : Aujourd’hui, création rapide, fiche', () {
     expect(WidgetLink.parse(Uri.parse('foyer://today')), isA<OpenToday>());
     expect(WidgetLink.parse(Uri.parse('foyer://create')), isA<QuickCreate>());
+    final courses = WidgetLink.parse(Uri.parse('foyer://courses'));
+    expect((courses as OpenCourses).add, isFalse);
+    expect(
+      (WidgetLink.parse(Uri.parse('foyer://courses?add=1')) as OpenCourses).add,
+      isTrue,
+    );
     final ticket = WidgetLink.parse(Uri.parse('foyer://ticket/abc123'));
     expect(ticket, isA<OpenTicket>());
     expect((ticket as OpenTicket).id, 'abc123');
@@ -40,8 +46,10 @@ void main() {
       expect(snapshot['notice'], isNull);
       expect(widgetSnapshot(null, at), {
         'today': null,
+        'shopping': null,
         'fetchedAt': null,
         'notice': null,
+        'shoppingNotice': null,
       });
     },
   );
@@ -59,5 +67,16 @@ void main() {
     expect(tasks[0], {'id': 'a', 'title': 'Lessive'});
     expect(tasks[1], {'id': 'b', 'title': 'Courses', 'pending': true});
     expect(markPending(null, 'b'), isNull);
+    final shopping = jsonEncode({
+      'rows': [
+        {'id': null, 'text': 'Crèmerie & œufs'},
+        {'id': 'lait', 'text': 'Lait'},
+      ],
+    });
+    final rows =
+        jsonDecode(markPending(shopping, 'lait', list: 'rows')!)['rows']
+            as List;
+    expect(rows[0], {'id': null, 'text': 'Crèmerie & œufs'});
+    expect(rows[1]['pending'], isTrue);
   });
 }

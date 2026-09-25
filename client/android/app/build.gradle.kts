@@ -59,3 +59,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Liste défilante du widget Courses (RemoteViewsCompat.setRemoteAdapter, sans service à écrire).
+    implementation("androidx.core:core-remoteviews:1.1.0")
+}

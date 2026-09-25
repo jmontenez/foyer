@@ -684,8 +684,11 @@ class ShoppingView extends StatefulWidget {
   final Api api;
   final Future<void> Function() onChanged;
   final void Function(Map<String, dynamic> ticket) onOpenTicket;
+  // Change de valeur quand on arrive pour ajouter un article : le curseur va dans la recherche.
+  final int focusSearch;
   const ShoppingView({
     super.key,
+    this.focusSearch = 0,
     required this.data,
     required this.api,
     required this.onChanged,
@@ -700,6 +703,20 @@ class _ShoppingViewState extends State<ShoppingView> {
   final focus = FocusNode();
   String? selectedId;
   bool busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusSearch > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => focus.requestFocus());
+    }
+  }
+
+  @override
+  void didUpdateWidget(ShoppingView old) {
+    super.didUpdateWidget(old);
+    if (widget.focusSearch != old.focusSearch) focus.requestFocus();
+  }
 
   @override
   void dispose() {

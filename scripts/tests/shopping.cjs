@@ -76,20 +76,28 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByText('Glisser pour réordonner',{exact:false}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-rayons-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
-  // Modifier un ingrédient : le nouveau nom suit dans la liste en cours.
+  // Modifier un ingrédient : le nouveau nom suit dans la liste en cours. La saisie Flutter web
+  // sous Playwright est parfois ignorée : l’étape entière est retentée (vérification stricte).
   await page.getByRole('button',{name:'Plus d’options',exact:true}).click();
   await page.getByRole('menuitem',{name:'Ingrédients'}).or(page.getByRole('button',{name:'Ingrédients'})).or(page.getByText('Ingrédients',{exact:true})).first().click();
-  const entry = page.getByRole('button',{name:new RegExp('^' + fresh)});
-  await type(fresh, entry, 'Chercher un ingrédient…');
-  await entry.click();
-  // Saisie clavier (Flutter web ne prend pas toujours fill() sur un champ déjà rempli).
-  const nameBox = page.getByRole('textbox',{name:'Nom'});
-  await nameBox.click();
-  await page.keyboard.press('ControlOrMeta+A');
-  await page.keyboard.type(fresh + ' four');
-  await page.waitForTimeout(300);
-  await page.getByRole('button',{name:'Enregistrer',exact:true}).click();
-  await until(async () => (await draft()).some(i => i.text === fresh + ' four'), 'Ingrédient non renommé dans la liste');
+  const renamedTo = fresh + ' four';
+  const isRenamed = async () => (await draft()).some(i => i.text === renamedTo);
+  for (let attempt = 0; attempt < 3 && !(await isRenamed()); attempt++) {
+    const entry = page.getByRole('button',{name:new RegExp('^' + fresh + '( |$)')}).first();
+    await type(fresh, entry, 'Chercher un ingrédient…');
+    await entry.click();
+    const nameBox = page.getByRole('textbox',{name:'Nom'});
+    await nameBox.waitFor();
+    await nameBox.click();
+    await page.waitForTimeout(300);
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type(renamedTo);
+    await page.waitForTimeout(300);
+    await page.getByRole('button',{name:'Enregistrer',exact:true}).click();
+    for (let i = 0; i < 10 && !(await isRenamed()); i++) await page.waitForTimeout(400);
+    if (!(await isRenamed()) && await page.getByRole('button',{name:'Enregistrer',exact:true}).isVisible().catch(() => false)) await page.keyboard.press('Escape');
+  }
+  if (!(await isRenamed())) throw new Error('Ingrédient non renommé dans la liste');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';

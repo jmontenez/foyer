@@ -42,6 +42,13 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_today_info" />
         </receiver>
+        <!-- Widget « Courses » (écran d’accueil). -->
+        <receiver android:name=".ShoppingWidget" android:exported="true" android:label="@string/widget_shopping_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_shopping_info" />
+        </receiver>
         <!-- Actions des widgets exécutées en Dart (home_widget) ; seules nos PendingIntent y mènent. -->
         <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="false">
             <intent-filter>
