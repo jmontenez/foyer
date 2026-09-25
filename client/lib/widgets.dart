@@ -45,11 +45,24 @@ class OpenTicket extends WidgetLink {
 }
 
 /// Instantané enregistré pour les widgets : les données du serveur, telles quelles.
+/// Un rafraîchissement réussi efface aussi l’éventuel « Action non envoyée ».
 Map<String, String?> widgetSnapshot(Map<String, dynamic>? data, DateTime at) =>
     {
       'today': data == null ? null : jsonEncode(data['today']),
       'fetchedAt': data == null ? null : at.millisecondsSinceEpoch.toString(),
+      'notice': null,
     };
+
+/// Tâche touchée dans le widget : affichée « en cours d’envoi » jusqu’au rafraîchissement.
+String? markPending(String? today, String id) {
+  if (today == null) return null;
+  final data = Map<String, dynamic>.from(jsonDecode(today) as Map);
+  data['tasks'] = [
+    for (final t in (data['tasks'] as List? ?? []))
+      t is Map && t['id'] == id ? {...t, 'pending': true} : t,
+  ];
+  return jsonEncode(data);
+}
 
 Future<void> _save(Map<String, String?> snapshot) async {
   for (final entry in snapshot.entries) {
@@ -80,13 +93,41 @@ Future<void> clearWidgets() async {
   } catch (_) {}
 }
 
-/// Actions des widgets (isolat d’arrière-plan) : foyer://refresh pour l’instant.
+/// Actions des widgets (isolat d’arrière-plan) : `foyer://refresh`, `foyer://done?id=ID`.
 @pragma('vm:entry-point')
 Future<void> widgetCallback(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
   final api = Api();
   await api.initialize();
-  if (uri?.host == 'refresh') await refreshWidgets(api);
+  final id = uri?.queryParameters['id'];
+  switch (uri?.host) {
+    case 'refresh':
+      await refreshWidgets(api);
+    case 'done' when id != null && id.isNotEmpty:
+      await markDone(api, id);
+  }
+}
+
+/// « C’est fait » depuis le widget : réalisée par moi. La ligne passe tout de suite en « envoi »,
+/// puis le widget se rafraîchit ; en cas d’échec, « Action non envoyée » jusqu’au prochain succès.
+Future<void> markDone(Api api, String id) async {
+  final today = await HomeWidget.getWidgetData<String>('today');
+  await HomeWidget.saveWidgetData<String>('today', markPending(today, id));
+  await HomeWidget.updateWidget(qualifiedAndroidName: todayWidget);
+  try {
+    await api.call('POST', '/api/v1/tickets/${Uri.encodeComponent(id)}/done');
+  } catch (e) {
+    // Déjà close ailleurs (409) : le rafraîchissement suffit.
+    if (e is! ApiError || e.status != 409) {
+      // Hors ligne : la tâche réapparaît telle quelle, avec le message.
+      await HomeWidget.saveWidgetData<String>('today', today);
+      await refreshWidgets(api);
+      await HomeWidget.saveWidgetData<String>('notice', 'Action non envoyée');
+      await HomeWidget.updateWidget(qualifiedAndroidName: todayWidget);
+      return;
+    }
+  }
+  await refreshWidgets(api);
 }
 
 Future<void> registerWidgetActions() async {

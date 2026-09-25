@@ -37,7 +37,27 @@ void main() {
       final snapshot = widgetSnapshot({'today': today}, at);
       expect(jsonDecode(snapshot['today']!), today);
       expect(snapshot['fetchedAt'], '1790000000000');
-      expect(widgetSnapshot(null, at), {'today': null, 'fetchedAt': null});
+      expect(snapshot['notice'], isNull);
+      expect(widgetSnapshot(null, at), {
+        'today': null,
+        'fetchedAt': null,
+        'notice': null,
+      });
     },
   );
+
+  test('Tâche touchée : marquée en cours d’envoi, les autres intactes', () {
+    final today = jsonEncode({
+      'date': '2026-09-25',
+      'count': 2,
+      'tasks': [
+        {'id': 'a', 'title': 'Lessive'},
+        {'id': 'b', 'title': 'Courses'},
+      ],
+    });
+    final tasks = jsonDecode(markPending(today, 'b')!)['tasks'] as List;
+    expect(tasks[0], {'id': 'a', 'title': 'Lessive'});
+    expect(tasks[1], {'id': 'b', 'title': 'Courses', 'pending': true});
+    expect(markPending(null, 'b'), isNull);
+  });
 }

@@ -163,6 +163,14 @@ public static class Rules
         if (!create && wasOpen && Closed(t) && t.Shopping) Foyer.Shopping.ReturnUnbought(h, t);
         foreach (var added in t.Assignees.Except(assignedBefore)) Notify.Assigned(h, t, added, actor, now);
     }
+    // « C’est fait » d’un geste (widget) : réalisée par [member], le reste de la tâche inchangé.
+    public static void Done(Household h, Ticket t, string member, DateTimeOffset now)
+    {
+        if (Closed(t)) throw new RuleException("Cette tâche est déjà close.", 409);
+        Apply(h, t, new TicketInput(t.Title, t.Description, t.Kind, t.Priority, "done", t.StartDate, t.DueDate,
+            t.Assignees, [member], t.TagIds, t.Checklist, t.Version, t.ShortcutId), member, now);
+    }
+
     // Appareils du destinataire concernés par une notification.
     public static IEnumerable<Device> Recipients(Household h, Notification n) =>
         h.Devices.Where(d => d.MemberId == n.MemberId && (n.BelowVersion is not { } below || d.AppVersion is not { } version || version < below));
