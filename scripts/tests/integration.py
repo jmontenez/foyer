@@ -104,6 +104,27 @@ kept = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
 assert (kept["fontId"], kept["density"]) == ("grotesk", "compact"), kept
 call("PUT", "/api/v1/appearance", {"fontId": "system", "listStyle": "cards", "density": "comfortable", "corners": "soft"}, a)
 assert call("GET", "/api/v1/state", token=b)["me"]["paletteId"] == other_palette
+# Raccourcis : exemples pré-chargés, lancement, gestion, lien depuis une création étoffée.
+shortcuts = call("GET", "/api/v1/state", token=a)["shortcuts"]
+assert len(shortcuts) == 8 and shortcuts[0]["title"] == "Faire une lessive", shortcuts[:1]
+launched = call("POST", f"/api/v1/shortcuts/{shortcuts[0]['id']}/launch", token=a)
+assert launched["stageId"] == "todo" and launched["shortcutId"] == shortcuts[0]["id"] and len(launched["checklist"]) == 4, launched
+again = call("GET", "/api/v1/state", token=a)["shortcuts"][0]
+assert again["openTicketId"] == launched["id"] and again["uses"] == 1, again
+custom = call("POST", "/api/v1/shortcuts", {"title": "Nourrir le chat", "description": "", "kind": "obligation", "priority": "normal", "tagIds": [], "checklist": [], "dueInDays": None, "assign": "rotation", "assigneeId": None}, a)
+call("POST", "/api/v1/shortcuts", {"title": "", "description": "", "kind": "obligation", "priority": "normal", "tagIds": [], "checklist": [], "dueInDays": 0, "assign": "launcher", "assigneeId": None}, a, expected=400)
+edited = call("PUT", f"/api/v1/shortcuts/{custom['id']}", {"title": "Nourrir le chat", "description": "Croquettes", "kind": "obligation", "priority": "high", "tagIds": [], "checklist": ["Gamelle"], "dueInDays": 1, "assign": "rotation", "assigneeId": None}, a)
+assert edited["priority"] == "high" and edited["checklist"] == ["Gamelle"], edited
+ids = [x["id"] for x in call("GET", "/api/v1/state", token=a)["shortcuts"]]
+call("PUT", "/api/v1/shortcuts-order", [ids[-1], *ids[:-1]], a, expected=204)
+assert call("GET", "/api/v1/state", token=a)["shortcuts"][0]["id"] == custom["id"]
+call("PUT", "/api/v1/shortcuts-order", ids[:-1], a, expected=400)
+detailed = call("POST", "/api/v1/tickets", {"title": "Nourrir le chat (vétérinaire)", "description": "", "kind": "obligation", "priority": "normal", "stageId": "todo", "startDate": None, "dueDate": None, "assignees": [], "performers": [], "tagIds": [], "checklist": [], "shortcutId": custom["id"]}, a)
+assert detailed["shortcutId"] == custom["id"], detailed
+call("DELETE", f"/api/v1/shortcuts/{custom['id']}", token=a, expected=204)
+kept = [t for t in call("GET", "/api/v1/state", token=a)["tickets"] if t["id"] == detailed["id"]]
+assert kept and kept[0]["shortcutId"] is None, "la tâche doit rester, sans lien"
+call("POST", f"/api/v1/shortcuts/{custom['id']}/launch", token=a, expected=404)
 second_session = call("POST", "/auth/demo/0")["token"]
 assert (
     call("GET", "/api/v1/state", token=second_session)["me"]["paletteId"]
