@@ -18,6 +18,7 @@ public sealed class Household
     public long AnnouncedAndroidVersion { get; set; }
     public List<Shortcut> Shortcuts { get; set; } = [];
     public bool ShortcutsSeeded { get; set; }
+    public bool RepeatsSuggested { get; set; }
 }
 public sealed class Member
 {

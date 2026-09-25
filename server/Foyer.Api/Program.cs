@@ -62,7 +62,7 @@ var app = builder.Build();
 await app.Services.GetRequiredService<Store>().Initialize();
 {
     var store = app.Services.GetRequiredService<Store>();
-    if (!await store.Read(h => h.ShortcutsSeeded)) await store.Update(h => { Shortcuts.SeedOnce(h); return true; });
+    if (!await store.Read(h => h.ShortcutsSeeded && h.RepeatsSuggested)) await store.Update(h => { Shortcuts.SeedOnce(h); Recurrence.SuggestOnce(h); return true; });
 }
 app.Use(async (ctx, next) =>
 {
@@ -231,6 +231,12 @@ api.MapPut("/shortcuts-order", async (List<string> ids, Store store) => await st
     if (ids is null || ids.Count != h.Shortcuts.Count || ids.Distinct().Count() != ids.Count || ids.Any(id => !h.Shortcuts.Any(s => s.Id == id))) throw new RuleException("Ordre des raccourcis invalide.");
     foreach (var (id, i) in ids.Select((id, i) => (id, i))) h.Shortcuts.First(s => s.Id == id).Order = i;
     return Results.NoContent();
+}));
+api.MapPost("/tickets/{id}/skip", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    var me = Security.Member(ctx, h); var t = Find(h, id);
+    Recurrence.Skip(h, t, me.Id, DateTimeOffset.UtcNow);
+    return t;
 }));
 api.MapPost("/tickets/{id}/undo-launch", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
 {

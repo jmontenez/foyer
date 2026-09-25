@@ -121,6 +121,16 @@ assert call("GET", "/api/v1/state", token=a)["shortcuts"][0]["id"] == custom["id
 call("PUT", "/api/v1/shortcuts-order", ids[:-1], a, expected=400)
 detailed = call("POST", "/api/v1/tickets", {"title": "Nourrir le chat (vétérinaire)", "description": "", "kind": "obligation", "priority": "normal", "stageId": "todo", "startDate": None, "dueDate": None, "assignees": [], "performers": [], "tagIds": [], "checklist": [], "shortcutId": custom["id"]}, a)
 assert detailed["shortcutId"] == custom["id"], detailed
+# Répétition : validée, aperçu de la prochaine date ; « passer » réservé aux occurrences répétées.
+body = {"title": "Nourrir le chat", "description": "", "kind": "obligation", "priority": "normal", "tagIds": [], "checklist": [], "dueInDays": 0, "assign": "rotation", "assigneeId": None}
+call("PUT", f"/api/v1/shortcuts/{custom['id']}", {**body, "repeat": {"mode": "weekly", "every": 1, "days": [], "monthDay": 1, "active": True}}, a, expected=400)
+# Raccourci neuf (sans occurrence ouverte) : l’aperçu donne la prochaine échéance mensuelle.
+rent = call("POST", "/api/v1/shortcuts", {**body, "title": "Payer le loyer", "repeat": {"mode": "monthly", "every": 1, "days": [], "monthDay": 5, "active": False}}, a)
+assert rent["repeat"]["mode"] == "monthly" and rent["nextDate"].endswith("-05"), rent
+call("DELETE", f"/api/v1/shortcuts/{rent['id']}", token=a, expected=204)
+laundry = next(x for x in call("GET", "/api/v1/state", token=a)["shortcuts"] if x["seedKey"] == "laundry")
+assert laundry["repeat"]["mode"] == "after" and laundry["repeat"]["every"] == 3 and not laundry["repeat"]["active"], laundry["repeat"]
+call("POST", f"/api/v1/tickets/{detailed['id']}/skip", token=a, expected=409)
 call("DELETE", f"/api/v1/shortcuts/{custom['id']}", token=a, expected=204)
 kept = [t for t in call("GET", "/api/v1/state", token=a)["tickets"] if t["id"] == detailed["id"]]
 assert kept and kept[0]["shortcutId"] is None, "la tâche doit rester, sans lien"
