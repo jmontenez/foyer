@@ -62,7 +62,7 @@ var app = builder.Build();
 await app.Services.GetRequiredService<Store>().Initialize();
 {
     var store = app.Services.GetRequiredService<Store>();
-    if (!await store.Read(h => h.ShortcutsSeeded && h.RepeatsSuggested)) await store.Update(h => { Shortcuts.SeedOnce(h); Recurrence.SuggestOnce(h); return true; });
+    if (!await store.Read(h => h.ShortcutsSeeded && h.RepeatsSuggested && h.IngredientsSeeded)) await store.Update(h => { Shortcuts.SeedOnce(h); Recurrence.SuggestOnce(h); Shopping.SeedOnce(h); return true; });
 }
 app.Use(async (ctx, next) =>
 {
@@ -158,6 +158,7 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     notificationsEnabled = settings.WorkersEnabled,
     shortcuts = h.Shortcuts.OrderBy(s => s.Order).Select(s => Shortcuts.Summary(h, s)),
+    shopping = new { lists = Shopping.Lists(h), ingredients = h.Ingredients, aisles = Shopping.Ordered(h) },
     demo = settings.PublicDemo
 }));
 // Mise à jour Android : réservée aux membres connectés (filtre du groupe), réponses no-store.
@@ -244,13 +245,37 @@ api.MapPost("/tickets/{id}/undo-launch", async (string id, HttpContext ctx, Stor
     Shortcuts.UndoLaunch(h, Find(h, id), me.Id, DateTimeOffset.UtcNow);
     return Results.NoContent();
 }));
-api.MapPost("/shortcuts/{id}/launch", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+api.MapPost("/shortcuts/{id}/launch", async (string id, bool? withList, HttpContext ctx, Store store) => await store.Update(h =>
 {
     if (settings.PublicDemo && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
     var me = Security.Member(ctx, h);
     var s = h.Shortcuts.FirstOrDefault(x => x.Id == id) ?? throw new RuleException("Raccourci introuvable.", 404);
-    return Shortcuts.Launch(h, s, me.Id, DateTimeOffset.UtcNow);
+    return Shortcuts.Launch(h, s, me.Id, DateTimeOffset.UtcNow, withList == true);
 }));
+// Courses : écritures article par article, pour cocher à deux sans conflit de version.
+api.MapPost("/shopping/items", async (ShoppingItemInput input, HttpContext ctx, Store store) => await store.Update(h =>
+    Shopping.Add(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
+api.MapPatch("/shopping/items/{list}/{id}", async (string list, string id, ShoppingItemPatch input, HttpContext ctx, Store store) => await store.Update(h =>
+    Shopping.Update(h, list, id, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
+api.MapDelete("/shopping/items/{list}/{id}", async (string list, string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    Shopping.Remove(h, list, id, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow); return Results.NoContent();
+}));
+api.MapPost("/shopping/{list}/clear-done", async (string list, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    Shopping.ClearDone(h, list, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow); return Results.NoContent();
+}));
+api.MapPost("/shopping/{list}/date", async (string list, ShoppingDateInput input, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    var t = Find(h, list); Shopping.Move(h, t, input.Date, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow); return t;
+}));
+api.MapPost("/shopping/schedule", async (ShoppingScheduleInput input, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    if (settings.PublicDemo && input.Mode == "new" && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
+    return Shopping.Schedule(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow);
+}));
+api.MapDelete("/shopping/ingredients/{name}", async (string name, Store store) => await store.Update(h => { Shopping.Forget(h, name); return Results.NoContent(); }));
+api.MapPut("/shopping/aisle-order", async (List<string> ids, Store store) => await store.Update(h => { Shopping.ReorderAisles(h, ids); return Results.NoContent(); }));
 api.MapPost("/tags", async (TagInput input, Store store) => await store.Update(h =>
 {
     if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > 40 || (input.Color == null || !System.Text.RegularExpressions.Regex.IsMatch(input.Color, "^#[0-9a-fA-F]{6}$"))) throw new RuleException("Nom ou couleur invalide.");
