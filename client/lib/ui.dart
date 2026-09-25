@@ -1080,3 +1080,12 @@ class _SwipeToMoveState extends State<SwipeToMove> {
     );
   }
 }
+
+/// Notification « … · Annuler » qui disparaît d’elle-même après 6 s. Depuis Flutter 3.35,
+/// une notification avec action reste affichée par défaut (persist) : on le désactive.
+SnackBar undoSnackBar(String text, VoidCallback onUndo) => SnackBar(
+  content: Text(text),
+  duration: const Duration(seconds: 6),
+  persist: false,
+  action: SnackBarAction(label: 'Annuler', onPressed: onUndo),
+);

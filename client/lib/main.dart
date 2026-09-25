@@ -720,24 +720,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       final t = await api.call('POST', '/api/v1/shortcuts/${s['id']}/launch');
       await refresh();
       messenger.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('« ${s['title']} » ajoutée.'),
-          duration: const Duration(seconds: 6),
-          action: SnackBarAction(
-            label: 'Annuler',
-            onPressed: () async {
-              try {
-                await api.call(
-                  'POST',
-                  '/api/v1/tickets/${t['id']}/undo-launch',
-                );
-              } catch (e) {
-                message(e);
-              }
-              await refresh();
-            },
-          ),
-        ),
+        undoSnackBar('« ${s['title']} » ajoutée.', () async {
+          try {
+            await api.call('POST', '/api/v1/tickets/${t['id']}/undo-launch');
+          } catch (e) {
+            message(e);
+          }
+          await refresh();
+        }),
       );
     } catch (e) {
       message(e);

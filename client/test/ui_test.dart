@@ -165,4 +165,30 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('La notification « Annuler » disparaît d’elle-même', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (c) => TextButton(
+              onPressed: () =>
+                  ScaffoldMessenger.of(c)
+                      .showSnackBar(undoSnackBar('Lessive ajoutée.', () {})),
+              child: const Text('Lancer'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Lancer'));
+    // Le minuteur démarre une fois l’animation d’apparition terminée.
+    await tester.pumpAndSettle();
+    expect(find.text('Annuler'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pumpAndSettle();
+    expect(find.text('Annuler'), findsNothing);
+  });
 }
