@@ -362,7 +362,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           checkUpdate(manual: true);
           return;
         }
-        message(m.notification?.body ?? 'Nouvelle activité');
+        // Application ouverte : un bandeau « titre — corps ».
+        final title = m.notification?.title, body = m.notification?.body;
+        final text = [
+          if (title != null && title != 'Foyer') title,
+          ?body,
+        ].join(' — ');
+        message(text.isEmpty ? 'Nouvelle activité' : text);
         refresh();
       });
       final initial = await FirebaseMessaging.instance.getInitialMessage();
