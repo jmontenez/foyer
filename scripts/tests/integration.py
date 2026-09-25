@@ -135,6 +135,35 @@ call("DELETE", f"/api/v1/shortcuts/{custom['id']}", token=a, expected=204)
 kept = [t for t in call("GET", "/api/v1/state", token=a)["tickets"] if t["id"] == detailed["id"]]
 assert kept and kept[0]["shortcutId"] is None, "la tâche doit rester, sans lien"
 call("POST", f"/api/v1/shortcuts/{custom['id']}/launch", token=a, expected=404)
+# Courses : brouillon, catalogue, rayons, programmation et lancement du raccourci avec la liste.
+shopping = call("GET", "/api/v1/state", token=a)["shopping"]
+assert shopping["lists"][-1]["id"] == "draft" and len(shopping["ingredients"]) >= 30 and len(shopping["aisles"]) == 11, shopping["aisles"]
+milk = call("POST", "/api/v1/shopping/items", {"list": "draft", "name": "lait", "qty": "2 L", "aisle": None}, a)
+assert milk["text"] == "Lait" and milk["aisle"] == "dairy" and milk["qty"] == "2 L", milk
+call("POST", "/api/v1/shopping/items", {"list": "draft", "name": "Frites", "qty": None, "aisle": "frozen"}, b)
+call("POST", "/api/v1/shopping/items", {"list": "draft", "name": "x", "qty": None, "aisle": "inconnu"}, a, expected=400)
+call("PATCH", f"/api/v1/shopping/items/draft/{milk['id']}", {"done": True, "qty": None, "aisle": None}, b)
+call("POST", "/api/v1/shopping/draft/clear-done", token=a, expected=204)
+draft = call("GET", "/api/v1/state", token=a)["shopping"]["lists"][-1]["items"]
+assert [x["text"] for x in draft] == ["Frites"], draft
+aisles = [x["id"] for x in shopping["aisles"]]
+call("PUT", "/api/v1/shopping/aisle-order", [*aisles[1:], aisles[0]], a, expected=204)
+assert call("GET", "/api/v1/state", token=a)["shopping"]["aisles"][-1]["id"] == aisles[0]
+call("PUT", "/api/v1/shopping/aisle-order", aisles[1:], a, expected=400)
+call("DELETE", "/api/v1/shopping/ingredients/Frites", token=a, expected=204)
+call("POST", "/api/v1/shopping/schedule", {"date": "2000-01-01", "mode": "new", "targetId": None}, a, expected=400)
+today = call("GET", "/api/v1/state", token=a)["today"]
+groceries = call("POST", "/api/v1/shopping/schedule", {"date": today, "mode": "new", "targetId": None}, a)
+assert groceries["shopping"] and groceries["stageId"] == "todo" and [x["text"] for x in groceries["checklist"]] == ["Frites"], groceries
+call("POST", "/api/v1/shopping/items", {"list": groceries["id"], "name": "Pain", "qty": "1", "aisle": None}, b)
+call("POST", "/api/v1/shopping/items", {"list": "draft", "name": "Café", "qty": None, "aisle": None}, a)
+call("POST", "/api/v1/shopping/schedule", {"date": today, "mode": "append", "targetId": groceries["id"]}, a)
+lists = call("GET", "/api/v1/state", token=a)["shopping"]["lists"]
+assert lists[0]["id"] == groceries["id"] and len(lists[0]["items"]) == 3 and not lists[-1]["items"], lists
+call("POST", "/api/v1/shopping/items", {"list": "draft", "name": "Sucre", "qty": None, "aisle": None}, a)
+grocery_shortcut = next(x for x in call("GET", "/api/v1/state", token=a)["shortcuts"] if x["seedKey"] == "groceries")
+second = call("POST", f"/api/v1/shortcuts/{grocery_shortcut['id']}/launch?withList=true", token=a)
+assert second["shopping"] and [x["text"] for x in second["checklist"]] == ["Sucre"], second
 second_session = call("POST", "/auth/demo/0")["token"]
 assert (
     call("GET", "/api/v1/state", token=second_session)["me"]["paletteId"]

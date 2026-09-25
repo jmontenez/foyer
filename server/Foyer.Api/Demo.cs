@@ -38,6 +38,7 @@ public static class Demo
         h.Members = seed.Members; h.Stages = seed.Stages; h.Tags = seed.Tags; h.Tickets = seed.Tickets;
         h.Sessions = []; h.Devices = []; h.Notifications = [];
         h.Shortcuts = seed.Shortcuts; h.ShortcutsSeeded = true; h.RepeatsSuggested = true;
+        h.ShoppingDraft = seed.ShoppingDraft; h.Ingredients = seed.Ingredients; h.IngredientsSeeded = true; h.AisleOrder = seed.AisleOrder;
     }
 
     public static Household Seed(Settings settings, DateOnly today, DateTimeOffset now)
@@ -70,7 +71,6 @@ public static class Demo
             .Comments.Add(new("m1", A, "J’ai trouvé le bon joint, je m’en occupe samedi si besoin.", now.AddHours(-2)));
         T("Déclaration d’impôts", "obligation", "high", "waiting", null, -1, [C], [6, 11], [("Rassembler les justificatifs", true), ("Remplir en ligne", false)])
             .Comments.Add(new("m2", C, "Il manque encore l’attestation de la mutuelle.", now.AddHours(-20)));
-        T("Courses de la semaine", "obligation", "normal", "todo", 0, 1, [], [7], [("Lait", false), ("Pain", false), ("Légumes", true)]);
         T("Rendez-vous contrôle technique", "obligation", "high", "todo", null, 2, [A], [9]);
         T("Tailler la haie", "obligation", "normal", "todo", null, 5, [A], [2]);
         T("Anniversaire de Mamie : trouver un cadeau", "obligation", "normal", "todo", null, 9, [C, A], [5], description: "Idées : un album photo, un atelier poterie.");
@@ -83,6 +83,16 @@ public static class Demo
         T("Rendre les livres à la médiathèque", "obligation", "low", "abandoned", null, null, [A], [5], closedDaysAgo: 8);
         Shortcuts.SeedOnce(h);
         Recurrence.SuggestOnce(h);
+        // Des courses programmées aujourd’hui, avec leur liste rangée par rayon.
+        Shopping.SeedOnce(h);
+        var groceries = T("Faire les courses", "obligation", "normal", "todo", 0, 0, [], [7]);
+        (groceries.Shopping, groceries.ShortcutId) = (true, h.Shortcuts.First(s => s.SeedKey == "groceries").Id);
+        foreach (var (name, qty, done) in new[] { ("Lait", "2 L", false), ("Pain", "1", false), ("Tomates", "1 kg", true), ("Œufs", "12", false), ("Café", null, false), ("Lessive", null, false) })
+        {
+            var item = Shopping.Add(h, new ShoppingItemInput(groceries.Id, name, qty, null), C, now);
+            if (done) Shopping.Update(h, groceries.Id, item.Id, new ShoppingItemPatch(true, null, null), C, now);
+        }
+        groceries.History.RemoveAll(e => e.Action == "shopping");
         // Une lessive déjà faite : « dernière fois il y a 2 jours » dans le panneau de création.
         T("Faire une lessive", "obligation", "normal", "done", null, null, [A], [8], performers: [A], closedDaysAgo: 2).ShortcutId = h.Shortcuts.First(s => s.SeedKey == "laundry").Id;
         return h;

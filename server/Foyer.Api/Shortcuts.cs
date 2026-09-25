@@ -74,7 +74,8 @@ public static class Shortcuts
     }
 
     // Crée la tâche du raccourci, avec les règles habituelles des tickets.
-    public static Ticket Launch(Household h, Shortcut s, string launcher, DateTimeOffset now)
+    // Raccourci « Faire les courses » : tâche Courses, qui peut reprendre la liste en cours.
+    public static Ticket Launch(Household h, Shortcut s, string launcher, DateTimeOffset now, bool withList = false)
     {
         var today = Rules.Today(h, now);
         var input = new TicketInput(s.Title, s.Description, s.Kind, s.Priority, "todo", null,
@@ -83,6 +84,8 @@ public static class Shortcuts
             s.Checklist.Select((text, i) => new CheckItem($"s{i}", text, false)).ToList());
         var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1, ShortcutId = s.Id, CreatedAt = now, UpdatedAt = now };
         Rules.Apply(h, t, input, launcher, now, true);
+        t.Shopping = s.SeedKey == "groceries";
+        if (withList && t.Shopping) Shopping.AttachDraft(h, t);
         h.Tickets.Add(t);
         return t;
     }
@@ -93,6 +96,7 @@ public static class Shortcuts
     {
         if (t.ShortcutId == null || t.Version != 1 || t.CreatedAt < now.AddMinutes(-5) || t.History.FirstOrDefault()?.ActorId != member || t.Comments.Count > 0 || t.Images.Count > 0)
             throw new RuleException("Cette tâche ne peut plus être annulée ; abandonnez-la si besoin.", 409);
+        if (t.Shopping) Shopping.ReturnUnbought(h, t, toDraft: true);
         h.Tickets.Remove(t);
     }
 
