@@ -49,4 +49,24 @@ public class WidgetsTests
         var ex = Assert.Throws<RuleException>(() => Rules.Done(h, t, "a", Now));
         Assert.Equal(409, ex.Status);
     }
+
+    [Fact]
+    public void ShoppingShowsTheCurrentListByAisle()
+    {
+        var h = Home();
+        Shopping.SeedOnce(h);
+        var draft = Widgets.Build(h, h.Members[0], Now).Shopping;
+        Assert.Equal(("draft", "non programmées", 0), (draft.List, draft.When, draft.Rows.Count));
+        Shopping.Add(h, new ShoppingItemInput("draft", "Lait", "2 L", null), "a", Now);
+        Shopping.Add(h, new ShoppingItemInput("draft", "Tomates", null, null), "a", Now);
+        Shopping.Add(h, new ShoppingItemInput("draft", "Pain", null, null), "a", Now);
+        var t = Shopping.Schedule(h, new ShoppingScheduleInput(new DateOnly(2026, 9, 26), "new", null), "a", Now);
+        Shopping.Update(h, t.Id, t.Checklist.Single(c => c.Text == "Pain").Id, new ShoppingItemPatch(true, null, null), "a", Now);
+        var w = Widgets.Build(h, h.Members[0], Now).Shopping;
+        Assert.Equal((t.Id, "demain", 2, 1), (w.List, w.When, w.Left, w.Done));
+        // Ordre du magasin : Fruits & légumes avant Crèmerie & œufs.
+        Assert.Equal(["Fruits & légumes", "Tomates", "Crèmerie & œufs", "Lait"], w.Rows.Select(r => r.Text));
+        Assert.Null(w.Rows[0].Id);
+        Assert.Equal("2 L", w.Rows[3].Qty);
+    }
 }

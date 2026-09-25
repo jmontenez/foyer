@@ -20,7 +20,7 @@ Données familiales privées, potentiellement sensibles (santé, habitudes et ph
 | Fuite par logs | Pas de corps/token dans les logs applicatifs ; logs ASP.NET restreints | Ne pas activer les logs HTTP détaillés en production, notamment sur OAuth |
 | Données perdues | PostgreSQL transactionnel, sauvegarde base + images cohérente et chiffrée | Destination hors Mac et rotation à configurer ; RPO correspondant à la dernière sauvegarde réussie |
 | Exposition push | Titres des tâches (rappels, résumé, attributions) et début des commentaires (80 caractères), choix assumé ; jamais les descriptions ni les images | Le sujet est transmis à Google/FCM et peut apparaître sur l’écran verrouillé ; réglage Android masquable |
-| Widgets Android | Titres des tâches du jour sur l’écran d’accueil ; instantané en clair dans les préférences de l’app (pas de sauvegarde, `allowBackup=false`), vidé à la déconnexion ; actions en arrière-plan avec la session de l’app | Ne pas ajouter le widget si l’écran d’accueil est partagé |
+| Widgets Android | Titres des tâches du jour et articles de la liste de courses sur l’écran d’accueil ; instantané en clair dans les préférences de l’app (pas de sauvegarde, `allowBackup=false`), vidé à la déconnexion ; actions en arrière-plan avec la session de l’app | Ne pas ajouter le widget si l’écran d’accueil est partagé |
 
 Le compte DB utilisé est propriétaire de la base domestique dédiée ; PostgreSQL n’est pas publié sur le réseau de production. L’API tourne avec l’utilisateur non root de l’image .NET, capacités supprimées. Les secrets montés et la clé de signature APK ne font pas partie du code ni de l’export de configuration.
 

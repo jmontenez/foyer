@@ -150,6 +150,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   StreamSubscription<Uri?>? widgetTaps;
   // Toucher sur un widget arrivé avant le chargement des données : traité juste après.
   WidgetLink? pendingLink;
+  // Incrémenté pour placer le curseur dans la recherche de Courses (« + » du widget).
+  int shoppingSearch = 0;
   @override
   void initState() {
     super.initState();
@@ -176,6 +178,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         setState(() => tab = 0);
       case QuickCreate():
         await quickCreate();
+      case OpenCourses(:final add):
+        setState(() {
+          tab = 5;
+          if (add) shoppingSearch++;
+        });
       case OpenTicket(:final id):
         final ticket = maps(data!['tickets'])
             .where((t) => t['id'] == id)
@@ -1197,6 +1204,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     Expanded(
                       child: tab == 5
                           ? ShoppingView(
+                              focusSearch: shoppingSearch,
                               data: data!,
                               api: api,
                               onChanged: refresh,
