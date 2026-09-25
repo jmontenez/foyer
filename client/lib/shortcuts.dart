@@ -38,6 +38,49 @@ String assignLabel(
   _ => 'Qui le lance',
 };
 
+const _dayNames = [
+  'lundi',
+  'mardi',
+  'mercredi',
+  'jeudi',
+  'vendredi',
+  'samedi',
+  'dimanche',
+];
+
+/// Répétition active d’un raccourci (null si aucune ou en pause).
+Map<String, dynamic>? activeRepeat(Map<String, dynamic>? s) {
+  final r = s?['repeat'];
+  return r is Map && r['active'] == true ? Map<String, dynamic>.from(r) : null;
+}
+
+/// « Tous les 3 jours après la dernière fois », « Toutes les 2 semaines, le dimanche », « Chaque mois, le 5 ».
+String repeatLabel(Map<String, dynamic> r) {
+  final every = (r['every'] as num? ?? 1).toInt();
+  switch (r['mode']) {
+    case 'after':
+      return every == 1
+          ? 'Chaque jour après la dernière fois'
+          : 'Tous les $every jours après la dernière fois';
+    case 'weekly':
+      final days = [
+        for (final d in _strings(r['days']).map(int.parse).toList()..sort())
+          _dayNames[d - 1],
+      ];
+      final list = days.length > 1
+          ? '${days.sublist(0, days.length - 1).join(', ')} et ${days.last}'
+          : days.join();
+      return every == 1
+          ? 'Chaque semaine, le $list'
+          : 'Toutes les $every semaines, le $list';
+    default:
+      final day = (r['monthDay'] as num? ?? 1).toInt();
+      return day == 31
+          ? 'Chaque mois, le dernier jour'
+          : 'Chaque mois, le ${day == 1 ? '1er' : day}';
+  }
+}
+
 /// Raccourcis du panneau de création, les plus utilisés d’abord.
 List<Map<String, dynamic>> byUse(dynamic shortcuts) =>
     _maps(shortcuts)..sort((a, b) {
@@ -66,7 +109,8 @@ class ShortcutChip extends StatelessWidget {
     final last = shortcutLast(shortcut, today);
     return Semantics(
       button: true,
-      label: '${shortcut['title']}, $last',
+      label:
+          '${shortcut['title']}, ${activeRepeat(shortcut) != null ? 'répété, ' : ''}$last',
       hint: 'Toucher pour ajouter, appui long pour préciser',
       excludeSemantics: true,
       onTap: onTap,
@@ -102,9 +146,23 @@ class ShortcutChip extends StatelessWidget {
                     height: 1.2,
                   ),
                 ),
-                Text(
-                  last,
-                  style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+                Row(
+                  children: [
+                    if (activeRepeat(shortcut) != null) ...[
+                      Icon(Icons.repeat, size: 14, color: c.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        last,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -202,6 +260,8 @@ class _ShortcutsPageState extends State<ShortcutsPage> {
                         dueLabel(s['dueInDays'] as int?),
                         assignLabel(s, members),
                         if (steps > 0) plural(steps, 'étape'),
+                        if (s['repeat'] is Map)
+                          '↻ ${repeatLabel(Map<String, dynamic>.from(s['repeat']))}${s['repeat']['active'] == true ? '' : ' (désactivée)'}',
                         shortcutLast(s, today),
                       ].join(' · '),
                     ),
@@ -286,6 +346,7 @@ class _ShortcutEditorState extends State<ShortcutEditor> {
         'dueInDays': s['dueInDays'],
         'assign': s['assign'],
         'assigneeId': s['assign'] == 'member' ? s['assigneeId'] : null,
+        'repeat': repeat,
       };
       await widget.api.call(
         widget.shortcut == null ? 'POST' : 'PUT',
@@ -330,6 +391,135 @@ class _ShortcutEditorState extends State<ShortcutEditor> {
     } catch (e) {
       fail(e);
     }
+  }
+
+  Map<String, dynamic>? get repeat =>
+      s['repeat'] is Map ? Map<String, dynamic>.from(s['repeat']) : null;
+  void setRepeat(Map<String, dynamic>? r) => setState(() => s['repeat'] = r);
+
+  Widget stepper(
+    String before,
+    int value,
+    int min,
+    int max,
+    String after,
+    ValueChanged<int> set,
+  ) => Row(
+    children: [
+      Text(before),
+      IconButton(
+        tooltip: 'Moins',
+        onPressed: value > min ? () => set(value - 1) : null,
+        icon: const Icon(Icons.remove_circle_outline),
+      ),
+      Text(
+        '$value',
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+      ),
+      IconButton(
+        tooltip: 'Plus',
+        onPressed: value < max ? () => set(value + 1) : null,
+        icon: const Icon(Icons.add_circle_outline),
+      ),
+      Flexible(child: Text(after)),
+    ],
+  );
+
+  List<Widget> repeatEditor() {
+    final r = repeat;
+    final mode = r?['mode'] ?? 'none';
+    Map<String, dynamic> base(String m) => {
+      'mode': m,
+      'every': 1,
+      'days': m == 'weekly' ? [DateTime.now().weekday] : <int>[],
+      'monthDay': DateTime.now().day,
+      'active': true,
+    };
+    void update(String key, Object value) => setRepeat({...?r, key: value});
+    final next = DateTime.tryParse(
+      widget.shortcut?['nextDate']?.toString() ?? '',
+    );
+    return [
+      SegmentedButton<String>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: 'none', label: Text('Jamais')),
+          ButtonSegment(value: 'after', label: Text('Après')),
+          ButtonSegment(value: 'weekly', label: Text('Semaine')),
+          ButtonSegment(value: 'monthly', label: Text('Mois')),
+        ],
+        selected: {mode},
+        onSelectionChanged: (v) =>
+            setRepeat(v.first == 'none' ? null : base(v.first)),
+      ),
+      if (r != null) ...[
+        const SizedBox(height: 8),
+        if (mode == 'after')
+          stepper(
+            'Tous les',
+            (r['every'] as num).toInt(),
+            1,
+            365,
+            ' jours après la dernière fois',
+            (v) => update('every', v),
+          ),
+        if (mode == 'weekly') ...[
+          Wrap(
+            spacing: 6,
+            children: [
+              for (var d = 1; d <= 7; d++)
+                FilterChip(
+                  label: Text(_dayNames[d - 1].substring(0, 3)),
+                  selected: _strings(r['days']).contains('$d'),
+                  onSelected: (on) {
+                    final days = _strings(r['days']).map(int.parse).toSet();
+                    on ? days.add(d) : days.remove(d);
+                    if (days.isNotEmpty) update('days', days.toList()..sort());
+                  },
+                ),
+            ],
+          ),
+          stepper(
+            'Toutes les',
+            (r['every'] as num).toInt(),
+            1,
+            8,
+            ' semaine(s)',
+            (v) => update('every', v),
+          ),
+        ],
+        if (mode == 'monthly')
+          stepper(
+            'Le',
+            (r['monthDay'] as num).toInt(),
+            1,
+            31,
+            ' du mois (31 = dernier jour)',
+            (v) => update('monthDay', v),
+          ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Créer automatiquement'),
+          subtitle: Text(
+            r['active'] == true
+                ? 'Une tâche à la fois : la suivante arrive quand celle-ci est faite.'
+                : 'Désactivée : rien n’est créé tout seul.',
+          ),
+          value: r['active'] == true,
+          onChanged: (v) => update('active', v),
+        ),
+        Text(
+          r['active'] == true &&
+                  next != null &&
+                  mode == (widget.shortcut?['repeat']?['mode'])
+              ? 'Prochaine : ${headerDay(next)}'
+              : repeatLabel(r),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ];
   }
 
   Widget label(String text) => Padding(
@@ -496,6 +686,8 @@ class _ShortcutEditorState extends State<ShortcutEditor> {
                 label: const Text('Ajouter une étape'),
               ),
             ),
+          label('Répéter'),
+          ...repeatEditor(),
           label('Notes'),
           TextField(
             controller: description,
