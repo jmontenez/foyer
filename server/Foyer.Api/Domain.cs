@@ -174,7 +174,8 @@ public static class Rules
         foreach (var old in h.Notifications.Where(n => n.Kind == "update" && !n.Finished)) old.Finished = true;
         foreach (var m in h.Members)
         {
-            var n = new Notification { MemberId = m.Id, Kind = "update", Title = "Une nouvelle version de Foyer est disponible", CreatedAt = now, ExpiresAt = now.AddDays(3), NextAttempt = now, BelowVersion = version };
+            // La nuit, l’annonce attend la fin des heures calmes du membre.
+            var n = new Notification { MemberId = m.Id, Kind = "update", Title = "Mise à jour de Foyer", Body = "Une nouvelle version est prête. Touchez pour l’installer.", CreatedAt = now, ExpiresAt = now.AddDays(3), NextAttempt = Notify.WakeAt(h, m, now), BelowVersion = version };
             if (Recipients(h, n).Any()) h.Notifications.Add(n);
         }
     }
@@ -188,11 +189,12 @@ public static class Rules
         foreach (var m in h.Members)
         {
             var mine = moved.Where(t => t.Assignees.Count == 0 || t.Assignees.Contains(m.Id)).ToList();
-            if (mine.Count > 0) h.Notifications.Add(new() { MemberId = m.Id, Kind = "start", Title = mine.Count == 1 ? $"À faire : {mine[0].Title}" : $"{mine.Count} tâches sont à faire", TicketId = mine.Count == 1 ? mine[0].Id : null, CreatedAt = now, ExpiresAt = now.AddDays(1), NextAttempt = now });
+            // La nuit (passage à minuit), le résumé du matin les annonce ; sans résumé, le rappel attend le matin.
+            if (mine.Count > 0 && !(m.DigestEnabled && Notify.Quiet(h, m, now))) h.Notifications.Add(Notify.Start(h, m, mine, now));
             if (m.DigestEnabled && TimeOnly.TryParseExact(m.DigestTime, "HH:mm", out var at) && TimeOnly.FromDateTime(local.DateTime) >= at && m.LastDigestDate != today.ToString("yyyy-MM-dd"))
             {
                 m.LastDigestDate = today.ToString("yyyy-MM-dd");
-                h.Notifications.Add(new() { MemberId = m.Id, Kind = "digest", Title = "Votre résumé est prêt", CreatedAt = now, ExpiresAt = now.AddHours(12), NextAttempt = now });
+                if (Notify.Digest(h, m, today, now) is { } digest) h.Notifications.Add(digest);
             }
         }
         h.Sessions.RemoveAll(s => s.ExpiresAt <= now);

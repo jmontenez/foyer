@@ -1662,7 +1662,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   SwitchListTile(
                     title: const Text('Résumé quotidien'),
                     subtitle: Text(
-                      'Notification à ${me['digestTime']} · Europe/Paris',
+                      'Chaque matin à ${me['digestTime']} · les rappels de la nuit attendent cette heure',
                     ),
                     value: me['digestEnabled'],
                     onChanged: (v) => change(() => me['digestEnabled'] = v),
