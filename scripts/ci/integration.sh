@@ -24,3 +24,4 @@ fi
 python3 scripts/tests/integration.py
 node scripts/tests/browser.cjs
 node scripts/tests/appearance.cjs
+node scripts/tests/shopping.cjs

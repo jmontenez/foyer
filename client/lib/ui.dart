@@ -395,14 +395,15 @@ class TaskTile extends StatelessWidget {
 class ScreenHeader extends StatelessWidget {
   final String title, subtitle;
   final Widget profile;
-  final VoidCallback onSearch;
+  // Sans recherche (null), le bouton est masqué.
+  final VoidCallback? onSearch;
   final bool searching;
   const ScreenHeader({
     super.key,
     required this.title,
     required this.subtitle,
     required this.profile,
-    required this.onSearch,
+    this.onSearch,
     this.searching = false,
   });
   @override
@@ -443,16 +444,17 @@ class ScreenHeader extends StatelessWidget {
               ],
             ),
           ),
-          IconButton.filled(
-            tooltip: searching ? 'Fermer la recherche' : 'Rechercher',
-            style: IconButton.styleFrom(
-              backgroundColor: Theme.of(context).cardTheme.color,
-              foregroundColor: c.onSurface,
-              side: BorderSide(color: c.outlineVariant),
+          if (onSearch != null)
+            IconButton.filled(
+              tooltip: searching ? 'Fermer la recherche' : 'Rechercher',
+              style: IconButton.styleFrom(
+                backgroundColor: Theme.of(context).cardTheme.color,
+                foregroundColor: c.onSurface,
+                side: BorderSide(color: c.outlineVariant),
+              ),
+              onPressed: onSearch,
+              icon: Icon(searching ? Icons.close : Icons.search),
             ),
-            onPressed: onSearch,
-            icon: Icon(searching ? Icons.close : Icons.search),
-          ),
           const SizedBox(width: 6),
           profile,
         ],

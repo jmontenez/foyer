@@ -41,6 +41,8 @@ python3 scripts/tests/integration.py
 npm install --prefix artifacts/browser playwright --no-audit --no-fund
 node artifacts/browser/node_modules/playwright/cli.js install chromium
 node scripts/tests/browser.cjs
+node scripts/tests/appearance.cjs
+node scripts/tests/shopping.cjs
 ```
 
 La migration automatisée utilise la base fictive `foyer-test-db`, le contexte Docker `colima-foyer`, l’image locale `foyer:local`, Python 3.12+ et age. Elle crée deux projets Compose horodatés, les arrête à la fin et conserve leurs volumes pour inspection. Ne pas la pointer vers des données familiales.
