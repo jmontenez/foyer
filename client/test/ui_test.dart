@@ -191,4 +191,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Annuler'), findsNothing);
   });
+
+  test(
+    'Barre : marges réduites puis onglet actif sans nom quand la place manque',
+    () {
+      expect(navLayout(400, 6, 60).label, isTrue);
+      expect(navLayout(400, 6, 60).padding, 12);
+      // Grande police : on resserre d’abord.
+      final tight = navLayout(340, 6, 95);
+      expect((tight.padding, tight.label), (8, true));
+      // Encore trop large : l’onglet actif garde sa couleur mais perd son nom.
+      expect(navLayout(320, 6, 140).label, isFalse);
+    },
+  );
+
+  for (final (width, scale) in [(320.0, 1.0), (360.0, 1.3), (412.0, 1.5)]) {
+    testWidgets(
+      'Les 6 onglets tiennent à ${width.toInt()} px, police ×$scale',
+      (tester) async {
+        tester.view.physicalSize = Size(width, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: Size(width, 800),
+                textScaler: TextScaler.linear(scale),
+              ),
+              child: Scaffold(
+                bottomNavigationBar: FloatingNav(
+                  index: 2,
+                  items: const [
+                    (Icons.wb_sunny_outlined, 'Aujourd’hui'),
+                    (Icons.date_range_outlined, 'Semaine'),
+                    (Icons.view_kanban_outlined, 'Tableau'),
+                    (Icons.inventory_2_outlined, 'Backlog'),
+                    (Icons.history, 'Historique'),
+                    (Icons.shopping_basket_outlined, 'Courses'),
+                  ],
+                  onSelected: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final basket = tester.getRect(
+          find.byIcon(Icons.shopping_basket_outlined),
+        );
+        expect(basket.right, lessThanOrEqualTo(width - 12));
+      },
+    );
+  }
 }

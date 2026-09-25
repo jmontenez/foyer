@@ -554,59 +554,70 @@ class FloatingNav extends StatelessWidget {
             height: 64,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (final (i, (icon, label)) in items.indexed)
-                    Semantics(
-                      selected: i == index,
-                      button: true,
-                      label: label,
-                      excludeSemantics: true,
-                      child: Tooltip(
-                        message: label,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => onSelected(i),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            height: 46,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: i == index ? 14 : 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: i == index
-                                  ? c.primary
-                                  : Colors.transparent,
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  final layout = navLayout(
+                    box.maxWidth,
+                    items.length,
+                    measureLabel(context, items[index].$2),
+                  );
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (final (i, (icon, label)) in items.indexed)
+                        Semantics(
+                          selected: i == index,
+                          button: true,
+                          label: label,
+                          excludeSemantics: true,
+                          child: Tooltip(
+                            message: label,
+                            child: InkWell(
                               borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  icon,
-                                  size: 22,
-                                  color: i == index
-                                      ? c.onPrimary
-                                      : c.onSurfaceVariant,
+                              onTap: () => onSelected(i),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                height: 46,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: i == index
+                                      ? layout.selectedPadding
+                                      : layout.padding,
                                 ),
-                                if (i == index) ...[
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    label,
-                                    style: TextStyle(
-                                      color: c.onPrimary,
-                                      fontWeight: FontWeight.w700,
+                                decoration: BoxDecoration(
+                                  color: i == index
+                                      ? c.primary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      icon,
+                                      size: 22,
+                                      color: i == index
+                                          ? c.onPrimary
+                                          : c.onSurfaceVariant,
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    if (i == index && layout.label) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        label,
+                                        style: TextStyle(
+                                          color: c.onPrimary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
           ),
@@ -614,6 +625,44 @@ class FloatingNav extends StatelessWidget {
       ),
     );
   }
+
+  static double measureLabel(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: DefaultTextStyle.of(context).style
+            .copyWith(fontWeight: FontWeight.w700),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    return painter.width;
+  }
+}
+
+/// Place de la barre : marges réduites si besoin, puis onglet actif sans son nom
+/// (grande police ou petit écran) plutôt que de rogner le dernier onglet.
+({double padding, double selectedPadding, bool label}) navLayout(
+  double width,
+  int count,
+  double labelWidth,
+) {
+  const icon = 22.0, gap = 8.0;
+  for (final (padding, selected) in [(12.0, 14.0), (8.0, 10.0)]) {
+    final needed =
+        (count - 1) * (icon + 2 * padding) +
+        icon +
+        gap +
+        labelWidth +
+        2 * selected;
+    if (needed <= width) {
+      return (padding: padding, selectedPadding: selected, label: true);
+    }
+  }
+  final padding = ((width / count) - icon) / 2;
+  final p = padding.clamp(4.0, 12.0);
+  return (padding: p, selectedPadding: p, label: false);
 }
 
 /// Titre de section d’une liste (« EN RETARD 1 »).
