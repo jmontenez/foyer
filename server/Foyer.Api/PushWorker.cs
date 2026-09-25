@@ -20,7 +20,7 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
             try
             {
                 var release = Updates.Android(settings.Updates);
-                await store.Update(h => { var now = DateTimeOffset.UtcNow; Rules.Schedule(h, now); Rules.AnnounceUpdate(h, release?.VersionCode, now); return true; });
+                await store.Update(h => { var now = DateTimeOffset.UtcNow; Recurrence.Tick(h, now); Rules.Schedule(h, now); Rules.AnnounceUpdate(h, release?.VersionCode, now); return true; });
                 if (messaging != null) await Deliver(messaging);
             }
             catch (Exception ex) { log.LogError("Traitement différé : {Type}", ex.GetType().Name); }
