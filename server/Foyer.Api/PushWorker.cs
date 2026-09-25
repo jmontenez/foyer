@@ -38,10 +38,11 @@ public sealed class PushWorker(Store store, Settings settings, IConfiguration co
                 if (await store.Read(h => h.Maintenance)) return;
                 try
                 {
+                    var (title, body) = Notify.Text(n);
                     await messaging.SendAsync(new Message
                     {
                         Token = d.Token,
-                        Notification = new FirebaseAdmin.Messaging.Notification { Title = "Foyer", Body = n.Title },
+                        Notification = new FirebaseAdmin.Messaging.Notification { Title = title, Body = body },
                         Data = new Dictionary<string, string> { ["notificationId"] = n.Id, ["kind"] = n.Kind, ["ticketId"] = n.TicketId ?? "" },
                         Android = new AndroidConfig { Priority = Priority.High, CollapseKey = n.Id, TimeToLive = n.ExpiresAt - DateTimeOffset.UtcNow, Notification = new AndroidNotification { Tag = n.Id, ChannelId = "foyer_activity" } }
                     });
