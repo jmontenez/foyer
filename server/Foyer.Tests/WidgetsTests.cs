@@ -34,4 +34,19 @@ public class WidgetsTests
         var w = Widgets.Build(h, h.Members[0], Now).Today;
         Assert.Equal((15, Widgets.MaxTasks), (w.Count, w.Tasks.Count));
     }
+
+    [Fact]
+    public void DoneInOneTapIsByMeAndKeepsTheRest()
+    {
+        var h = Home();
+        var t = new Ticket { Title = "Faire les courses", StageId = "todo", Assignees = ["b"], Shopping = true, Checklist = [new("1", "Lait", true), new("2", "Pain", false)] };
+        h.Tickets.Add(t);
+        Rules.Done(h, t, "a", Now);
+        Assert.Equal(("done", "Faire les courses"), (t.StageId, t.Title));
+        Assert.Equal(["a"], t.Performers);
+        Assert.Equal(["b"], t.Assignees);
+        Assert.Equal(["Pain"], h.ShoppingDraft.Select(c => c.Text));
+        var ex = Assert.Throws<RuleException>(() => Rules.Done(h, t, "a", Now));
+        Assert.Equal(409, ex.Status);
+    }
 }

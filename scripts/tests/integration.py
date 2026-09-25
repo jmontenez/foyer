@@ -173,6 +173,11 @@ widget = call("GET", "/api/v1/widget", token=a)["today"]
 assert widget["date"] == today and widget["count"] >= len(widget["tasks"]) > 0, widget
 assert any(t["id"] == groceries["id"] for t in widget["tasks"]), widget
 call("GET", "/api/v1/widget", expected=401)
+quick = call("POST", "/api/v1/tickets", {"title": "Arroser — widget", "description": "", "kind": "obligation", "priority": "normal", "stageId": "todo", "startDate": None, "dueDate": today, "assignees": [], "performers": [], "tagIds": [], "checklist": []}, b)
+done = call("POST", f"/api/v1/tickets/{quick['id']}/done", token=a)
+me_a = call("GET", "/api/v1/state", token=a)["me"]["id"]
+assert done["stageId"] == "done" and done["performers"] == [me_a], done
+call("POST", f"/api/v1/tickets/{quick['id']}/done", token=a, expected=409)
 second = call("POST", f"/api/v1/shortcuts/{grocery_shortcut['id']}/launch?withList=true", token=a)
 assert second["shopping"] and [x["text"] for x in second["checklist"]] == ["Sucre"], second
 second_session = call("POST", "/auth/demo/0")["token"]
