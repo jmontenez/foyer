@@ -106,6 +106,12 @@ public static class Recurrence
             s.Checklist.Select((text, i) => new CheckItem($"s{i}", text, false)).ToList());
         var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1, ShortcutId = s.Id, CreatedAt = now, UpdatedAt = now };
         Rules.Apply(h, t, input, "system", now, true);
+        // Courses : personne à qui demander, la liste en cours rejoint l’occurrence.
+        if (s.SeedKey == "groceries")
+        {
+            t.Shopping = true;
+            try { Shopping.AttachDraft(h, t); } catch (RuleException) { }
+        }
         h.Tickets.Add(t);
     }
 
@@ -116,6 +122,7 @@ public static class Recurrence
         if (s?.Repeat is not { Active: true } || Rules.Closed(t)) throw new RuleException("Seule une occurrence répétée en cours peut être passée.", 409);
         t.StageId = "abandoned"; t.ClosedAt = now; t.Version++;
         Rules.Event(t, member, "skip", "Passée cette fois", now);
+        if (t.Shopping) Shopping.ReturnUnbought(h, t);
     }
 
     // Aperçu : date de l’occurrence ouverte, sinon de celle qui sera créée.

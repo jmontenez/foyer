@@ -19,6 +19,11 @@ public sealed class Household
     public List<Shortcut> Shortcuts { get; set; } = [];
     public bool ShortcutsSeeded { get; set; }
     public bool RepeatsSuggested { get; set; }
+    // Courses : brouillon non programmé, catalogue d’ingrédients et ordre des rayons du magasin.
+    public List<CheckItem> ShoppingDraft { get; set; } = [];
+    public List<Ingredient> Ingredients { get; set; } = [];
+    public bool IngredientsSeeded { get; set; }
+    public List<string> AisleOrder { get; set; } = [.. Foyer.Shopping.Aisles.Select(a => a.Id)];
 }
 public sealed class Member
 {
@@ -62,8 +67,11 @@ public sealed class Ticket
     public DateTimeOffset? ClosedAt { get; set; }
     // Raccourci d’origine (null pour une tâche créée à la main).
     public string? ShortcutId { get; set; }
+    // Tâche Courses : sa checklist est la liste de courses.
+    public bool Shopping { get; set; }
 }
-public record CheckItem(string Id, string Text, bool Done);
+// Qty et Aisle : quantité libre et rayon, pour les articles d’une liste de courses.
+public record CheckItem(string Id, string Text, bool Done, string? Qty = null, string? Aisle = null);
 public record Comment(string Id, string AuthorId, string Text, DateTimeOffset At);
 public record Attachment(string Id, string FileName, string Sha256, long Bytes, DateTimeOffset At);
 public record Activity(string Id, string ActorId, string Action, string Detail, DateTimeOffset At);
@@ -122,8 +130,9 @@ public static class Rules
         if (i.Assignees.Concat(i.Performers).Any(id => !h.Members.Any(m => m.Id == id))) throw new RuleException("Membre inconnu.");
         if (i.StageId == "done" && i.Performers.Distinct().Count() is < 1 or > 2) throw new RuleException("Choisissez qui a réalisé cette tâche.");
         if (i.TagIds.Any(id => !h.Tags.Any(tag => tag.Id == id))) throw new RuleException("Tag inconnu.");
-        if (i.Checklist.Count > 100 || i.Checklist.Any(c => string.IsNullOrWhiteSpace(c.Text) || c.Text.Length > 300) || i.Checklist.Select(c => c.Id).Distinct().Count() != i.Checklist.Count) throw new RuleException("Checklist invalide.");
+        if (i.Checklist.Count > 100 || i.Checklist.Any(c => string.IsNullOrWhiteSpace(c.Text) || c.Text.Length > 300 || c.Qty?.Length > Foyer.Shopping.MaxQty || (c.Aisle != null && !Foyer.Shopping.KnownAisle(c.Aisle))) || i.Checklist.Select(c => c.Id).Distinct().Count() != i.Checklist.Count) throw new RuleException("Checklist invalide.");
         var performers = i.StageId == "done" ? i.Performers.Distinct().ToList() : new List<string>();
+        var wasOpen = !Closed(t);
         if (create)
         {
             Event(t, actor, "created", "Ticket créé", now);
@@ -143,6 +152,7 @@ public static class Rules
         t.StartDate = i.StartDate; t.DueDate = i.DueDate; t.Assignees = i.Assignees.Distinct().ToList(); t.Performers = i.StageId == "done" ? i.Performers.Distinct().ToList() : [];
         t.TagIds = i.TagIds.Distinct().ToList(); t.Checklist = i.Checklist; t.UpdatedAt = now;
         t.ClosedAt = Closed(t) ? t.ClosedAt ?? now : null;
+        if (!create && wasOpen && Closed(t) && t.Shopping) Foyer.Shopping.ReturnUnbought(h, t);
     }
     // Appareils du destinataire concernés par une notification.
     public static IEnumerable<Device> Recipients(Household h, Notification n) =>
