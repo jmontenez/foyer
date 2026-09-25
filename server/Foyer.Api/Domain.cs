@@ -84,6 +84,11 @@ public sealed class Notification
     public string MemberId { get; set; } = "";
     public string Kind { get; set; } = "";
     public string Title { get; set; } = "";
+    // Texte sous le titre (null pour les notifications d’avant : titre « Foyer », Title en corps).
+    public string? Body { get; set; }
+    // Nombre d’événements regroupés dans cette notification, et qui les a déclenchés.
+    public int Count { get; set; } = 1;
+    public string? ActorId { get; set; }
     public string? TicketId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset ExpiresAt { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
@@ -133,6 +138,7 @@ public static class Rules
         if (i.Checklist.Count > 100 || i.Checklist.Any(c => string.IsNullOrWhiteSpace(c.Text) || c.Text.Length > 300 || c.Qty?.Length > Foyer.Shopping.MaxQty || (c.Aisle != null && !Foyer.Shopping.KnownAisle(c.Aisle))) || i.Checklist.Select(c => c.Id).Distinct().Count() != i.Checklist.Count) throw new RuleException("Checklist invalide.");
         var performers = i.StageId == "done" ? i.Performers.Distinct().ToList() : new List<string>();
         var wasOpen = !Closed(t);
+        var assignedBefore = create ? [] : t.Assignees.ToList();
         if (create)
         {
             Event(t, actor, "created", "Ticket créé", now);
@@ -153,6 +159,7 @@ public static class Rules
         t.TagIds = i.TagIds.Distinct().ToList(); t.Checklist = i.Checklist; t.UpdatedAt = now;
         t.ClosedAt = Closed(t) ? t.ClosedAt ?? now : null;
         if (!create && wasOpen && Closed(t) && t.Shopping) Foyer.Shopping.ReturnUnbought(h, t);
+        foreach (var added in t.Assignees.Except(assignedBefore)) Notify.Assigned(h, t, added, actor, now);
     }
     // Appareils du destinataire concernés par une notification.
     public static IEnumerable<Device> Recipients(Household h, Notification n) =>
