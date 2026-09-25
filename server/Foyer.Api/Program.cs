@@ -60,6 +60,10 @@ if (googleConfigured)
     auth.AddGoogle(o => { o.ClientId = settings.GoogleClientId!; o.ClientSecret = builder.Configuration["GoogleClientSecret"]!; o.SignInScheme = "google-temp"; o.CallbackPath = "/signin-google"; o.SaveTokens = false; o.Events.OnCreatingTicket = ctx => { if (!(ctx.User.TryGetProperty("email_verified", out var verified) || ctx.User.TryGetProperty("verified_email", out verified)) || verified.ValueKind != JsonValueKind.True) throw new RuleException("Adresse Google non vérifiée.", 403); return Task.CompletedTask; }; o.Events.OnRemoteFailure = ctx => { ctx.Response.Redirect("/?login=failed"); ctx.HandleResponse(); return Task.CompletedTask; }; });
 var app = builder.Build();
 await app.Services.GetRequiredService<Store>().Initialize();
+{
+    var store = app.Services.GetRequiredService<Store>();
+    if (!await store.Read(h => h.ShortcutsSeeded)) await store.Update(h => { Shortcuts.SeedOnce(h); return true; });
+}
 app.Use(async (ctx, next) =>
 {
     // Canonical configured origin, never trust caller-controlled forwarded headers.
@@ -153,6 +157,7 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     todayIds = h.Tickets.Where(t => Rules.TodayView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     notificationsEnabled = settings.WorkersEnabled,
+    shortcuts = h.Shortcuts.OrderBy(s => s.Order).Select(s => Shortcuts.Summary(h, s)),
     demo = settings.PublicDemo
 }));
 // Mise à jour Android : réservée aux membres connectés (filtre du groupe), réponses no-store.
@@ -187,7 +192,9 @@ api.MapPost("/tickets", async (TicketInput input, HttpContext ctx, Store store) 
 {
     if (settings.PublicDemo && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
     var me = Security.Member(ctx, h); var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1 };
-    Rules.Apply(h, t, input, me.Id, DateTimeOffset.UtcNow, true); h.Tickets.Add(t); return t;
+    Rules.Apply(h, t, input, me.Id, DateTimeOffset.UtcNow, true);
+    if (input.ShortcutId is { } sid && h.Shortcuts.Any(s => s.Id == sid)) t.ShortcutId = sid;
+    h.Tickets.Add(t); return t;
 }));
 api.MapPut("/tickets/{id}", async (string id, TicketInput input, HttpContext ctx, Store store) => await store.Update(h => { var me = Security.Member(ctx, h); var t = Find(h, id); Rules.Apply(h, t, input, me.Id, DateTimeOffset.UtcNow); return t; }));
 api.MapPost("/tickets/{id}/comments", async (string id, CommentInput input, HttpContext ctx, Store store) => await store.Update(h =>
@@ -199,6 +206,38 @@ api.MapPost("/tickets/{id}/comments", async (string id, CommentInput input, Http
     Rules.Event(t, me.Id, "comment", "Commentaire ajouté", now);
     foreach (var other in h.Members.Where(m => m.Id != me.Id)) h.Notifications.Add(new() { MemberId = other.Id, Kind = "comment", TicketId = t.Id, Title = $"Nouveau commentaire — {t.Title}" });
     return t;
+}));
+api.MapPost("/shortcuts", async (ShortcutInput input, Store store) => await store.Update(h =>
+{
+    if (h.Shortcuts.Count >= (settings.PublicDemo ? 20 : Shortcuts.Max)) throw new RuleException(settings.PublicDemo ? Demo.Limit : "40 raccourcis maximum.", 403);
+    Shortcuts.Validate(h, input);
+    var s = new Shortcut { Order = h.Shortcuts.Select(x => x.Order).DefaultIfEmpty(-1).Max() + 1 };
+    Shortcuts.Apply(s, input); h.Shortcuts.Add(s); return Shortcuts.Summary(h, s);
+}));
+api.MapPut("/shortcuts/{id}", async (string id, ShortcutInput input, Store store) => await store.Update(h =>
+{
+    var s = h.Shortcuts.FirstOrDefault(x => x.Id == id) ?? throw new RuleException("Raccourci introuvable.", 404);
+    Shortcuts.Validate(h, input); Shortcuts.Apply(s, input); return Shortcuts.Summary(h, s);
+}));
+api.MapDelete("/shortcuts/{id}", async (string id, Store store) => await store.Update(h =>
+{
+    // Les tâches déjà créées restent ; elles perdent seulement le lien.
+    if (h.Shortcuts.RemoveAll(x => x.Id == id) == 0) throw new RuleException("Raccourci introuvable.", 404);
+    foreach (var t in h.Tickets.Where(t => t.ShortcutId == id)) t.ShortcutId = null;
+    return Results.NoContent();
+}));
+api.MapPut("/shortcuts-order", async (List<string> ids, Store store) => await store.Update(h =>
+{
+    if (ids is null || ids.Count != h.Shortcuts.Count || ids.Distinct().Count() != ids.Count || ids.Any(id => !h.Shortcuts.Any(s => s.Id == id))) throw new RuleException("Ordre des raccourcis invalide.");
+    foreach (var (id, i) in ids.Select((id, i) => (id, i))) h.Shortcuts.First(s => s.Id == id).Order = i;
+    return Results.NoContent();
+}));
+api.MapPost("/shortcuts/{id}/launch", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    if (settings.PublicDemo && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
+    var me = Security.Member(ctx, h);
+    var s = h.Shortcuts.FirstOrDefault(x => x.Id == id) ?? throw new RuleException("Raccourci introuvable.", 404);
+    return Shortcuts.Launch(h, s, me.Id, DateTimeOffset.UtcNow);
 }));
 api.MapPost("/tags", async (TagInput input, Store store) => await store.Update(h =>
 {

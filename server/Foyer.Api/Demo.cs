@@ -37,6 +37,7 @@ public static class Demo
         h.Maintenance = false;
         h.Members = seed.Members; h.Stages = seed.Stages; h.Tags = seed.Tags; h.Tickets = seed.Tickets;
         h.Sessions = []; h.Devices = []; h.Notifications = [];
+        h.Shortcuts = seed.Shortcuts; h.ShortcutsSeeded = true;
     }
 
     public static Household Seed(Settings settings, DateOnly today, DateTimeOffset now)
@@ -80,6 +81,9 @@ public static class Demo
         T("Payer la cantine", "obligation", "normal", "done", null, null, [C], [11], performers: [C], closedDaysAgo: 1);
         T("Monter l’étagère", "obligation", "normal", "done", null, null, [C, A], [0], performers: [C, A], closedDaysAgo: 3);
         T("Rendre les livres à la médiathèque", "obligation", "low", "abandoned", null, null, [A], [5], closedDaysAgo: 8);
+        Shortcuts.SeedOnce(h);
+        // Une lessive déjà faite : « dernière fois il y a 2 jours » dans le panneau de création.
+        T("Faire une lessive", "obligation", "normal", "done", null, null, [A], [8], performers: [A], closedDaysAgo: 2).ShortcutId = h.Shortcuts.First(s => s.SeedKey == "laundry").Id;
         return h;
     }
 }
