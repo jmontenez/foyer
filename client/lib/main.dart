@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'shopping.dart';
 import 'shortcuts.dart';
 import 'ui.dart';
 import 'update.dart';
@@ -407,11 +408,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> openTicket([Map<String, dynamic>? ticket]) async {
     if (data == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute<String>(
         builder: (_) => TicketPage(data: data!, ticket: ticket),
       ),
     );
+    // « Ouvrir la liste de courses » depuis une tâche Courses.
+    if (result == 'shopping' && mounted) setState(() => tab = 5);
     await refresh();
   }
 
@@ -716,8 +719,41 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       );
       if (again != true) return;
     }
+    // Raccourci Courses : proposer d’y mettre la liste en cours (brouillon non programmé).
+    final draft = maps(
+      maps(data?['shopping']?['lists'])
+          .where((l) => l['id'] == 'draft')
+          .firstOrNull?['items'],
+    );
+    var withList = false;
+    if (s['seedKey'] == 'groceries' && draft.isNotEmpty && mounted) {
+      final load = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(
+            'Une liste en cours (${plural(draft.length, 'article')})',
+          ),
+          content: const Text('La mettre dans cette tâche ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Non'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Oui, la charger'),
+            ),
+          ],
+        ),
+      );
+      if (load == null) return;
+      withList = load;
+    }
     try {
-      final t = await api.call('POST', '/api/v1/shortcuts/${s['id']}/launch');
+      final t = await api.call(
+        'POST',
+        '/api/v1/shortcuts/${s['id']}/launch${withList ? '?withList=true' : ''}',
+      );
       await refresh();
       messenger.currentState?.showSnackBar(
         undoSnackBar('« ${s['title']} » ajoutée.', () async {
@@ -910,6 +946,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Chacun sait où on en est',
       'Plus tard, sans pression',
       'Ce qu’on a fait, et ce qu’on a décidé',
+      'Ce qu’il faut rapporter',
     ];
     final tickets = visible();
     const views = [
@@ -918,6 +955,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       (Icons.view_kanban_outlined, 'Tableau'),
       (Icons.inventory_2_outlined, 'Backlog'),
       (Icons.history, 'Historique'),
+      (Icons.shopping_basket_outlined, 'Courses'),
     ];
     final members = maps(data!['members']);
     final me = Map<String, dynamic>.from(data!['me']);
@@ -927,12 +965,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         .firstOrNull;
     final rows = tokensOf(context).rows;
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Une nouvelle tâche',
-        shape: const CircleBorder(),
-        onPressed: quickCreate,
-        child: const Icon(Icons.add, size: 28),
-      ),
+      floatingActionButton: tab == 5
+          ? null
+          : FloatingActionButton(
+              tooltip: 'Une nouvelle tâche',
+              shape: const CircleBorder(),
+              onPressed: quickCreate,
+              child: const Icon(Icons.add, size: 28),
+            ),
       bottomNavigationBar: wide
           ? null
           : FloatingNav(
@@ -967,10 +1007,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       title: views[tab].$2,
                       subtitle: subtitles[tab],
                       searching: searching,
-                      onSearch: () => setState(() {
-                        searching = !searching;
-                        if (!searching) query = '';
-                      }),
+                      // Courses a sa propre recherche d’ingrédients.
+                      onSearch: tab == 5
+                          ? null
+                          : () => setState(() {
+                              searching = !searching;
+                              if (!searching) query = '';
+                            }),
                       profile: IconButton(
                         tooltip: 'Réglages',
                         onPressed: () => settingsDialog(),
@@ -983,7 +1026,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                    if (searching)
+                    if (searching && tab != 5)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                         child: TextField(
@@ -1071,16 +1114,25 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ],
                       ),
                     ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: filterPills(members, me, selectedTag),
+                    if (tab != 5) ...[
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: filterPills(members, me, selectedTag),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                    ],
                     Expanded(
-                      child: tab == 2
+                      child: tab == 5
+                          ? ShoppingView(
+                              data: data!,
+                              api: api,
+                              onChanged: refresh,
+                              onOpenTicket: openTicket,
+                            )
+                          : tab == 2
                           ? board(tickets)
                           : RefreshIndicator(
                               onRefresh: refresh,
@@ -2254,67 +2306,67 @@ class _TicketPageState extends State<TicketPage> {
     if (!dirty) message(done);
   }
 
-  Future<void> finish() async {
-    final me = widget.data['me']?['id']?.toString();
-    final chosen = <String>{
-      ...strings(t['assignees']),
-      if (strings(t['assignees']).isEmpty && me != null) me,
-    };
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (c) => StatefulBuilder(
-        builder: (c, change) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Qui l’a réalisé ?',
-                  style: Theme.of(c).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                const Text('Choix explicite, indépendant des responsables.'),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final m in members)
-                      FilterChip(
-                        label: Text(m['name']),
-                        selected: chosen.contains(m['id']),
-                        onSelected: (v) => change(
-                          () =>
-                              v ? chosen.add(m['id']) : chosen.remove(m['id']),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: chosen.isEmpty
-                      ? null
-                      : () => Navigator.pop(c, true),
-                  child: const Text('C’est fait'),
-                ),
-              ],
-            ),
-          ),
+  // Tâche Courses : la checklist est la liste, rangée dans l’ordre des rayons du magasin.
+  bool get shopping => t['shopping'] == true;
+  List<Map<String, dynamic>> checklistItems() {
+    final items = maps(t['checklist']);
+    if (!shopping) return items;
+    final order = [
+      for (final a in maps(widget.data['shopping']?['aisles'])) a['id'],
+    ];
+    int rank(Map<String, dynamic> i) {
+      final r = order.indexOf(i['aisle'] ?? 'other');
+      return r < 0 ? order.length : r;
+    }
+
+    final ranked = items.indexed.toList()
+      ..sort((a, b) {
+        final r = rank(a.$2) - rank(b.$2);
+        return r != 0 ? r : a.$1 - b.$1;
+      });
+    return [for (final e in ranked) e.$2];
+  }
+
+  List<Widget> checklistHeading() => [
+    heading(shopping ? 'Liste de courses' : 'Une étape à la fois'),
+    if (shopping && t['id'] != null && !closedTicket)
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () async {
+            if (dirty) await save(close: false);
+            if (mounted && !dirty) Navigator.pop(context, 'shopping');
+          },
+          icon: const Icon(Icons.shopping_basket_outlined),
+          label: const Text('Ouvrir la liste de courses'),
         ),
       ),
+  ];
+
+  bool get closedTicket =>
+      t['stageId'] == 'done' || t['stageId'] == 'abandoned';
+
+  Future<void> finish() async {
+    final me = widget.data['me']?['id']?.toString();
+    final performers = await askPerformers(context, members, {
+      ...strings(t['assignees']),
+      if (strings(t['assignees']).isEmpty && me != null) me,
+    });
+    if (performers == null) return;
+    // Courses : les articles non cochés reviennent dans la liste en cours (côté serveur).
+    final left = shopping
+        ? maps(t['checklist']).where((i) => i['done'] != true).length
+        : 0;
+    await apply(
+      () {
+        t['stageId'] = 'done';
+        t['performers'] = performers;
+      },
+      left == 0
+          ? 'Bravo, c’est fait.'
+          : 'Bravo ! ${plural(left, 'article non acheté', 'articles non achetés')} remis dans la liste.',
+      close: true,
     );
-    if (ok == true) {
-      await apply(
-        () {
-          t['stageId'] = 'done';
-          t['performers'] = chosen.toList();
-        },
-        'Bravo, c’est fait.',
-        close: true,
-      );
-    }
   }
 
   Future<void> postpone() async {
@@ -3087,13 +3139,13 @@ class _TicketPageState extends State<TicketPage> {
                         ),
                       ],
                     ),
-                    heading('Une étape à la fois'),
-                    ...maps(t['checklist']).map(
+                    ...checklistHeading(),
+                    ...checklistItems().map(
                       (item) => CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         controlAffinity: ListTileControlAffinity.leading,
                         value: item['done'],
-                        title: Text(item['text']),
+                        title: Text(itemLabel(item)),
                         secondary: IconButton(
                           tooltip: 'Retirer',
                           icon: const Icon(Icons.close),
@@ -3209,13 +3261,13 @@ class _TicketPageState extends State<TicketPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  heading('Une étape à la fois'),
-                  ...maps(t['checklist']).map(
+                  ...checklistHeading(),
+                  ...checklistItems().map(
                     (item) => CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       value: item['done'],
-                      title: Text(item['text']),
+                      title: Text(itemLabel(item)),
                       secondary: IconButton(
                         tooltip: 'Retirer',
                         icon: const Icon(Icons.close),
