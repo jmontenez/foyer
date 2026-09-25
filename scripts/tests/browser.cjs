@@ -22,7 +22,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByRole('button', {name:'Créer',exact:true}).click();
   await page.waitForTimeout(1000);
   await page.screenshot({path:'artifacts/browser/after-save.png'});
-  await page.getByText('Backlog Tab 4 of 5', {exact:true}).click();
+  await page.getByText('Backlog Tab 4 of 6', {exact:true}).click();
   await cardOf(title).waitFor();
   await page.screenshot({path:'artifacts/browser/backlog-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});

@@ -1,0 +1,151 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:foyer/api.dart';
+import 'package:foyer/shopping.dart';
+
+void main() {
+  final catalog = [
+    {'name': 'Lait', 'aisle': 'dairy', 'uses': 3},
+    {'name': 'Œufs', 'aisle': 'dairy', 'uses': 1},
+    {'name': 'Pommes de terre', 'aisle': 'produce', 'uses': 0},
+    {'name': 'Pommes', 'aisle': 'produce', 'uses': 5},
+    {'name': 'Tomates', 'aisle': 'produce', 'uses': 0},
+    {'name': 'Crème fraîche', 'aisle': 'dairy', 'uses': 0},
+    {'name': 'Papier toilette', 'aisle': 'hygiene', 'uses': 0},
+  ];
+  List<String> names(List<Map<String, dynamic>> l) => [
+    for (final i in l) i['name'].toString(),
+  ];
+
+  test('Clé identique au serveur : casse, accents, ligatures, pluriel', () {
+    expect(ingredientKey('Œufs'), 'oeuf');
+    expect(ingredientKey('  Pommes de terre '), 'pomme de terre');
+    expect(ingredientKey('Crème fraîche'), 'creme fraiche');
+    expect(ingredientKey('Riz'), 'riz');
+  });
+
+  test('Recherche : exact, début, mot, contenu, faute de frappe', () {
+    expect(names(searchIngredients(catalog, 'oeuf')), ['Œufs']);
+    // « Pommes » (5 utilisations) avant « Pommes de terre ».
+    expect(names(searchIngredients(catalog, 'pom')), [
+      'Pommes',
+      'Pommes de terre',
+    ]);
+    expect(names(searchIngredients(catalog, 'terre')), ['Pommes de terre']);
+    expect(names(searchIngredients(catalog, 'CREME')), ['Crème fraîche']);
+    expect(names(searchIngredients(catalog, 'toilete')), ['Papier toilette']);
+    expect(names(searchIngredients(catalog, 'tomtes')), ['Tomates']);
+    expect(searchIngredients(catalog, 'xyz'), isEmpty);
+    expect(searchIngredients(catalog, '  '), isEmpty);
+  });
+
+  test('Accès rapide : les plus utilisés, puis l’ordre du catalogue', () {
+    expect(names(quickIngredients(catalog, limit: 4)), [
+      'Pommes',
+      'Lait',
+      'Œufs',
+      'Pommes de terre',
+    ]);
+  });
+
+  test('Articles groupés par rayon dans l’ordre du magasin, cochés à part', () {
+    final aisles = [
+      {'id': 'produce', 'name': 'Fruits & légumes'},
+      {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+      {'id': 'other', 'name': 'Autre'},
+    ];
+    final (groups, basket) = groupByAisle([
+      {'id': '1', 'text': 'Lait', 'aisle': 'dairy', 'done': false},
+      {'id': '2', 'text': 'Pommes', 'aisle': 'produce', 'done': true},
+      {'id': '3', 'text': 'Carottes', 'aisle': 'produce', 'done': false},
+      {'id': '4', 'text': 'Vis', 'aisle': null, 'done': false},
+    ], aisles);
+    expect([for (final g in groups) g.$1['id']], ['produce', 'dairy', 'other']);
+    expect([for (final i in basket) i['text']], ['Pommes']);
+    expect(itemLabel({'text': 'Lait', 'qty': '2 L'}), 'Lait · 2 L');
+    expect(itemLabel({'text': 'Pain', 'qty': null}), 'Pain');
+  });
+
+  test('Libellés de liste et dates d’API', () {
+    final today = DateTime(2026, 9, 25);
+    expect(listLabel({'id': 'draft'}, today), 'Non programmée');
+    expect(listLabel({'id': 't', 'date': '2026-09-26'}, today), 'Demain');
+    expect(apiDate(DateTime(2026, 3, 7)), '2026-03-07');
+    expect(
+      [ofDay('Aujourd’hui'), ofDay('Samedi'), ofDay('3 oct.')],
+      ['d’aujourd’hui', 'de samedi', 'du 3 oct.'],
+    );
+    expect([dayPhrase('Demain'), dayPhrase('3 oct.')], ['demain', 'le 3 oct.']);
+  });
+
+  testWidgets(
+    'Une suggestion déjà dans la liste le montre avant de la toucher',
+    (tester) async {
+      final data = {
+        'today': '2026-09-25',
+        'tickets': [],
+        'members': [],
+        'shopping': {
+          'lists': [
+            {
+              'id': 'draft',
+              'items': [
+                {
+                  'id': '1',
+                  'text': 'Lait',
+                  'qty': '2 L',
+                  'aisle': 'dairy',
+                  'done': false,
+                },
+              ],
+            },
+          ],
+          'ingredients': catalog,
+          'aisles': [
+            {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+            {'id': 'produce', 'name': 'Fruits & légumes'},
+            {'id': 'other', 'name': 'Autre'},
+          ],
+        },
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShoppingView(
+              data: data,
+              api: Api(),
+              onChanged: () async {},
+              onOpenTicket: (_) {},
+            ),
+          ),
+        ),
+      );
+      // Accès rapide : la puce du lait est cochée et porte la quantité.
+      final milk = tester.widget<FilterChip>(
+        find.widgetWithText(FilterChip, 'Lait · 2 L'),
+      );
+      expect(milk.selected, isTrue);
+      expect(
+        tester
+            .widget<FilterChip>(find.widgetWithText(FilterChip, 'Pommes'))
+            .selected,
+        isFalse,
+      );
+      expect(find.text('CRÈMERIE & ŒUFS'), findsOneWidget);
+      expect(find.text('Programmer'), findsOneWidget);
+      // Recherche : l’état « Dans la liste » et l’ajout d’un nouvel ingrédient.
+      await tester.enterText(find.byType(TextField), 'lai');
+      await tester.pump();
+      expect(find.text('Dans la liste · 2 L'), findsOneWidget);
+      expect(find.text('Ajouter « lai »'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Lait');
+      await tester.pump();
+      expect(find.textContaining('Ajouter « '), findsNothing);
+      // Toucher l’ingrédient ouvre sa feuille, en modification.
+      await tester.tap(find.text('Dans la liste · 2 L'));
+      await tester.pumpAndSettle();
+      expect(find.text('Déjà dans la liste'), findsOneWidget);
+      expect(find.text('Enregistrer'), findsOneWidget);
+    },
+  );
+}
