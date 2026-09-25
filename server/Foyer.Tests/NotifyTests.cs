@@ -156,13 +156,23 @@ public class NotifyTests
     }
 
     [Fact]
-    public void CommentsSayWhoAndOnWhatButNeverTheText()
+    public void CommentsSayWhoAndWhat()
     {
         var h = Home();
         var t = Create(h, "a", ["a"]);
-        Notify.Commented(h, t, "b", Now);
+        Notify.Commented(h, t, "b", "J’ai trouvé le formulaire\nil faut juste le signer et le rendre à la maîtresse avant vendredi, sinon on est en retard", Now);
         var n = Assert.Single(h.Notifications, x => x.Kind == "comment");
-        Assert.Equal(("a", "Clemence a commenté", "Papiers École"), (n.MemberId, n.Title, n.Body));
+        Assert.Equal(("a", "Clemence a commenté"), (n.MemberId, n.Title));
+        Assert.StartsWith("Papiers École — « J’ai trouvé le formulaire il faut", n.Body);
+        Assert.EndsWith("… »", n.Body);
+        Assert.Equal("Papiers École — « Court »", CommentBody(h, "Court"));
+    }
+
+    private static string? CommentBody(Household h, string text)
+    {
+        var t = Create(h, "a", ["a"]);
+        Notify.Commented(h, t, "b", text, Now);
+        return h.Notifications.Last(x => x.Kind == "comment").Body;
     }
 
     [Fact]
@@ -174,4 +184,47 @@ public class NotifyTests
         var n = Assert.Single(h.Notifications);
         Assert.Equal(("Mise à jour de Foyer", new DateTimeOffset(2026, 9, 26, 6, 0, 0, TimeSpan.Zero)), (n.Title, n.NextAttempt));
     }
+
+    [Fact]
+    public void CommentBurstsReplaceOneNotification()
+    {
+        var h = Home();
+        var t = Create(h, "a", ["a"]);
+        var other = Create(h, "a", ["a"]);
+        Notify.Commented(h, t, "b", "Premier", Now);
+        var first = Assert.Single(h.Notifications, n => n.Kind == "comment");
+        first.Finished = true; first.DeliveredDeviceIds.Add("p");
+        Notify.Commented(h, t, "b", "Deuxième", Now.AddMinutes(2));
+        Notify.Commented(h, t, "b", "Troisième", Now.AddMinutes(5));
+        var n = Assert.Single(h.Notifications, x => x.Kind == "comment");
+        Assert.Equal((3, "3 nouveaux commentaires", "Papiers École — « Troisième »", false), (n.Count, n.Title, n.Body, n.Finished));
+        Assert.Empty(n.DeliveredDeviceIds);
+        Assert.Equal(Now.AddMinutes(5), n.NextAttempt);
+        // Autre tâche, ou plus de 30 minutes après : une nouvelle notification.
+        Notify.Commented(h, other, "b", "Ailleurs", Now.AddMinutes(6));
+        Notify.Commented(h, t, "b", "Plus tard", Now.AddMinutes(31));
+        Assert.Equal(3, h.Notifications.Count(x => x.Kind == "comment"));
+    }
+
+    [Fact]
+    public void AssignmentBurstsListTheTasks()
+    {
+        var h = Home();
+        foreach (var title in new[] { "Lessive", "Poubelles", "Courses", "Vaisselle" })
+        {
+            var t = new Ticket();
+            Rules.Apply(h, t, Input(["a"]) with { Title = title }, "b", Now, true);
+            h.Tickets.Add(t);
+        }
+        var n = Assert.Single(Assigns(h));
+        Assert.Equal((4, "Clemence vous a confié 4 tâches", "Lessive · Poubelles · Courses (+1)", (string?)null), (n.Count, n.Title, n.Body, n.TicketId));
+    }
+
+    [Theory]
+    [InlineData("start", "foyer_reminders")]
+    [InlineData("digest", "foyer_reminders")]
+    [InlineData("comment", "foyer_activity")]
+    [InlineData("assign", "foyer_activity")]
+    [InlineData("update", "foyer_updates")]
+    public void EachKindHasItsAndroidChannel(string kind, string channel) => Assert.Equal(channel, Notify.Channel(kind));
 }

@@ -27,6 +27,22 @@ import java.security.MessageDigest
 
 private class UpdateException(message: String) : Exception(message)
 
+// Un canal par type : chacun peut couper les commentaires et garder les rappels (Réglages Android).
+// L’identifiant « foyer_activity » est conservé pour garder les réglages déjà faits.
+object Channels {
+    const val REMINDERS = "foyer_reminders"
+    const val ACTIVITY = "foyer_activity"
+    const val UPDATES = "foyer_updates"
+    fun ensure(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        context.getSystemService(NotificationManager::class.java).createNotificationChannels(listOf(
+            NotificationChannel(REMINDERS, "Rappels", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Tâches du jour et résumé du matin" },
+            NotificationChannel(ACTIVITY, "Activité du foyer", NotificationManager.IMPORTANCE_DEFAULT).apply { description = "Commentaires et tâches confiées" },
+            NotificationChannel(UPDATES, "Mises à jour", NotificationManager.IMPORTANCE_LOW).apply { description = "Nouvelles versions de Foyer" },
+        ))
+    }
+}
+
 // Résultat de la session d’installation : confirmation Android si nécessaire, sinon rien
 // (en cas de succès l’application est remplacée et son processus arrêté).
 class UpdateStatusReceiver : BroadcastReceiver() {
@@ -49,8 +65,10 @@ class UpdatedReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         val manager = context.getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled()) return
+        // Première exécution après la mise à jour, avant tout lancement : le canal peut manquer.
+        Channels.ensure(context)
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, "foyer_activity") else @Suppress("DEPRECATION") Notification.Builder(context)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(context, Channels.UPDATES) else @Suppress("DEPRECATION") Notification.Builder(context)
         manager.notify(UPDATED_NOTIFICATION, builder.setSmallIcon(android.R.drawable.stat_sys_download_done).setContentTitle("Foyer est à jour")
             .setContentText("Touchez pour rouvrir l’application.").setContentIntent(open).setAutoCancel(true).build())
     }
@@ -60,10 +78,7 @@ class UpdatedReceiver : BroadcastReceiver() {
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("foyer_activity", "Activité du foyer", NotificationManager.IMPORTANCE_DEFAULT)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
+        Channels.ensure(this)
     }
 
     // Mise à jour hors store : l’APK est téléchargé depuis le serveur Foyer avec la session,
@@ -75,6 +90,12 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "fr.foyer/update").setMethodCallHandler { call, result ->
             when (call.method) {
                 "info" -> result.success(mapOf("versionCode" to installedVersion(), "versionName" to (packageInfo().versionName ?: ""), "canInstall" to canInstall()))
+                "notificationSettings" -> {
+                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                        else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                    startActivity(intent)
+                    result.success(null)
+                }
                 "permission" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
                     result.success(null)

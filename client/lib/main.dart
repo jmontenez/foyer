@@ -1667,6 +1667,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     value: me['digestEnabled'],
                     onChanged: (v) => change(() => me['digestEnabled'] = v),
                   ),
+                  if (Updater.supported)
+                    TextButton.icon(
+                      icon: const Icon(Icons.tune),
+                      label: const Text('Gérer les notifications par type'),
+                      onPressed: () => Updater.openNotificationSettings()
+                          .catchError((Object e) => message(e)),
+                    ),
                   TextButton.icon(
                     icon: const Icon(Icons.schedule),
                     label: const Text('Choisir l’heure'),

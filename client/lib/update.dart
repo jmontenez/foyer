@@ -35,6 +35,10 @@ class Updater {
     return (info!['versionCode'] as num).toInt();
   }
 
+  /// Réglages Android des notifications de Foyer (un canal par type).
+  static Future<void> openNotificationSettings() =>
+      channel.invokeMethod<void>('notificationSettings');
+
   /// versionCode installé, ou null hors Android ou si le canal natif ne répond pas.
   static Future<int?> installedVersionOrNull() async {
     if (!supported) return null;

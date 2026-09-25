@@ -24,16 +24,45 @@ public static class Notify
     public static (string Title, string Body) Text(Notification n) =>
         string.IsNullOrEmpty(n.Body) ? ("Foyer", n.Title) : (n.Title, n.Body);
 
+    // Canal Android selon le type (les anciens APK sans ces canaux prennent le canal par défaut).
+    public static string Channel(string kind) => kind switch
+    {
+        "start" or "digest" => "foyer_reminders",
+        "update" => "foyer_updates",
+        _ => "foyer_activity",
+    };
+
+    // Rafale : une notification du même type pour la même personne depuis moins de 30 minutes
+    // est reprise (même identifiant, donc remplacée sur le téléphone) au lieu d’en empiler une autre.
+    static readonly TimeSpan Burst = TimeSpan.FromMinutes(30);
+    static Notification? Recent(Household h, string memberId, string kind, string? ticketId, DateTimeOffset now) =>
+        h.Notifications.LastOrDefault(n => n.MemberId == memberId && n.Kind == kind && n.CreatedAt > now - Burst && (ticketId == null || n.TicketId == ticketId));
+
+    static void Resend(Notification n, DateTimeOffset now, TimeSpan life)
+    {
+        n.Count++; n.Finished = false; n.DeliveredDeviceIds.Clear(); n.Attempts = 0; n.NextAttempt = now; n.ExpiresAt = now + life;
+    }
+
     // Tâche confiée par quelqu’un d’autre ; jamais pour soi-même ni pour l’automatisation.
     public static void Assigned(Household h, Ticket t, string memberId, string actor, DateTimeOffset now)
     {
         if (actor == "system" || memberId == actor || Rules.Closed(t)) return;
         var when = When(t.DueDate ?? t.StartDate, Rules.Today(h, now));
+        var subject = when == null ? t.Title : $"{t.Title} · {when}";
+        var who = FirstName(h, actor);
+        if (Recent(h, memberId, "assign", null, now) is { } burst && burst.TicketId != t.Id)
+        {
+            Resend(burst, now, TimeSpan.FromDays(3));
+            burst.Subjects.Add(t.Title);
+            burst.TicketId = null; // plusieurs tâches : on ouvre Aujourd’hui
+            burst.Title = $"{who} vous a confié {burst.Count} tâches";
+            burst.Body = string.Join(" · ", burst.Subjects.Take(3)) + (burst.Subjects.Count > 3 ? $" (+{burst.Subjects.Count - 3})" : "");
+            return;
+        }
         h.Notifications.Add(new()
         {
-            MemberId = memberId, Kind = "assign", TicketId = t.Id, ActorId = actor,
-            Title = $"{FirstName(h, actor)} vous a confié une tâche",
-            Body = when == null ? t.Title : $"{t.Title} · {when}",
+            MemberId = memberId, Kind = "assign", TicketId = t.Id, ActorId = actor, Subjects = [t.Title],
+            Title = $"{who} vous a confié une tâche", Body = subject,
             CreatedAt = now, NextAttempt = now, ExpiresAt = now.AddDays(3),
         });
     }
@@ -111,16 +140,28 @@ public static class Notify
         };
     }
 
-    // Commentaire : qui, et sur quelle tâche. Le texte du commentaire ne passe jamais par FCM
-    // (docs/securite.md) ; il se lit dans l’application.
-    public static void Commented(Household h, Ticket t, string author, DateTimeOffset now)
+    // Commentaire : qui, sur quelle tâche, et le début du texte (choix assumé : il transite par
+    // FCM, voir docs/securite.md). En rafale, le dernier commentaire reste affiché.
+    public static void Commented(Household h, Ticket t, string author, string text, DateTimeOffset now)
     {
+        var snippet = text.Trim().ReplaceLineEndings(" ");
+        if (snippet.Length > 80) snippet = snippet[..79].TrimEnd() + "…";
+        var body = $"{t.Title} — « {snippet} »";
         foreach (var other in h.Members.Where(m => m.Id != author))
+        {
+            if (Recent(h, other.Id, "comment", t.Id, now) is { } burst)
+            {
+                Resend(burst, now, TimeSpan.FromDays(7));
+                burst.Title = $"{burst.Count} nouveaux commentaires";
+                burst.Body = body;
+                continue;
+            }
             h.Notifications.Add(new()
             {
                 MemberId = other.Id, Kind = "comment", TicketId = t.Id, ActorId = author,
-                Title = $"{FirstName(h, author)} a commenté", Body = t.Title,
+                Title = $"{FirstName(h, author)} a commenté", Body = body,
                 CreatedAt = now, NextAttempt = now, ExpiresAt = now.AddDays(7),
             });
+        }
     }
 }
