@@ -751,19 +751,23 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                             ),
                           ),
                         ),
-                      FilledButton.icon(
-                        onPressed: signing || api.base.isEmpty
-                            ? null
-                            : () => login(),
-                        icon: const Icon(Icons.login),
-                        label: Text(
-                          signing ? 'Connexion…' : 'Continuer avec Google',
+                      // Pas de connexion Google sur la démonstration publique.
+                      if (config['publicDemo'] != true)
+                        FilledButton.icon(
+                          onPressed: signing || api.base.isEmpty
+                              ? null
+                              : () => login(),
+                          icon: const Icon(Icons.login),
+                          label: Text(
+                            signing ? 'Connexion…' : 'Continuer avec Google',
+                          ),
                         ),
-                      ),
                       if (config['demo'] == true) ...[
                         const SizedBox(height: 16),
-                        const Text(
-                          'Démonstration locale · données fictives',
+                        Text(
+                          config['publicDemo'] == true
+                              ? 'Démonstration · données fictives, remises à zéro chaque nuit.\nChoisissez qui vous voulez être :'
+                              : 'Démonstration locale · données fictives',
                           textAlign: TextAlign.center,
                         ),
                         Wrap(
@@ -931,6 +935,32 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                   ),
                                 ),
                               ],
+                            ),
+                          if (data!['demo'] == true)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.science_outlined,
+                                    size: 18,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Démonstration : données fictives, remises à zéro chaque nuit.',
+                                      style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           if (data!['maintenance'] == true)
                             const Padding(
@@ -2823,7 +2853,7 @@ class _TicketPageState extends State<TicketPage> {
                       icon: const Icon(Icons.add),
                       label: const Text('Ajouter une étape'),
                     ),
-                    heading('Images'),
+                    if (widget.data['demo'] != true) heading('Images'),
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -2866,11 +2896,12 @@ class _TicketPageState extends State<TicketPage> {
                         );
                       }).toList(),
                     ),
-                    TextButton.icon(
-                      onPressed: saving ? null : upload,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Ajouter une image'),
-                    ),
+                    if (widget.data['demo'] != true)
+                      TextButton.icon(
+                        onPressed: saving ? null : upload,
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        label: const Text('Ajouter une image'),
+                      ),
                   ],
                 ] else ...[
                   ...summary(),
@@ -2943,7 +2974,7 @@ class _TicketPageState extends State<TicketPage> {
                     icon: const Icon(Icons.add),
                     label: const Text('Ajouter une étape'),
                   ),
-                  heading('Images'),
+                  if (widget.data['demo'] != true) heading('Images'),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
@@ -2986,11 +3017,12 @@ class _TicketPageState extends State<TicketPage> {
                       );
                     }).toList(),
                   ),
-                  TextButton.icon(
-                    onPressed: saving ? null : upload,
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: const Text('Ajouter une image'),
-                  ),
+                  if (widget.data['demo'] != true)
+                    TextButton.icon(
+                      onPressed: saving ? null : upload,
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Ajouter une image'),
+                    ),
                   heading('On en parle'),
                   ...maps(t['comments']).map(
                     (c) => Card(

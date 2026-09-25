@@ -156,6 +156,9 @@ def main():
     parser.add_argument("--state", required=True, help="Fichier d'état du déploiement")
     parser.add_argument("--health", default="http://127.0.0.1:5080/health")
     parser.add_argument("--check", action="store_true", help="Afficher la release candidate, sans déployer")
+    parser.add_argument("--compose", default="compose.yaml", help="Fichier Compose, relatif au dépôt")
+    parser.add_argument("--image", default="foyer-api", help="Image de l'API (sauvegarde pour retour arrière)")
+    parser.add_argument("--no-apk", action="store_true", help="Ne pas publier l'APK (démonstration)")
     args = parser.parse_args()
     app, state_file = Path(args.app), Path(args.state)
 
@@ -206,9 +209,9 @@ def main():
             run("git", "fetch", "--quiet", "origin", sha, env=git_env)
             run("git", "reset", "--quiet", "--hard", sha)
             extract_web(folder / "foyer-web.tar.gz", web)
-            run("docker", "image", "tag", "foyer-api:latest", "foyer-api:rollback")
-            run("docker", "compose", "build", "--quiet", "api")
-            run("docker", "compose", "up", "-d", "--wait", "--wait-timeout", "180")
+            run("docker", "image", "tag", f"{args.image}:latest", f"{args.image}:rollback")
+            run("docker", "compose", "-f", args.compose, "build", "--quiet", "api")
+            run("docker", "compose", "-f", args.compose, "up", "-d", "--wait", "--wait-timeout", "180")
             if not healthy(args.health, 120):
                 raise RuntimeError("/health ne répond pas après déploiement")
         except Exception as error:  # rollback puis mémorisation de l'échec
@@ -217,16 +220,16 @@ def main():
             state_file.write_text(json.dumps(state))
             subprocess.run(["git", "reset", "--quiet", "--hard", previous], cwd=app)
             restore_web(web)
-            subprocess.run(["docker", "image", "tag", "foyer-api:rollback", "foyer-api:latest"], cwd=app)
-            subprocess.run(["docker", "compose", "up", "-d", "--no-build"], cwd=app)
+            subprocess.run(["docker", "image", "tag", f"{args.image}:rollback", f"{args.image}:latest"], cwd=app)
+            subprocess.run(["docker", "compose", "-f", args.compose, "up", "-d", "--no-build"], cwd=app)
             log("Version précédente " + ("rétablie." if healthy(args.health, 120) else "NON rétablie : intervention requise."))
             return 1
         # APK publié seulement une fois le serveur sain : jamais d'application plus récente
         # que l'API en cas de retour arrière.
         published = subprocess.run(
             [sys.executable, str(app / "scripts/android_update.py"), str(folder), args.updates]
-        )
-        if published.returncode != 0:
+        ) if not args.no_apk else None
+        if published is not None and published.returncode != 0:
             log(f"{tag} : serveur déployé, APK non publié (voir ci-dessus).")
     state.update(deployed=release_number(tag), sha=sha, at=datetime.now(timezone.utc).isoformat())
     state_file.write_text(json.dumps(state))

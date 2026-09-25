@@ -1,0 +1,71 @@
+# Démonstration publique (https://demofoyer.jmops.fr) : instance séparée, sans aucun secret réel.
+# Données fictives remises à zéro chaque nuit ; images, Google et notifications désactivés.
+# Lancée par un compte et une VM Docker dédiés (docs/installation.md, section 9).
+name: foyer-demo
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "5m", max-file: "2"}
+    environment:
+      POSTGRES_DB: foyer
+      POSTGRES_USER: foyer
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:?Configure DEMO_DB_PASSWORD}
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U foyer -d foyer]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: foyer-demo-api
+    restart: unless-stopped
+    logging:
+      driver: local
+      options: {max-size: "5m", max-file: "2"}
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      PublicOrigin: ${DEMO_ORIGIN:-https://demofoyer.jmops.fr}
+      PublicDemo: "true"
+      # Adresses réservées (.invalid) : aucun compte réel possible, exigé au démarrage.
+      AllowedEmails: camille@demo.invalid,alex@demo.invalid
+      ClientIpHeader: CF-Connecting-IP
+      ConnectionStrings__Database: Host=db;Database=foyer;Username=foyer;Password=${DEMO_DB_PASSWORD}
+      ImagesPath: /data/images
+      UpdatesPath: /data/updates
+      WorkersEnabled: "false"
+    ports: ["127.0.0.1:5081:8080"]
+    volumes: [keyring:/home/app/.aspnet/DataProtection-Keys]
+    tmpfs: [/tmp, /data/images]
+    read_only: true
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal, outbound]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 200
+    healthcheck:
+      test: [CMD, /app/Foyer.Api, --healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  database:
+  keyring:
+networks:
+  internal:
+    internal: true
+  outbound:
