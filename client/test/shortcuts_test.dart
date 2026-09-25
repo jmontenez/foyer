@@ -80,4 +80,52 @@ void main() {
     await tester.longPress(find.text('Faire une lessive'));
     expect((taps, longs), (1, 1));
   });
+
+  test('Libellés de répétition', () {
+    expect(
+      repeatLabel({'mode': 'after', 'every': 3}),
+      'Tous les 3 jours après la dernière fois',
+    );
+    expect(
+      repeatLabel({'mode': 'after', 'every': 1}),
+      'Chaque jour après la dernière fois',
+    );
+    expect(
+      repeatLabel({
+        'mode': 'weekly',
+        'every': 1,
+        'days': [2],
+      }),
+      'Chaque semaine, le mardi',
+    );
+    expect(
+      repeatLabel({
+        'mode': 'weekly',
+        'every': 2,
+        'days': [4, 1, 6],
+      }),
+      'Toutes les 2 semaines, le lundi, jeudi et samedi',
+    );
+    expect(
+      repeatLabel({'mode': 'monthly', 'monthDay': 1}),
+      'Chaque mois, le 1er',
+    );
+    expect(
+      repeatLabel({'mode': 'monthly', 'monthDay': 31}),
+      'Chaque mois, le dernier jour',
+    );
+    expect(
+      activeRepeat({
+        'repeat': {'mode': 'after', 'active': false},
+      }),
+      isNull,
+    );
+    expect(
+      activeRepeat({
+        'repeat': {'mode': 'after', 'active': true},
+      }),
+      isNotNull,
+    );
+    expect(activeRepeat(null), isNull);
+  });
 }

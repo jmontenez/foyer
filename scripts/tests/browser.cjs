@@ -56,14 +56,31 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByRole('button', {name:'Une nouvelle tâche'}).click();
   await page.getByRole('button', {name:/^Faire une lessive/}).click();
   // Une lessive est peut-être déjà à faire (recette API) : l’anti-doublon demande confirmation.
+  // On attend soit la confirmation, soit la tâche créée (la CI est plus lente qu’un poste local).
   const again = page.getByRole('button', {name:'En ajouter une', exact:true});
-  if (await again.isVisible({timeout: 1500}).catch(() => false)) await again.click();
-  await page.waitForTimeout(1500);
-  if ((await tickets()).length !== before + 1 || (await laundries()) !== laundryBefore + 1) throw new Error('Raccourci non lancé');
+  let launched = false;
+  for (let i = 0; i < 20 && !launched; i++) {
+    if (await again.isVisible().catch(() => false)) await again.click();
+    await page.waitForTimeout(500);
+    launched = (await laundries()) === laundryBefore + 1;
+  }
+  if (!launched || (await tickets()).length !== before + 1) throw new Error('Raccourci non lancé');
   await page.getByRole('button', {name:'Annuler', exact:true}).click();
   await page.waitForTimeout(1500);
   if ((await tickets()).length !== before) throw new Error('Lancement non annulé');
+  // Répétition : activer la suggestion de la lessive depuis Réglages → Raccourcis.
+  await page.getByRole('button', {name:'Réglages', exact:true}).click();
+  await page.getByText('Raccourcis', {exact:false}).first().click();
+  await page.getByRole('button', {name:/^Faire une lessive/}).first().click();
+  // La section « Répéter » est en bas de l’éditeur : on fait défiler jusqu’à elle.
+  const auto = page.getByRole('switch', {name:/Créer automatiquement/}).or(page.getByRole('checkbox', {name:/Créer automatiquement/})).first();
+  for (let i = 0; i < 8 && !(await auto.isVisible().catch(() => false)); i++) { await page.mouse.move(195, 500); await page.mouse.wheel(0, 500); await page.waitForTimeout(300); }
+  await auto.click();
+  await page.getByRole('button', {name:'Enregistrer', exact:true}).click();
+  await page.waitForTimeout(1500);
+  const lessive = (await page.evaluate(async()=> (await fetch('/api/v1/state')).json())).shortcuts.find(x => x.seedKey === 'laundry');
+  if (!lessive.repeat || lessive.repeat.active !== true || lessive.repeat.every !== 3) throw new Error('Répétition non activée : ' + JSON.stringify(lessive.repeat));
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (Backlog → à faire, bloquer, terminer avec réalisateur), raccourci lancé puis annulé.');
+  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (Backlog → à faire, bloquer, terminer avec réalisateur), raccourci lancé puis annulé, répétition activée.');
   await browser.close();
 })();

@@ -198,9 +198,10 @@ class TaskView {
   final TaskBadge? badge;
   final int done, total, comments;
   final List<(String, int)> people;
-  final bool wish;
+  final bool wish, repeat;
   const TaskView({
     this.wish = false,
+    this.repeat = false,
     required this.title,
     required this.meta,
     this.badge,
@@ -240,6 +241,7 @@ class TaskTile extends StatelessWidget {
         TaskBadge.high => 'priorité haute',
       },
     if (task.wish) 'envie',
+    if (task.repeat) 'répétée',
     if (task.meta.isNotEmpty) task.meta,
     task.people.isEmpty
         ? 'sans responsable'
@@ -305,6 +307,7 @@ class TaskTile extends StatelessWidget {
                     Text(
                       [
                         if (task.wish) 'Envie',
+                        if (task.repeat) '↻',
                         task.meta,
                         ...extras,
                       ].where((s) => s.isNotEmpty).join(' · '),
@@ -339,6 +342,10 @@ class TaskTile extends StatelessWidget {
                   if (task.wish) ...[
                     const WishBadge(),
                     const SizedBox(width: 8),
+                  ],
+                  if (task.repeat) ...[
+                    Icon(Icons.repeat, size: 16, color: c.onSurfaceVariant),
+                    const SizedBox(width: 6),
                   ],
                   Expanded(
                     child: Text(
