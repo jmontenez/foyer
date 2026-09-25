@@ -148,4 +148,53 @@ void main() {
       expect(find.text('Enregistrer'), findsOneWidget);
     },
   );
+
+  testWidgets('L’éditeur d’ingrédient renvoie nom, quantité et rayon', (
+    tester,
+  ) async {
+    IngredientChoice? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async => result = await showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => const IngredientSheet(
+                  ingredient: {
+                    'name': 'Yaourts',
+                    'aisle': 'dairy',
+                    'lastQty': '4',
+                  },
+                  aisles: [
+                    {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+                    {'id': 'frozen', 'name': 'Surgelés'},
+                  ],
+                ),
+              ),
+              child: const Text('ouvrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('ouvrir'));
+    await tester.pumpAndSettle();
+    expect(find.text('4'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Yaourts'),
+      'Yaourts nature',
+    );
+    await tester.tap(find.text('Surgelés'));
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(result, (
+      name: 'Yaourts nature',
+      qty: '4',
+      aisle: 'frozen',
+      forget: false,
+    ));
+  });
 }

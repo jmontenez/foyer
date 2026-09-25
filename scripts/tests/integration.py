@@ -150,6 +150,12 @@ aisles = [x["id"] for x in shopping["aisles"]]
 call("PUT", "/api/v1/shopping/aisle-order", [*aisles[1:], aisles[0]], a, expected=204)
 assert call("GET", "/api/v1/state", token=a)["shopping"]["aisles"][-1]["id"] == aisles[0]
 call("PUT", "/api/v1/shopping/aisle-order", aisles[1:], a, expected=400)
+renamed = call("PUT", "/api/v1/shopping/ingredients/Frites", {"name": "Frites au four", "aisle": "frozen", "qty": "1 sac"}, a)
+assert renamed["name"] == "Frites au four" and renamed["lastQty"] == "1 sac", renamed
+call("PUT", "/api/v1/shopping/ingredients/Frites%20au%20four", {"name": "Lait", "aisle": None, "qty": None}, a, expected=409)
+draft = call("GET", "/api/v1/state", token=a)["shopping"]["lists"][-1]["items"]
+assert [x["text"] for x in draft] == ["Frites au four"], draft
+call("PUT", "/api/v1/shopping/ingredients/Frites%20au%20four", {"name": "Frites", "aisle": "frozen", "qty": None}, a)
 call("DELETE", "/api/v1/shopping/ingredients/Frites", token=a, expected=204)
 call("POST", "/api/v1/shopping/schedule", {"date": "2000-01-01", "mode": "new", "targetId": None}, a, expected=400)
 today = call("GET", "/api/v1/state", token=a)["today"]

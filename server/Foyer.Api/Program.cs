@@ -274,6 +274,8 @@ api.MapPost("/shopping/schedule", async (ShoppingScheduleInput input, HttpContex
     if (settings.PublicDemo && input.Mode == "new" && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
     return Shopping.Schedule(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow);
 }));
+api.MapPut("/shopping/ingredients/{name}", async (string name, IngredientInput input, HttpContext ctx, Store store) => await store.Update(h =>
+    Shopping.EditIngredient(h, name, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
 api.MapDelete("/shopping/ingredients/{name}", async (string name, Store store) => await store.Update(h => { Shopping.Forget(h, name); return Results.NoContent(); }));
 api.MapPut("/shopping/aisle-order", async (List<string> ids, Store store) => await store.Update(h => { Shopping.ReorderAisles(h, ids); return Results.NoContent(); }));
 api.MapPost("/tags", async (TagInput input, Store store) => await store.Update(h =>

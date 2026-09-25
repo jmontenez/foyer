@@ -413,6 +413,249 @@ class _ItemSheetState extends State<ItemSheet> {
   }
 }
 
+/// Résultat de l’éditeur d’ingrédient : nouvelles valeurs, ou « Oublier ».
+typedef IngredientChoice = ({
+  String name,
+  String qty,
+  String aisle,
+  bool forget,
+});
+
+class IngredientSheet extends StatefulWidget {
+  final Map<String, dynamic> ingredient;
+  final List<Map<String, dynamic>> aisles;
+  const IngredientSheet({
+    super.key,
+    required this.ingredient,
+    required this.aisles,
+  });
+  @override
+  State<IngredientSheet> createState() => _IngredientSheetState();
+}
+
+class _IngredientSheetState extends State<IngredientSheet> {
+  late final name = TextEditingController(
+    text: widget.ingredient['name']?.toString() ?? '',
+  );
+  late final qty = TextEditingController(
+    text: widget.ingredient['lastQty']?.toString() ?? '',
+  );
+  late String aisle = widget.ingredient['aisle']?.toString() ?? 'other';
+  @override
+  void dispose() {
+    name.dispose();
+    qty.dispose();
+    super.dispose();
+  }
+
+  void done() {
+    if (name.text.trim().isEmpty) return;
+    Navigator.pop<IngredientChoice>(context, (
+      name: name.text.trim(),
+      qty: qty.text.trim(),
+      aisle: aisle,
+      forget: false,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Modifier l’ingrédient',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: name,
+              maxLength: 60,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Nom',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qty,
+              maxLength: 40,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => done(),
+              decoration: const InputDecoration(
+                labelText: 'Quantité habituelle',
+                hintText: 'ex. 2, 500 g, 1 L',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Rayon', style: TextStyle(color: c.onSurfaceVariant)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final a in widget.aisles)
+                  ChoiceChip(
+                    label: Text(a['name'].toString()),
+                    selected: aisle == a['id'],
+                    onSelected: (_) => setState(() => aisle = a['id']),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Un nouveau nom ou rayon s’applique aussi aux listes en cours.',
+              style: TextStyle(color: c.onSurfaceVariant, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => Navigator.pop<IngredientChoice>(context, (
+                    name: '',
+                    qty: '',
+                    aisle: aisle,
+                    forget: true,
+                  )),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Oublier'),
+                ),
+                const Spacer(),
+                FilledButton(onPressed: done, child: const Text('Enregistrer')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Modifie ou oublie un ingrédient du catalogue ; renvoie vrai si quelque chose a changé.
+Future<bool> editIngredient(
+  BuildContext context,
+  Api api,
+  Map<String, dynamic> ingredient,
+  List<Map<String, dynamic>> aisles,
+) async {
+  final choice = await showModalBottomSheet<IngredientChoice>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (_) => IngredientSheet(ingredient: ingredient, aisles: aisles),
+  );
+  if (choice == null) return false;
+  final path =
+      '/api/v1/shopping/ingredients/${Uri.encodeComponent(ingredient['name'].toString())}';
+  try {
+    if (choice.forget) {
+      await api.call('DELETE', path);
+    } else {
+      await api.call('PUT', path, {
+        'name': choice.name,
+        'aisle': choice.aisle,
+        'qty': choice.qty,
+      });
+    }
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text('$e')));
+    }
+    return false;
+  }
+}
+
+/// Tous les ingrédients connus, par rayon, pour les corriger ou les oublier.
+class IngredientsPage extends StatefulWidget {
+  final Api api;
+  final List<Map<String, dynamic>> ingredients, aisles;
+  const IngredientsPage({
+    super.key,
+    required this.api,
+    required this.ingredients,
+    required this.aisles,
+  });
+  @override
+  State<IngredientsPage> createState() => _IngredientsPageState();
+}
+
+class _IngredientsPageState extends State<IngredientsPage> {
+  late var ingredients = widget.ingredients;
+  String query = '';
+
+  Future<void> edit(Map<String, dynamic> ingredient) async {
+    if (!await editIngredient(context, widget.api, ingredient, widget.aisles)) {
+      return;
+    }
+    final state = await widget.api.call('GET', '/api/v1/state');
+    if (mounted) {
+      setState(() => ingredients = _maps(state['shopping']?['ingredients']));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = query.trim().isEmpty
+        ? ingredients
+        : searchIngredients(ingredients, query, limit: 500);
+    final known = {for (final a in widget.aisles) a['id']};
+    List<Map<String, dynamic>> of(String aisle) => shown
+        .where(
+          (i) => (known.contains(i['aisle']) ? i['aisle'] : 'other') == aisle,
+        )
+        .toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ingrédients')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+        children: [
+          TextField(
+            decoration: const InputDecoration(
+              hintText: 'Chercher un ingrédient…',
+              prefixIcon: Icon(Icons.search),
+              isDense: true,
+            ),
+            onChanged: (v) => setState(() => query = v),
+          ),
+          for (final a in widget.aisles)
+            if (of(a['id']).isNotEmpty) ...[
+              SectionLabel(a['name'].toString(), of(a['id']).length),
+              for (final i in of(a['id']))
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  title: Text(i['name'].toString()),
+                  subtitle: (i['lastQty'] ?? '').toString().isEmpty
+                      ? null
+                      : Text('Habituellement ${i['lastQty']}'),
+                  trailing: const Icon(Icons.edit_outlined),
+                  onTap: () => edit(i),
+                ),
+            ],
+          if (shown.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Text('Aucun ingrédient.', textAlign: TextAlign.center),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Onglet Courses : liste en cours, recherche et accès rapide, programmation.
 class ShoppingView extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -590,34 +833,24 @@ class _ShoppingViewState extends State<ShoppingView> {
     );
   }
 
-  Future<void> forget(Map<String, dynamic> ingredient) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('Oublier « ${ingredient['name']} » ?'),
-        content: const Text(
-          'Il ne sera plus proposé. Vous pourrez toujours le rajouter en le tapant.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('Oublier'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await run(
-      () => widget.api.call(
-        'DELETE',
-        '/api/v1/shopping/ingredients/${Uri.encodeComponent(ingredient['name'].toString())}',
-      ),
-    );
+  // Appui long sur une suggestion : corriger l’ingrédient (nom, rayon, quantité) ou l’oublier.
+  Future<void> editSuggestion(Map<String, dynamic> ingredient) async {
+    if (await editIngredient(context, widget.api, ingredient, aisles)) {
+      await widget.onChanged();
+    }
   }
+
+  Future<void> ingredientsPage() => Navigator.of(context)
+      .push(
+        MaterialPageRoute<void>(
+          builder: (_) => IngredientsPage(
+            api: widget.api,
+            ingredients: catalog,
+            aisles: aisles,
+          ),
+        ),
+      )
+      .then((_) => widget.onChanged());
 
   Future<void> schedule(Map<String, dynamic> list) async {
     final date = await pickShoppingDate(context, today);
@@ -731,7 +964,7 @@ class _ShoppingViewState extends State<ShoppingView> {
     Widget suggestion(Map<String, dynamic> ingredient) {
       final there = inList[ingredientKey(ingredient['name'])];
       return GestureDetector(
-        onLongPress: () => forget(ingredient),
+        onLongPress: () => editSuggestion(ingredient),
         child: FilterChip(
           selected: there != null,
           showCheckmark: true,
@@ -762,7 +995,7 @@ class _ShoppingViewState extends State<ShoppingView> {
               : aisle?['name']?.toString() ?? '',
         ),
         onTap: () => pick(list, m['name'].toString(), ingredient: m),
-        onLongPress: () => forget(m),
+        onLongPress: () => editSuggestion(m),
       );
     }
 
@@ -860,9 +1093,16 @@ class _ShoppingViewState extends State<ShoppingView> {
               ],
               PopupMenuButton<String>(
                 tooltip: 'Plus d’options',
-                onSelected: (v) =>
-                    v == 'aisles' ? reorderAisles() : clearDone(list),
+                onSelected: (v) => switch (v) {
+                  'aisles' => reorderAisles(),
+                  'ingredients' => ingredientsPage(),
+                  _ => clearDone(list),
+                },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'ingredients',
+                    child: Text('Ingrédients'),
+                  ),
                   const PopupMenuItem(
                     value: 'aisles',
                     child: Text('Ordre des rayons'),
@@ -931,7 +1171,7 @@ class _ShoppingViewState extends State<ShoppingView> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Text(
-                'La liste est vide. Touchez un ingrédient ou tapez son nom.',
+                'La liste est vide. Touchez un ingrédient ou tapez son nom. Appui long sur une suggestion pour la modifier.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: c.onSurfaceVariant),
               ),
