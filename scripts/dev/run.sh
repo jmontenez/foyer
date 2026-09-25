@@ -9,5 +9,7 @@ export AllowedEmails='camille@example.invalid,alex@example.invalid'
 export DemoMode=true
 export ClientIpHeader=CF-Connecting-IP
 export WorkersEnabled=false
+# Toutes les recettes partagent l’adresse locale : budget général relevé (le budget d’authentification reste testé).
+export RequestsPerMinute=5000
 export ImagesPath="$PWD/artifacts/test-images"
 exec "${DOTNET_BIN:-dotnet}" run --project server/Foyer.Api --no-launch-profile

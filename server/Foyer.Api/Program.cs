@@ -48,7 +48,7 @@ builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = 429;
     o.GlobalLimiter = PartitionedRateLimiter.CreateChained(
-        PartitionedRateLimiter.Create<HttpContext, string>(ctx => RateLimitPartition.GetFixedWindowLimiter("global:" + Security.ClientIp(ctx, settings), _ => new() { PermitLimit = 180, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })),
+        PartitionedRateLimiter.Create<HttpContext, string>(ctx => RateLimitPartition.GetFixedWindowLimiter("global:" + Security.ClientIp(ctx, settings), _ => new() { PermitLimit = settings.RequestsPerMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })),
         PartitionedRateLimiter.Create<HttpContext, string>(ctx => Security.AuthPath(ctx.Request.Path)
             ? RateLimitPartition.GetFixedWindowLimiter("auth:" + Security.ClientIp(ctx, settings), _ => new() { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
             : RateLimitPartition.GetNoLimiter("auth:none")));
@@ -230,6 +230,12 @@ api.MapPut("/shortcuts-order", async (List<string> ids, Store store) => await st
 {
     if (ids is null || ids.Count != h.Shortcuts.Count || ids.Distinct().Count() != ids.Count || ids.Any(id => !h.Shortcuts.Any(s => s.Id == id))) throw new RuleException("Ordre des raccourcis invalide.");
     foreach (var (id, i) in ids.Select((id, i) => (id, i))) h.Shortcuts.First(s => s.Id == id).Order = i;
+    return Results.NoContent();
+}));
+api.MapPost("/tickets/{id}/undo-launch", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    var me = Security.Member(ctx, h);
+    Shortcuts.UndoLaunch(h, Find(h, id), me.Id, DateTimeOffset.UtcNow);
     return Results.NoContent();
 }));
 api.MapPost("/shortcuts/{id}/launch", async (string id, HttpContext ctx, Store store) => await store.Update(h =>

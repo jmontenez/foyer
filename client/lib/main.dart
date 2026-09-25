@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'shortcuts.dart';
 import 'ui.dart';
 import 'update.dart';
 
@@ -437,6 +438,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     };
     final members = maps(data!['members']);
     final me = data!['me']['id'];
+    final shortcuts = byUse(data!['shortcuts']);
     final today = DateTime.now();
     final day = DateTime(today.year, today.month, today.day);
     String iso(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
@@ -484,6 +486,58 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (shortcuts.isNotEmpty) ...[
+                  Text(
+                    'RACCOURCIS',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .8,
+                      color: Theme.of(c).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 72,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: shortcuts.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) => ShortcutChip(
+                        shortcut: shortcuts[i],
+                        today: day,
+                        onTap: () =>
+                            Navigator.pop(c, 'shortcut:${shortcuts[i]['id']}'),
+                        // Appui long : on préremplit pour étoffer avant de créer.
+                        onLongPress: () => change(() {
+                          final s = shortcuts[i];
+                          title.text = s['title'].toString();
+                          ticket['shortcutId'] = s['id'];
+                          ticket['description'] = s['description'] ?? '';
+                          ticket['kind'] = s['kind'];
+                          ticket['priority'] = s['priority'];
+                          ticket['tagIds'] = strings(s['tagIds']);
+                          ticket['checklist'] = [
+                            for (final (k, text) in strings(
+                              s['checklist'],
+                            ).indexed)
+                              {'id': 's$k', 'text': text, 'done': false},
+                          ];
+                          final d = s['dueInDays'] as int?;
+                          ticket['dueDate'] = d == null
+                              ? null
+                              : iso(day.add(Duration(days: d)));
+                          ticket['assignees'] = switch (s['assign']) {
+                            'none' => <String>[],
+                            'member' => [s['assigneeId'].toString()],
+                            _ => [me.toString()],
+                          };
+                        }),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 Text(
                   'Nouvelle tâche',
                   style: TextStyle(
@@ -602,6 +656,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     );
     ticket['title'] = title.text.trim();
     title.dispose();
+    if (choice != null && choice.startsWith('shortcut:')) {
+      final s = shortcuts.firstWhere((s) => s['id'] == choice.substring(9));
+      await launchShortcut(s);
+      return;
+    }
     if (choice == 'details') {
       await openTicket(ticket);
       return;
@@ -627,12 +686,62 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           'checklist',
         ])
           key: ticket[key],
+        if (ticket['shortcutId'] != null) 'shortcutId': ticket['shortcutId'],
       });
       message('Tâche créée.');
     } catch (e) {
       message(e);
     }
     await refresh();
+  }
+
+  Future<void> launchShortcut(Map<String, dynamic> s) async {
+    if (s['openTicketId'] != null) {
+      final again = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('« ${s['title']} » est déjà à faire'),
+          content: const Text('En ajouter une autre quand même ?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Non'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('En ajouter une'),
+            ),
+          ],
+        ),
+      );
+      if (again != true) return;
+    }
+    try {
+      final t = await api.call('POST', '/api/v1/shortcuts/${s['id']}/launch');
+      await refresh();
+      messenger.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('« ${s['title']} » ajoutée.'),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Annuler',
+            onPressed: () async {
+              try {
+                await api.call(
+                  'POST',
+                  '/api/v1/tickets/${t['id']}/undo-launch',
+                );
+              } catch (e) {
+                message(e);
+              }
+              await refresh();
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      message(e);
+    }
   }
 
   String memberName(String who) =>
@@ -1538,6 +1647,24 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       appearanceDialog();
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.bolt_outlined),
+                    title: const Text('Raccourcis'),
+                    subtitle: Text(
+                      plural(maps(data!['shortcuts']).length, 'raccourci'),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      Navigator.pop(c);
+                      await Navigator.push<void>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ShortcutsPage(api: api, data: data!),
+                        ),
+                      );
+                      await refresh();
+                    },
+                  ),
                   TextButton(
                     onPressed: () {
                       Navigator.pop(c);
@@ -2243,6 +2370,63 @@ class _TicketPageState extends State<TicketPage> {
     );
   }
 
+  // Mémorise cette tâche comme raccourci réutilisable (sans dates précises ni avancement).
+  Future<void> saveAsShortcut() async {
+    final assignees = strings(t['assignees']);
+    try {
+      await api.call('POST', '/api/v1/shortcuts', {
+        'title': title.text.trim(),
+        'description': description.text.trim(),
+        'kind': t['kind'],
+        'priority': t['priority'],
+        'tagIds': strings(t['tagIds']),
+        'checklist': [
+          for (final c in maps(t['checklist'])) c['text'].toString(),
+        ].take(20).toList(),
+        'dueInDays': t['dueDate'] == null ? null : 0,
+        'assign': assignees.isEmpty
+            ? 'none'
+            : assignees.length == 1
+            ? 'member'
+            : 'launcher',
+        'assigneeId': assignees.length == 1 ? assignees.first : null,
+      });
+      message('Raccourci « ${title.text.trim()} » enregistré.');
+    } catch (e) {
+      message(e);
+    }
+  }
+
+  // Pas de suppression : l’historique garde la décision de ne pas faire.
+  Future<void> abandon() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Abandonner cette tâche ?'),
+        content: const Text(
+          'Elle disparaît des listes et reste visible dans l’historique.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Garder'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Abandonner'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await apply(
+        () => t['stageId'] = 'abandoned',
+        'Tâche abandonnée.',
+        close: true,
+      );
+    }
+  }
+
   Future<void> makeTodo() async {
     final target = stageOf('todo') ?? stages.firstOrNull?['id'];
     if (target == null) return;
@@ -2613,6 +2797,32 @@ class _TicketPageState extends State<TicketPage> {
                 child: PriorityBadge(
                   t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
                 ),
+              ),
+            if (existing)
+              PopupMenuButton<String>(
+                tooltip: 'Plus d’actions',
+                onSelected: (v) =>
+                    v == 'abandon' ? abandon() : saveAsShortcut(),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'shortcut',
+                    child: ListTile(
+                      leading: Icon(Icons.bolt_outlined),
+                      title: Text('Enregistrer comme raccourci'),
+                    ),
+                  ),
+                  if (t['stageId'] != 'done' && t['stageId'] != 'abandoned')
+                    const PopupMenuItem(
+                      value: 'abandon',
+                      child: ListTile(
+                        leading: Icon(Icons.do_not_disturb_on_outlined),
+                        title: Text('Abandonner'),
+                        subtitle: Text(
+                          'Décidé de ne pas faire, gardé dans l’historique',
+                        ),
+                      ),
+                    ),
+                ],
               ),
             Padding(
               padding: const EdgeInsets.only(right: 12),
