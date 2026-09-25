@@ -16,6 +16,8 @@ public sealed class Household
     public List<Notification> Notifications { get; set; } = [];
     // Dernier versionCode Android annoncé par notification : une seule annonce par version.
     public long AnnouncedAndroidVersion { get; set; }
+    public List<Shortcut> Shortcuts { get; set; } = [];
+    public bool ShortcutsSeeded { get; set; }
 }
 public sealed class Member
 {
@@ -57,6 +59,8 @@ public sealed class Ticket
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ClosedAt { get; set; }
+    // Raccourci d’origine (null pour une tâche créée à la main).
+    public string? ShortcutId { get; set; }
 }
 public record CheckItem(string Id, string Text, bool Done);
 public record Comment(string Id, string AuthorId, string Text, DateTimeOffset At);
@@ -83,7 +87,7 @@ public sealed class Notification
 }
 public record TicketInput(string Title, string Description, string Kind, string Priority, string StageId,
     DateOnly? StartDate, DateOnly? DueDate, List<string> Assignees, List<string> Performers,
-    List<string> TagIds, List<CheckItem> Checklist, int Version = 0);
+    List<string> TagIds, List<CheckItem> Checklist, int Version = 0, string? ShortcutId = null);
 public sealed class RuleException(string message, int status = 400) : Exception(message) { public int Status { get; } = status; }
 public static class Defaults
 {
