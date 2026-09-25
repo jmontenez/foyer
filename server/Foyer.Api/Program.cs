@@ -205,7 +205,7 @@ api.MapPost("/tickets/{id}/comments", async (string id, CommentInput input, Http
     if (settings.PublicDemo && (t.Comments.Count >= Demo.MaxCommentsPerTicket || input.Text.Length > 1000)) throw new RuleException(Demo.Limit, 403);
     var now = DateTimeOffset.UtcNow; t.Comments.Add(new(Guid.NewGuid().ToString("N"), me.Id, input.Text.Trim(), now)); t.Version++;
     Rules.Event(t, me.Id, "comment", "Commentaire ajouté", now);
-    foreach (var other in h.Members.Where(m => m.Id != me.Id)) h.Notifications.Add(new() { MemberId = other.Id, Kind = "comment", TicketId = t.Id, Title = $"Nouveau commentaire — {t.Title}" });
+    Notify.Commented(h, t, me.Id, now);
     return t;
 }));
 api.MapPost("/shortcuts", async (ShortcutInput input, Store store) => await store.Update(h =>
