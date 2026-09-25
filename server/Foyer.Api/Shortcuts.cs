@@ -75,10 +75,19 @@ public static class Shortcuts
             s.DueInDays is { } d ? today.AddDays(d) : null, Assignees(h, s, launcher), [],
             s.TagIds.Where(id => h.Tags.Any(t => t.Id == id)).ToList(),
             s.Checklist.Select((text, i) => new CheckItem($"s{i}", text, false)).ToList());
-        var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1, ShortcutId = s.Id };
+        var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1, ShortcutId = s.Id, CreatedAt = now, UpdatedAt = now };
         Rules.Apply(h, t, input, launcher, now, true);
         h.Tickets.Add(t);
         return t;
+    }
+
+    // « Annuler » juste après un toucher : seulement la tâche qu’on vient de lancer, intacte,
+    // par la même personne et dans les 5 minutes. Sinon on garde l’historique (abandonner la tâche).
+    public static void UndoLaunch(Household h, Ticket t, string member, DateTimeOffset now)
+    {
+        if (t.ShortcutId == null || t.Version != 1 || t.CreatedAt < now.AddMinutes(-5) || t.History.FirstOrDefault()?.ActorId != member || t.Comments.Count > 0 || t.Images.Count > 0)
+            throw new RuleException("Cette tâche ne peut plus être annulée ; abandonnez-la si besoin.", 409);
+        h.Tickets.Remove(t);
     }
 
     // Pour l’affichage : dernière réalisation, occurrence encore ouverte, nombre d’utilisations.

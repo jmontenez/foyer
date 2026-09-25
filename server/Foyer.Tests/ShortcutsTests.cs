@@ -119,6 +119,24 @@ public class ShortcutsTests
     }
 
     [Fact]
+    public void JustLaunchedTaskCanBeUndoneOnlyWhileUntouched()
+    {
+        var h = Home();
+        var s = h.Shortcuts[0];
+        var t = Shortcuts.Launch(h, s, "a", Now);
+        Assert.Throws<RuleException>(() => Shortcuts.UndoLaunch(h, t, "b", Now));
+        Assert.Throws<RuleException>(() => Shortcuts.UndoLaunch(h, t, "a", Now.AddMinutes(6)));
+        t.Version++;
+        Assert.Throws<RuleException>(() => Shortcuts.UndoLaunch(h, t, "a", Now));
+        t.Version--;
+        Shortcuts.UndoLaunch(h, t, "a", Now.AddMinutes(1));
+        Assert.Empty(h.Tickets);
+        var manual = new Ticket { Title = "À la main" };
+        h.Tickets.Add(manual);
+        Assert.Throws<RuleException>(() => Shortcuts.UndoLaunch(h, manual, "a", Now));
+    }
+
+    [Fact]
     public void PreviousHouseholdsDeserializeWithoutShortcuts()
     {
         var h = System.Text.Json.JsonSerializer.Deserialize<Household>("""{"tickets":[{"title":"x"}]}""", Defaults.Json)!;
