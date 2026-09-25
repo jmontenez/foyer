@@ -138,4 +138,31 @@ void main() {
     await tester.tap(find.text('En cours'));
     expect(chosen, 'doing');
   });
+
+  testWidgets('Envie signalée sur la carte et lue par le lecteur d’écran', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: TaskTile(
+            onTap: () {},
+            task: const TaskView(
+              title: 'Week-end à la mer',
+              meta: 'Un jour',
+              wish: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('ENVIE'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(
+        'Week-end à la mer, envie, Un jour, sans responsable',
+      ),
+      findsOneWidget,
+    );
+  });
 }

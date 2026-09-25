@@ -166,6 +166,31 @@ class PriorityBadge extends StatelessWidget {
   }
 }
 
+/// Repère discret des envies (l’obligation est le cas par défaut, sans marque).
+class WishBadge extends StatelessWidget {
+  const WishBadge({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: c.outline),
+      ),
+      child: Text(
+        'ENVIE',
+        style: TextStyle(
+          color: c.onSurfaceVariant,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .5,
+        ),
+      ),
+    );
+  }
+}
+
 /// Données d’affichage d’une tâche, calculées par l’écran à partir du ticket.
 class TaskView {
   final String title;
@@ -173,7 +198,9 @@ class TaskView {
   final TaskBadge? badge;
   final int done, total, comments;
   final List<(String, int)> people;
+  final bool wish;
   const TaskView({
+    this.wish = false,
     required this.title,
     required this.meta,
     this.badge,
@@ -212,6 +239,7 @@ class TaskTile extends StatelessWidget {
         TaskBadge.urgent => 'urgent',
         TaskBadge.high => 'priorité haute',
       },
+    if (task.wish) 'envie',
     if (task.meta.isNotEmpty) task.meta,
     task.people.isEmpty
         ? 'sans responsable'
@@ -276,6 +304,7 @@ class TaskTile extends StatelessWidget {
                     Text(task.title, style: title),
                     Text(
                       [
+                        if (task.wish) 'Envie',
                         task.meta,
                         ...extras,
                       ].where((s) => s.isNotEmpty).join(' · '),
@@ -305,6 +334,10 @@ class TaskTile extends StatelessWidget {
                 children: [
                   if (task.badge != null) ...[
                     PriorityBadge(task.badge!),
+                    const SizedBox(width: 8),
+                  ],
+                  if (task.wish) ...[
+                    const WishBadge(),
                     const SizedBox(width: 8),
                   ],
                   Expanded(
