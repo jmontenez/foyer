@@ -13,6 +13,8 @@ public sealed class Settings(IConfiguration c, IWebHostEnvironment env)
     public string ClientIpHeader { get; } = c["ClientIpHeader"]?.Trim() ?? "";
     public bool WorkersEnabled { get; } = c.GetValue("WorkersEnabled", false);
     public bool PublicDemo { get; } = c.GetValue("PublicDemo", false);
+    // Budget général par visiteur et par minute (180 en production ; relevé pour les recettes locales).
+    public int RequestsPerMinute { get; } = Math.Clamp(c.GetValue("RequestsPerMinute", 180), 30, 100_000);
     public bool Secure { get; } = !env.IsDevelopment();
     public string ConnectionString { get; } = Connection(c);
     private static string Connection(IConfiguration c)

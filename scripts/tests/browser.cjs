@@ -47,7 +47,23 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.waitForTimeout(1500);
   const done = await find();
   if (done.stageId !== 'done' || done.performers.length !== 1) throw new Error('Tâche non terminée : ' + done.stageId + ' ' + done.performers);
+  // Raccourci : un toucher crée la tâche, « Annuler » la retire.
+  // « C’est fait » a refermé la fiche : retour sur l’écran principal.
+  await page.getByRole('button', {name:'Une nouvelle tâche'}).waitFor();
+  const tickets = async () => (await page.evaluate(async()=> (await fetch('/api/v1/state')).json())).tickets;
+  const laundries = async () => (await tickets()).filter(t => t.shortcutId && t.title === 'Faire une lessive').length;
+  const before = (await tickets()).length, laundryBefore = await laundries();
+  await page.getByRole('button', {name:'Une nouvelle tâche'}).click();
+  await page.getByRole('button', {name:/^Faire une lessive/}).click();
+  // Une lessive est peut-être déjà à faire (recette API) : l’anti-doublon demande confirmation.
+  const again = page.getByRole('button', {name:'En ajouter une', exact:true});
+  if (await again.isVisible({timeout: 1500}).catch(() => false)) await again.click();
+  await page.waitForTimeout(1500);
+  if ((await tickets()).length !== before + 1 || (await laundries()) !== laundryBefore + 1) throw new Error('Raccourci non lancé');
+  await page.getByRole('button', {name:'Annuler', exact:true}).click();
+  await page.waitForTimeout(1500);
+  if ((await tickets()).length !== before) throw new Error('Lancement non annulé');
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (Backlog → à faire, bloquer, terminer avec réalisateur).');
+  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (Backlog → à faire, bloquer, terminer avec réalisateur), raccourci lancé puis annulé.');
   await browser.close();
 })();
