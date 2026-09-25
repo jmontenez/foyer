@@ -15,8 +15,8 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   // Les puces se lisent comme des cases à cocher (FilterChip) ou des choix (ChoiceChip).
   const chip = (name) => page.getByRole('checkbox',{name,exact:true}).or(page.getByRole('radio',{name,exact:true})).or(page.getByRole('button',{name,exact:true})).first();
   // Saisie dans la recherche : Flutter web crée le vrai champ au focus, on réessaie si besoin.
-  const type = async (text, expected) => {
-    const box = page.getByRole('textbox',{name:'Ajouter un ingrédient…'});
+  const type = async (text, expected, field = 'Ajouter un ingrédient…') => {
+    const box = page.getByRole('textbox',{name:field});
     for (let i = 0; i < 5; i++) {
       await box.click();
       await page.keyboard.press('ControlOrMeta+A');
@@ -76,6 +76,18 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByText('Glisser pour réordonner',{exact:false}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-rayons-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
+  // Modifier un ingrédient : le nouveau nom suit dans la liste en cours.
+  await page.getByRole('button',{name:'Plus d’options',exact:true}).click();
+  await page.getByRole('menuitem',{name:'Ingrédients'}).or(page.getByRole('button',{name:'Ingrédients'})).or(page.getByText('Ingrédients',{exact:true})).first().click();
+  const entry = page.getByRole('button',{name:new RegExp('^' + fresh)});
+  await type(fresh, entry, 'Chercher un ingrédient…');
+  await entry.click();
+  await page.getByRole('textbox',{name:'Nom'}).fill(fresh + ' four');
+  await page.getByRole('button',{name:'Enregistrer',exact:true}).click();
+  await until(async () => (await draft()).some(i => i.text === fresh + ' four'), 'Ingrédient non renommé dans la liste');
+  await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
+  await page.getByRole('button',{name:'Back'}).click();
+  const renamed = fresh + ' four';
 
   // Raccourci Courses : il propose la liste en cours ; « Non » garde le brouillon.
   await page.getByRole('button',{name:'Aujourd’hui',exact:true}).click();
@@ -110,7 +122,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/courses-faites-mobile.png'});
   await until(async () => (await state()).shopping.lists.length === 1, 'Tâche Courses non close');
   const back = await draft();
-  if (back.length !== 1 || back[0].text !== fresh || back[0].done) throw new Error('Article non acheté non remis : ' + JSON.stringify(back));
+  if (back.length !== 1 || back[0].text !== renamed || back[0].done) throw new Error('Article non acheté non remis : ' + JSON.stringify(back));
   if(errors.length) throw Error(errors.join('\n'));
   console.log('PASS : accès rapide, « déjà dans la liste », nouvel ingrédient et rayon, recherche, raccourci Courses, programmation à trois choix, panier et retour des articles non achetés.');
   await browser.close();

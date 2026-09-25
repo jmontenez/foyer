@@ -60,6 +60,30 @@ public class ShoppingTests
     }
 
     [Fact]
+    public void EditingAnIngredientFollowsIntoOpenLists()
+    {
+        var h = Home();
+        Add(h, "Yaourts", "4");
+        var t = Schedule(h, Today);
+        Add(h, "yaourt", list: t.Id);
+        Add(h, "Yaourts");
+        var version = t.Version;
+        var edited = Shopping.EditIngredient(h, "yaourts", new IngredientInput("Yaourts nature", "dairy", "8"), "a", Now);
+        Assert.Equal(("Yaourts nature", "8"), (edited.Name, edited.LastQty));
+        Assert.Equal("Yaourts nature", t.Checklist.Single().Text);
+        Assert.Equal("4", t.Checklist.Single().Qty);
+        Assert.Equal("Yaourts nature", h.ShoppingDraft.Single().Text);
+        Assert.True(t.Version > version);
+        Assert.Throws<RuleException>(() => Shopping.EditIngredient(h, "Yaourts nature", new IngredientInput("Lait", null, null), "a", Now));
+        Assert.Throws<RuleException>(() => Shopping.EditIngredient(h, "Yaourts nature", new IngredientInput(" ", null, null), "a", Now));
+        Assert.Throws<RuleException>(() => Shopping.EditIngredient(h, "Yaourts nature", new IngredientInput("X", "rayon-x", null), "a", Now));
+        Assert.Throws<RuleException>(() => Shopping.EditIngredient(h, "inconnu", new IngredientInput("X", null, null), "a", Now));
+        // Changer seulement la casse ou le rayon est permis.
+        Assert.Equal("frozen", Shopping.EditIngredient(h, "Yaourts nature", new IngredientInput("yaourts nature", "frozen", null), "a", Now).Aisle);
+        Assert.Equal("frozen", h.ShoppingDraft.Single().Aisle);
+    }
+
+    [Fact]
     public void InvalidInputsAreRefused()
     {
         var h = Home();

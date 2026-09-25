@@ -18,6 +18,7 @@ public record ShoppingItemInput(string List, string Name, string? Qty, string? A
 public record ShoppingItemPatch(bool? Done, string? Qty, string? Aisle);
 public record ShoppingScheduleInput(DateOnly Date, string Mode, string? TargetId);
 public record ShoppingDateInput(DateOnly Date);
+public record IngredientInput(string Name, string? Aisle, string? Qty);
 
 // Liste de courses : la checklist d’une tâche Courses (Shopping), ou le brouillon du foyer tant
 // qu’aucune date n’est programmée. Une seule donnée, cochée depuis l’écran Courses ou la tâche.
@@ -160,6 +161,35 @@ public static class Shopping
     {
         var (items, ticket) = Resolve(h, list);
         if (items.RemoveAll(c => c.Done) > 0) Touched(ticket, member, now);
+    }
+
+    // Modifier un ingrédient connu : nom, rayon, quantité habituelle. Un nouveau nom suit dans
+    // les listes en cours (brouillon et tâches Courses ouvertes).
+    public static Ingredient EditIngredient(Household h, string name, IngredientInput i, string member, DateTimeOffset now)
+    {
+        var known = h.Ingredients.FirstOrDefault(x => Key(x.Name) == Key(name ?? "")) ?? throw new RuleException("Ingrédient introuvable.", 404);
+        var newName = i.Name?.Trim() ?? "";
+        if (newName.Length is < 1 or > MaxName) throw new RuleException($"Nom d’ingrédient requis ({MaxName} caractères maximum).");
+        if (i.Aisle != null && !KnownAisle(i.Aisle)) throw new RuleException("Rayon inconnu.");
+        var qty = CleanQty(i.Qty);
+        var (oldKey, newKey) = (Key(known.Name), Key(newName));
+        if (newKey != oldKey && h.Ingredients.Any(x => Key(x.Name) == newKey)) throw new RuleException("Cet ingrédient existe déjà.", 409);
+        var aisle = i.Aisle ?? known.Aisle;
+        foreach (var (items, ticket) in Open(h).Select(t => (t.Checklist, (Ticket?)t)).Append((h.ShoppingDraft, null)))
+        {
+            var changed = false;
+            for (var k = 0; k < items.Count; k++)
+            {
+                if (Key(items[k].Text) != oldKey) continue;
+                // Deux articles fusionneraient sous le nouveau nom : on garde le premier.
+                if (newKey != oldKey && items.Any(x => Key(x.Text) == newKey)) continue;
+                items[k] = items[k] with { Text = newName, Aisle = aisle };
+                changed = true;
+            }
+            if (changed) Touched(ticket, member, now);
+        }
+        (known.Name, known.Aisle, known.LastQty) = (newName, aisle, qty);
+        return known;
     }
 
     public static void Forget(Household h, string name)
