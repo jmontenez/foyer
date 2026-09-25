@@ -92,8 +92,8 @@ public static class Notify
 
     static TimeZoneInfo Zone(Household h) => TimeZoneInfo.FindSystemTimeZoneById(h.TimeZone);
 
-    static string Items(int n) => n == 1 ? "1 article" : $"{n} articles";
-    static int Left(Ticket t) => t.Checklist.Count(c => !c.Done);
+    public static string Items(int n) => n == 1 ? "1 article" : $"{n} articles";
+    public static int Left(Ticket t) => t.Checklist.Count(c => !c.Done);
     // « Courses (12 articles) » pour une tâche Courses avec une liste, sinon le titre.
     static string Label(Ticket t) => t.Shopping && Left(t) > 0 ? $"Courses ({Items(Left(t))})" : t.Title;
     static string Titles(IReadOnlyList<Ticket> tasks) =>
@@ -113,16 +113,20 @@ public static class Notify
         };
     }
 
+    // Tâches du jour d’un membre (les siennes et celles sans responsable) : retards, priorité, date.
+    // Partagé par le résumé du matin et le widget Android.
+    public static List<Ticket> TodayFor(Household h, Member m, DateOnly today) => h.Tickets
+        .Where(t => Rules.TodayView(h, t, today) && (t.Assignees.Count == 0 || t.Assignees.Contains(m.Id)))
+        .OrderBy(t => t.DueDate < today ? 0 : 1)
+        .ThenBy(t => t.Priority switch { "urgent" => 0, "high" => 1, "normal" => 2, _ => 3 })
+        .ThenBy(t => t.DueDate ?? t.StartDate ?? DateOnly.MaxValue)
+        .ToList();
+
     // Résumé du matin : les tâches du jour du membre (ou sans responsable), retards d’abord.
     // Null quand il n’y a rien à faire : pas de notification vide.
     public static Notification? Digest(Household h, Member m, DateOnly today, DateTimeOffset now)
     {
-        var tasks = h.Tickets
-            .Where(t => Rules.TodayView(h, t, today) && (t.Assignees.Count == 0 || t.Assignees.Contains(m.Id)))
-            .OrderBy(t => t.DueDate < today ? 0 : 1)
-            .ThenBy(t => t.Priority switch { "urgent" => 0, "high" => 1, "normal" => 2, _ => 3 })
-            .ThenBy(t => t.DueDate ?? t.StartDate ?? DateOnly.MaxValue)
-            .ToList();
+        var tasks = TodayFor(h, m, today);
         if (tasks.Count == 0) return null;
         var late = tasks.Count(t => t.DueDate < today);
         var one = tasks.Count == 1 ? tasks[0] : null;
