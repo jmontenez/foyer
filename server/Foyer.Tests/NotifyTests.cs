@@ -156,13 +156,23 @@ public class NotifyTests
     }
 
     [Fact]
-    public void CommentsSayWhoAndOnWhatButNeverTheText()
+    public void CommentsSayWhoAndWhat()
     {
         var h = Home();
         var t = Create(h, "a", ["a"]);
-        Notify.Commented(h, t, "b", Now);
+        Notify.Commented(h, t, "b", "J’ai trouvé le formulaire\nil faut juste le signer et le rendre à la maîtresse avant vendredi, sinon on est en retard", Now);
         var n = Assert.Single(h.Notifications, x => x.Kind == "comment");
-        Assert.Equal(("a", "Clemence a commenté", "Papiers École"), (n.MemberId, n.Title, n.Body));
+        Assert.Equal(("a", "Clemence a commenté"), (n.MemberId, n.Title));
+        Assert.StartsWith("Papiers École — « J’ai trouvé le formulaire il faut", n.Body);
+        Assert.EndsWith("… »", n.Body);
+        Assert.Equal("Papiers École — « Court »", CommentBody(h, "Court"));
+    }
+
+    private static string? CommentBody(Household h, string text)
+    {
+        var t = Create(h, "a", ["a"]);
+        Notify.Commented(h, t, "b", text, Now);
+        return h.Notifications.Last(x => x.Kind == "comment").Body;
     }
 
     [Fact]
@@ -181,18 +191,18 @@ public class NotifyTests
         var h = Home();
         var t = Create(h, "a", ["a"]);
         var other = Create(h, "a", ["a"]);
-        Notify.Commented(h, t, "b", Now);
+        Notify.Commented(h, t, "b", "Premier", Now);
         var first = Assert.Single(h.Notifications, n => n.Kind == "comment");
         first.Finished = true; first.DeliveredDeviceIds.Add("p");
-        Notify.Commented(h, t, "b", Now.AddMinutes(2));
-        Notify.Commented(h, t, "b", Now.AddMinutes(5));
+        Notify.Commented(h, t, "b", "Deuxième", Now.AddMinutes(2));
+        Notify.Commented(h, t, "b", "Troisième", Now.AddMinutes(5));
         var n = Assert.Single(h.Notifications, x => x.Kind == "comment");
-        Assert.Equal((3, "3 nouveaux commentaires", "Papiers École", false), (n.Count, n.Title, n.Body, n.Finished));
+        Assert.Equal((3, "3 nouveaux commentaires", "Papiers École — « Troisième »", false), (n.Count, n.Title, n.Body, n.Finished));
         Assert.Empty(n.DeliveredDeviceIds);
         Assert.Equal(Now.AddMinutes(5), n.NextAttempt);
         // Autre tâche, ou plus de 30 minutes après : une nouvelle notification.
-        Notify.Commented(h, other, "b", Now.AddMinutes(6));
-        Notify.Commented(h, t, "b", Now.AddMinutes(31));
+        Notify.Commented(h, other, "b", "Ailleurs", Now.AddMinutes(6));
+        Notify.Commented(h, t, "b", "Plus tard", Now.AddMinutes(31));
         Assert.Equal(3, h.Notifications.Count(x => x.Kind == "comment"));
     }
 

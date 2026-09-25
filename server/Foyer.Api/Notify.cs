@@ -140,22 +140,26 @@ public static class Notify
         };
     }
 
-    // Commentaire : qui, et sur quelle tâche. Le texte du commentaire ne passe jamais par FCM
-    // (docs/securite.md) ; il se lit dans l’application.
-    public static void Commented(Household h, Ticket t, string author, DateTimeOffset now)
+    // Commentaire : qui, sur quelle tâche, et le début du texte (choix assumé : il transite par
+    // FCM, voir docs/securite.md). En rafale, le dernier commentaire reste affiché.
+    public static void Commented(Household h, Ticket t, string author, string text, DateTimeOffset now)
     {
+        var snippet = text.Trim().ReplaceLineEndings(" ");
+        if (snippet.Length > 80) snippet = snippet[..79].TrimEnd() + "…";
+        var body = $"{t.Title} — « {snippet} »";
         foreach (var other in h.Members.Where(m => m.Id != author))
         {
             if (Recent(h, other.Id, "comment", t.Id, now) is { } burst)
             {
                 Resend(burst, now, TimeSpan.FromDays(7));
                 burst.Title = $"{burst.Count} nouveaux commentaires";
+                burst.Body = body;
                 continue;
             }
             h.Notifications.Add(new()
             {
                 MemberId = other.Id, Kind = "comment", TicketId = t.Id, ActorId = author,
-                Title = $"{FirstName(h, author)} a commenté", Body = t.Title,
+                Title = $"{FirstName(h, author)} a commenté", Body = body,
                 CreatedAt = now, NextAttempt = now, ExpiresAt = now.AddDays(7),
             });
         }
