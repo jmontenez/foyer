@@ -30,12 +30,14 @@ if (string.IsNullOrWhiteSpace(settings.ConnectionString)) throw new InvalidOpera
 if (!builder.Environment.IsDevelopment() && (!settings.Origin.StartsWith("https://") || settings.AllowedEmails.Length != 2))
     throw new InvalidOperationException("Production requires HTTPS PublicOrigin and exactly two AllowedEmails.");
 if (!builder.Environment.IsDevelopment() && builder.Configuration.GetValue("DemoMode", false)) throw new InvalidOperationException("DemoMode is forbidden in production.");
+if (settings.PublicDemo && Demo.Refusal(settings, builder.Configuration) is { } refusal) throw new InvalidOperationException(refusal);
 Directory.CreateDirectory(settings.Images);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(settings);
 builder.Services.AddSingleton(NpgsqlDataSource.Create(settings.ConnectionString));
 builder.Services.AddSingleton<Store>();
 builder.Services.AddHostedService<PushWorker>();
+builder.Services.AddHostedService<DemoReset>();
 builder.Services.AddOpenApi();
 builder.Services.Configure<FormOptions>(o => o.MultipartBodyLengthLimit = 10 * 1024 * 1024);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 11 * 1024 * 1024);
@@ -71,6 +73,7 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["X-Frame-Options"] = "DENY";
     ctx.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
     if (settings.Secure) ctx.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
+    if (settings.PublicDemo) ctx.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
     if (ctx.Request.Path.StartsWithSegments("/api") || Security.AuthPath(ctx.Request.Path)) ctx.Response.Headers.CacheControl = "no-store";
     try { await next(); }
     catch (RuleException ex) { ctx.Response.StatusCode = ex.Status; await ctx.Response.WriteAsJsonAsync(new { error = ex.Message }); }
@@ -80,7 +83,8 @@ app.Use(async (ctx, next) =>
 app.UseRateLimiter();
 app.UseAuthentication();
 app.MapGet("/health", async (Store store) => Results.Ok(new { status = await store.Read(h => h.Maintenance ? "maintenance" : "ok"), version = "0.1.0" }));
-app.MapGet("/auth/config", () => new { googleClientId = settings.GoogleClientId, demo = app.Environment.IsDevelopment() && app.Configuration.GetValue("DemoMode", false) });
+var demoLogin = (app.Environment.IsDevelopment() && app.Configuration.GetValue("DemoMode", false)) || settings.PublicDemo;
+app.MapGet("/auth/config", () => new { googleClientId = settings.GoogleClientId, demo = demoLogin, publicDemo = settings.PublicDemo });
 app.MapGet("/auth/google/start", () => !googleConfigured ? Results.Problem("Connexion Google non configurée.", statusCode: 503) : Results.Challenge(new AuthenticationProperties { RedirectUri = "/auth/google/finish" }, ["Google"]));
 app.MapGet("/auth/google/finish", async (HttpContext ctx, Store store) =>
 {
@@ -104,15 +108,17 @@ app.MapPost("/auth/google/mobile", async (GoogleLogin input, HttpContext ctx, St
     var login = await store.Update(h => Security.Login(h, settings, payload.Subject, payload.Email, payload.Name ?? "Membre", "Android"));
     return Results.Ok(new { token = login.token });
 });
-if (app.Environment.IsDevelopment() && app.Configuration.GetValue("DemoMode", false))
+// Démo locale (développement, boucle locale seulement) ou démonstration publique (instance dédiée, verrouillée au démarrage).
+if (demoLogin)
 {
     app.MapPost("/auth/demo/{who:int}", async (int who, HttpContext ctx, Store store) =>
     {
-        if (who is < 0 or > 1 || ctx.Connection.RemoteIpAddress is not { } remote || !System.Net.IPAddress.IsLoopback(remote)) throw new RuleException("Démo locale uniquement.", 403);
+        if (who is < 0 or > 1) throw new RuleException("Compte de démonstration inconnu.", 404);
+        if (!settings.PublicDemo && (ctx.Connection.RemoteIpAddress is not { } remote || !System.Net.IPAddress.IsLoopback(remote))) throw new RuleException("Démo locale uniquement.", 403);
         Security.CheckWrite(ctx, settings);
         var email = settings.AllowedEmails.ElementAtOrDefault(who) ?? throw new RuleException("Démo non configurée.");
-        var login = await store.Update(h => Security.Login(h, settings, $"demo-{who}", email, who == 0 ? "Camille" : "Alex", "Démo locale"));
-        ctx.Response.Cookies.Append(Security.Cookie, login.token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Lax, Path = "/" });
+        var login = await store.Update(h => { var l = Security.Login(h, settings, $"demo-{who}", email, who == 0 ? "Camille" : "Alex", settings.PublicDemo ? "Démonstration" : "Démo locale"); if (settings.PublicDemo) Demo.PruneSessions(h); return l; });
+        ctx.Response.Cookies.Append(Security.Cookie, login.token, new CookieOptions { HttpOnly = true, Secure = settings.Secure, SameSite = SameSiteMode.Lax, Path = "/" });
         return Results.Ok(new { token = login.token });
     });
 }
@@ -146,7 +152,8 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     today = Rules.Today(h, DateTimeOffset.UtcNow),
     todayIds = h.Tickets.Where(t => Rules.TodayView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
-    notificationsEnabled = settings.WorkersEnabled
+    notificationsEnabled = settings.WorkersEnabled,
+    demo = settings.PublicDemo
 }));
 // Mise à jour Android : réservée aux membres connectés (filtre du groupe), réponses no-store.
 api.MapGet("/app/android", () => Updates.Android(settings.Updates) is { } release ? Results.Ok(release) : Results.NotFound());
@@ -171,12 +178,14 @@ api.MapPut("/preferences", async (PreferenceInput input, HttpContext ctx, Store 
 api.MapPost("/devices", async (DeviceInput input, HttpContext ctx, Store store) => await store.Update(h =>
 {
     var me = Security.Member(ctx, h); if (input.Token is null || input.Token.Length is < 20 or > 4096) throw new RuleException("Jeton appareil invalide.");
+    if (settings.PublicDemo) return Results.NoContent(); // aucune notification en démonstration
     h.Devices.RemoveAll(d => d.Token == input.Token || (d.MemberId == me.Id && d.SessionHash == Security.Hash(Security.Token(ctx)!)));
     if (input.AppVersion is <= 0) throw new RuleException("Version d’application invalide.");
     h.Devices.Add(new(Guid.NewGuid().ToString("N"), me.Id, Security.Hash(Security.Token(ctx)!), input.Token, DateTimeOffset.UtcNow, input.AppVersion)); return Results.NoContent();
 }));
 api.MapPost("/tickets", async (TicketInput input, HttpContext ctx, Store store) => await store.Update(h =>
 {
+    if (settings.PublicDemo && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
     var me = Security.Member(ctx, h); var t = new Ticket { Number = h.Tickets.Select(t => t.Number).DefaultIfEmpty(0).Max() + 1 };
     Rules.Apply(h, t, input, me.Id, DateTimeOffset.UtcNow, true); h.Tickets.Add(t); return t;
 }));
@@ -185,6 +194,7 @@ api.MapPost("/tickets/{id}/comments", async (string id, CommentInput input, Http
 {
     var me = Security.Member(ctx, h); var t = Find(h, id);
     if (string.IsNullOrWhiteSpace(input.Text) || input.Text.Length > 6000) throw new RuleException("Commentaire requis, 6 000 caractères maximum.");
+    if (settings.PublicDemo && (t.Comments.Count >= Demo.MaxCommentsPerTicket || input.Text.Length > 1000)) throw new RuleException(Demo.Limit, 403);
     var now = DateTimeOffset.UtcNow; t.Comments.Add(new(Guid.NewGuid().ToString("N"), me.Id, input.Text.Trim(), now)); t.Version++;
     Rules.Event(t, me.Id, "comment", "Commentaire ajouté", now);
     foreach (var other in h.Members.Where(m => m.Id != me.Id)) h.Notifications.Add(new() { MemberId = other.Id, Kind = "comment", TicketId = t.Id, Title = $"Nouveau commentaire — {t.Title}" });
@@ -194,6 +204,7 @@ api.MapPost("/tags", async (TagInput input, Store store) => await store.Update(h
 {
     if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > 40 || (input.Color == null || !System.Text.RegularExpressions.Regex.IsMatch(input.Color, "^#[0-9a-fA-F]{6}$"))) throw new RuleException("Nom ou couleur invalide.");
     if (h.Tags.Any(t => t.Name.Equals(input.Name.Trim(), StringComparison.OrdinalIgnoreCase))) throw new RuleException("Ce tag existe déjà.", 409);
+    if (settings.PublicDemo && h.Tags.Count >= Demo.MaxTags) throw new RuleException(Demo.Limit, 403);
     var tag = new Tag(Guid.NewGuid().ToString("N"), input.Name.Trim(), input.Color); h.Tags.Add(tag); return tag;
 }));
 api.MapPut("/stages", async (StageInput input, Store store) => await store.Update(h =>
@@ -207,6 +218,8 @@ api.MapPut("/stages", async (StageInput input, Store store) => await store.Updat
 }));
 api.MapPost("/tickets/{id}/images", async (string id, HttpContext ctx, Store store) =>
 {
+    // Aucun fichier d’inconnus hébergé ni décodé sur la démonstration publique.
+    if (settings.PublicDemo) throw new RuleException("Les images sont désactivées dans la démonstration.", 403);
     await store.Read(h => Find(h, id));
     var form = await ctx.Request.ReadFormAsync(); var file = form.Files.GetFile("image") ?? throw new RuleException("Image requise.");
     if (file.Length > 10 * 1024 * 1024 || file.Length == 0) throw new RuleException("Image limitée à 10 Mo.");

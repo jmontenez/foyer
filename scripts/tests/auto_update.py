@@ -86,7 +86,7 @@ bin_dir = tmp / "bin"
 bin_dir.mkdir()
 (bin_dir / "docker").write_text(
     f'#!/bin/sh\necho "$@" >> {tmp}/docker.log\n'
-    f'[ "$2" = build ] && [ -f {tmp}/FAKE_DOCKER_FAIL ] && exit 1\nexit 0\n'
+    f'case " $* " in *" build "*) [ -f {tmp}/FAKE_DOCKER_FAIL ] && exit 1;; esac\nexit 0\n'
 )
 (bin_dir / "docker").chmod(0o755)
 
@@ -152,7 +152,7 @@ assert head() == commits[1]
 assert (app / "client/build/web/index.html").read_text() == "web B"
 assert served_version() == 2112
 assert json.loads(state.read_text())["deployed"] == 12
-assert any(c.startswith("compose build") for c in docker_calls())
+assert any(c.startswith("compose -f compose.yaml build") for c in docker_calls())
 assert any(c.startswith("image tag foyer-api:latest foyer-api:rollback") for c in docker_calls())
 assert not leaked, f"jeton transmis au stockage : {leaked}"
 checks += 1
@@ -181,7 +181,7 @@ release(14, commits[2], tamper=True)
 before = len(docker_calls())
 assert deploy().returncode == 1
 assert head() == commits[1] and served_version() == 2112
-assert not any(c.startswith("compose build") for c in docker_calls()[before:])
+assert not any(" build" in c for c in docker_calls()[before:])
 checks += 1
 
 # 5. Commit absent de main : ignoré.
@@ -206,6 +206,21 @@ assert head() == commits[2] and served_version() == 2117
 assert json.loads(state.read_text())["deployed"] == 17
 checks += 1
 
+# 8. Démonstration : son fichier Compose et son image, sans publier d'APK.
+release(18, commits[2], web="web D")
+demo_updates = tmp / "demo-updates"
+r = subprocess.run(
+    [sys.executable, str(SCRIPT), "--repo", "o/r", "--app", str(app), "--updates", str(demo_updates),
+     "--token-file", str(token), "--state", str(tmp / "demo-state.json"), "--health", f"{BASE}/health",
+     "--compose", "deploy/compose.demo.yaml", "--image", "foyer-demo-api", "--no-apk"],
+    env=env, capture_output=True, text=True,
+)
+assert r.returncode == 0, r.stdout + r.stderr
+assert "image tag foyer-demo-api:latest foyer-demo-api:rollback" in docker_calls()
+assert any(c.startswith("compose -f deploy/compose.demo.yaml build") for c in docker_calls())
+assert not (demo_updates / "foyer-arm64.apk").exists(), "APK publié sur la démonstration"
+checks += 1
+
 server.shutdown()
 shutil.rmtree(tmp)
-print(f"PASS : déploiement automatique, {checks} scénarios (succès, rien à faire, rollback, empreinte, hors main, auteur, reprise).")
+print(f"PASS : déploiement automatique, {checks} scénarios (succès, rien à faire, rollback, empreinte, hors main, auteur, reprise, démonstration).")
