@@ -544,6 +544,16 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ticket['assignees'] = List<String>.from(v as List),
                     ),
                     chip(
+                      icon: Icons.auto_awesome_outlined,
+                      label: ticket['kind'] == 'wish' ? 'Envie' : 'Obligation',
+                      active: ticket['kind'] == 'wish',
+                      options: [
+                        ('Obligation', 'obligation'),
+                        ('Envie', 'wish'),
+                      ],
+                      onPick: (k) => ticket['kind'] = k,
+                    ),
+                    chip(
                       icon: Icons.flag_outlined,
                       label: ticket['priority'] == 'normal'
                           ? 'Priorité'
@@ -1396,6 +1406,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         total: check.length,
         comments: maps(t['comments']).length,
         people: people,
+        wish: t['kind'] == 'wish',
       ),
     );
   }
@@ -2202,6 +2213,12 @@ class _TicketPageState extends State<TicketPage> {
     );
   }
 
+  Future<void> makeTodo() async {
+    final target = stageOf('todo') ?? stages.firstOrNull?['id'];
+    if (target == null) return;
+    await apply(() => t['stageId'] = target, 'Tâche passée à faire.');
+  }
+
   Future<void> toggleBlocked() async {
     final target = blocked
         ? (stageOf('doing') ?? stageOf('todo'))
@@ -2368,11 +2385,17 @@ class _TicketPageState extends State<TicketPage> {
             const SizedBox(width: 10),
             action(Icons.event_repeat, 'Reporter', postpone),
             const SizedBox(width: 10),
-            action(
-              blocked ? Icons.play_arrow_outlined : Icons.pause_circle_outline,
-              blocked ? 'Débloquer' : 'Bloqué',
-              toggleBlocked,
-            ),
+            // Depuis le Backlog, l’action utile est de passer la tâche à faire.
+            if (t['stageId'] == 'backlog')
+              action(Icons.play_arrow_outlined, 'À faire', makeTodo)
+            else
+              action(
+                blocked
+                    ? Icons.play_arrow_outlined
+                    : Icons.pause_circle_outline,
+                blocked ? 'Débloquer' : 'Bloqué',
+                toggleBlocked,
+              ),
           ],
         ),
         const SizedBox(height: 10),

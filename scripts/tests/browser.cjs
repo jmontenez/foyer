@@ -34,6 +34,9 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/ticket-mobile.png',fullPage:true});
   // Actions rapides de la fiche : bloquer puis terminer, en choisissant qui l’a réalisé.
   const find = async () => (await page.evaluate(async()=> (await fetch('/api/v1/state')).json())).tickets.find(t => t.title === title);
+  await page.getByRole('button', {name:'À faire'}).click();
+  await page.waitForTimeout(1200);
+  if ((await find()).stageId !== 'todo') throw new Error('Tâche du Backlog non passée à faire');
   await page.getByRole('button', {name:'Bloqué'}).click();
   await page.waitForTimeout(1200);
   const waiting = await find();
@@ -45,6 +48,6 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   const done = await find();
   if (done.stageId !== 'done' || done.performers.length !== 1) throw new Error('Tâche non terminée : ' + done.stageId + ' ' + done.performers);
   if (errors.length) throw new Error(errors.join('\n'));
-  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (bloquer, terminer avec réalisateur).');
+  console.log('PASS : connexion, création rapide, persistance backlog, affichage mobile, fiche (Backlog → à faire, bloquer, terminer avec réalisateur).');
   await browser.close();
 })();
