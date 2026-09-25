@@ -56,10 +56,15 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByRole('button', {name:'Une nouvelle tâche'}).click();
   await page.getByRole('button', {name:/^Faire une lessive/}).click();
   // Une lessive est peut-être déjà à faire (recette API) : l’anti-doublon demande confirmation.
+  // On attend soit la confirmation, soit la tâche créée (la CI est plus lente qu’un poste local).
   const again = page.getByRole('button', {name:'En ajouter une', exact:true});
-  if (await again.isVisible({timeout: 1500}).catch(() => false)) await again.click();
-  await page.waitForTimeout(1500);
-  if ((await tickets()).length !== before + 1 || (await laundries()) !== laundryBefore + 1) throw new Error('Raccourci non lancé');
+  let launched = false;
+  for (let i = 0; i < 20 && !launched; i++) {
+    if (await again.isVisible().catch(() => false)) await again.click();
+    await page.waitForTimeout(500);
+    launched = (await laundries()) === laundryBefore + 1;
+  }
+  if (!launched || (await tickets()).length !== before + 1) throw new Error('Raccourci non lancé');
   await page.getByRole('button', {name:'Annuler', exact:true}).click();
   await page.waitForTimeout(1500);
   if ((await tickets()).length !== before) throw new Error('Lancement non annulé');
