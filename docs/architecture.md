@@ -26,6 +26,10 @@ Un worker toutes les 30 secondes programme les activations et résumés ; chaque
 
 FCM est un transport au mieux : reprise exponentielle plafonnée à une heure, expiration, suppression des jetons invalides et suivi des appareils déjà traités. Chaque notification a un titre qui dit qui ou quoi (« Clemence a commenté », « À faire aujourd’hui ») et un corps court : titres des tâches, et début du texte pour un commentaire. Le résumé du matin liste les tâches du jour (retards d’abord, trois titres au plus) et n’est pas envoyé les jours sans tâche. Les attributions par l’autre membre sont notifiées. Heures calmes de 22 h à l’heure du résumé : les rappels de minuit sont repris par le résumé (ou attendent cette heure s’il est désactivé), les annonces de mise à jour attendent aussi ; commentaires et attributions partent tout de suite. Toucher un commentaire ouvre son ticket ; le résumé ouvre Aujourd’hui. En premier plan, l’application montre une bannière.
 
+### Widgets Android
+
+Le widget « Aujourd’hui » affiche un instantané de `GET /api/v1/widget` (tâches du jour du membre, dans l’ordre du résumé) écrit par l’application via `home_widget`. Il est rafraîchi à chaque chargement de l’application, à chaque notification reçue (handler FCM d’arrière-plan) et au plus toutes les 30 minutes (le widget demande alors `foyer://refresh`, exécuté en Dart dans un isolat d’arrière-plan avec la session de l’application ; au plus une demande toutes les 5 minutes). Le code natif (`TodayWidget.kt`) ne fait que du rendu ; les touchers ouvrent l’application sur `foyer://today`, `foyer://create` ou `foyer://ticket/<id>`.
+
 Un crash entre acceptation FCM et enregistrement serveur peut provoquer un renvoi ; l’identifiant/tag de notification limite les doublons visibles, sans garantie d’exactement une livraison. Aucune notification push web dans cette V1. Le contenu reste consultable dans l’application. `WORKERS_ENABLED=false` suspend aussi les passages automatiques de date ; réservé aux tests/restaurations ou à une pause volontaire.
 
 ## Évolutions prévues

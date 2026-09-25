@@ -166,6 +166,7 @@ api.MapGet("/app/android", () => Updates.Android(settings.Updates) is { } releas
 api.MapGet("/app/android.apk", () => Updates.Android(settings.Updates) is null
     ? Results.NotFound()
     : Results.File(Path.Combine(settings.Updates, Updates.Apk), "application/vnd.android.package-archive", Updates.Apk, enableRangeProcessing: true));
+api.MapGet("/widget", async (HttpContext ctx, Store store) => await store.Read(h => Widgets.Build(h, Security.Member(ctx, h), DateTimeOffset.UtcNow)));
 api.MapGet("/revision", async (Store store) => await store.Read(h => new { h.Revision, h.Maintenance }));
 api.MapGet("/sessions", async (HttpContext ctx, Store store) => await store.Read(h => { var me = Security.Member(ctx, h); return h.Sessions.Where(s => s.MemberId == me.Id).Select(s => new { id = s.Hash, s.DeviceName, s.CreatedAt, s.ExpiresAt, current = s.Hash == Security.Hash(Security.Token(ctx)!) }).ToList(); }));
 api.MapDelete("/sessions/{id}", async (string id, HttpContext ctx, Store store) => await store.Update(h => { var me = Security.Member(ctx, h); h.Sessions.RemoveAll(s => s.Hash == id && s.MemberId == me.Id); h.Devices.RemoveAll(d => d.SessionHash == id && d.MemberId == me.Id); return Results.NoContent(); }));

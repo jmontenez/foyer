@@ -17,6 +17,7 @@ import 'shopping.dart';
 import 'shortcuts.dart';
 import 'ui.dart';
 import 'update.dart';
+import 'widgets.dart';
 
 final messenger = GlobalKey<ScaffoldMessengerState>();
 final api = Api();
@@ -63,7 +64,14 @@ Color priorityColor(String p, [Brightness brightness = Brightness.light]) =>
       };
 
 @pragma('vm:entry-point')
-Future<void> backgroundMessage(RemoteMessage message) async {}
+// Notification reçue application fermée : les widgets de l’écran d’accueil se remettent à jour.
+@pragma('vm:entry-point')
+Future<void> backgroundMessage(RemoteMessage message) async {
+  final background = Api();
+  await background.initialize();
+  await refreshWidgets(background);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   LicenseRegistry.addLicense(() async* {
@@ -80,6 +88,7 @@ Future<void> main() async {
     }
   });
   await api.initialize();
+  await registerWidgetActions();
   if (!kIsWeb && const bool.fromEnvironment('FIREBASE_ENABLED')) {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -138,12 +147,45 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   DateTime? updateCheckedAt;
   StreamSubscription<RemoteMessage>? pushOpen, pushForeground;
   StreamSubscription<String>? tokenRefresh;
+  StreamSubscription<Uri?>? widgetTaps;
+  // Toucher sur un widget arrivé avant le chargement des données : traité juste après.
+  WidgetLink? pendingLink;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     refresh();
     timer = Timer.periodic(const Duration(seconds: 12), (_) => checkRevision());
+    initialWidgetUri().then(openWidgetLink);
+    widgetTaps = widgetClicks.listen(openWidgetLink);
+  }
+
+  void openWidgetLink(Uri? uri) {
+    final link = WidgetLink.parse(uri);
+    if (link == null || !mounted) return;
+    if (data == null) {
+      pendingLink = link;
+    } else {
+      unawaited(followWidgetLink(link));
+    }
+  }
+
+  Future<void> followWidgetLink(WidgetLink link) async {
+    switch (link) {
+      case OpenToday():
+        setState(() => tab = 0);
+      case QuickCreate():
+        await quickCreate();
+      case OpenTicket(:final id):
+        final ticket = maps(data!['tickets'])
+            .where((t) => t['id'] == id)
+            .firstOrNull;
+        if (ticket == null) {
+          message('Cette tâche n’existe plus.');
+        } else {
+          await openTicket(ticket);
+        }
+    }
   }
 
   @override
@@ -153,6 +195,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     pushOpen?.cancel();
     pushForeground?.cancel();
     tokenRefresh?.cancel();
+    widgetTaps?.cancel();
     super.dispose();
   }
 
@@ -204,6 +247,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           if (e.status == 401) {
+            unawaited(clearWidgets());
             data = null;
             pushInitialized = false;
             error = null;
@@ -220,7 +264,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       pushInitialized = true;
       await setupPush();
     }
-    if (data != null) unawaited(checkUpdate());
+    if (data != null) {
+      unawaited(checkUpdate());
+      unawaited(refreshWidgets(api));
+      if (pendingLink case final link?) {
+        pendingLink = null;
+        unawaited(followWidgetLink(link));
+      }
+    }
   }
 
   // Vérification au retour dans l’application (au plus toutes les 30 s), sinon au plus une
@@ -1784,6 +1835,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       try {
                         await api.call('POST', '/api/v1/logout');
                         await api.clearSession();
+                        await clearWidgets();
                         if (c.mounted) Navigator.pop(c);
                         if (mounted) setState(() => data = null);
                       } catch (e) {
