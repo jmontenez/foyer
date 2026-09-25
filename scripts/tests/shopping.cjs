@@ -82,7 +82,12 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   const entry = page.getByRole('button',{name:new RegExp('^' + fresh)});
   await type(fresh, entry, 'Chercher un ingrédient…');
   await entry.click();
-  await page.getByRole('textbox',{name:'Nom'}).fill(fresh + ' four');
+  // Saisie clavier (Flutter web ne prend pas toujours fill() sur un champ déjà rempli).
+  const nameBox = page.getByRole('textbox',{name:'Nom'});
+  await nameBox.click();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.type(fresh + ' four');
+  await page.waitForTimeout(300);
   await page.getByRole('button',{name:'Enregistrer',exact:true}).click();
   await until(async () => (await draft()).some(i => i.text === fresh + ' four'), 'Ingrédient non renommé dans la liste');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
