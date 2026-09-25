@@ -18,15 +18,16 @@ public sealed class Shortcut
     public string Assign { get; set; } = "launcher";
     public string? AssigneeId { get; set; }
     public int Order { get; set; }
+    public RepeatRule? Repeat { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public record ShortcutSummary(string Id, string? SeedKey, string Title, string Description, string Kind, string Priority,
     List<string> TagIds, List<string> Checklist, int? DueInDays, string Assign, string? AssigneeId, int Order,
-    DateTimeOffset? LastDoneAt, string? OpenTicketId, int Uses);
+    DateTimeOffset? LastDoneAt, string? OpenTicketId, int Uses, RepeatRule? Repeat = null, DateOnly? NextDate = null);
 
 public record ShortcutInput(string Title, string? Description, string Kind, string Priority, List<string> TagIds,
-    List<string> Checklist, int? DueInDays, string Assign, string? AssigneeId);
+    List<string> Checklist, int? DueInDays, string Assign, string? AssigneeId, RepeatRule? Repeat = null);
 
 public static class Shortcuts
 {
@@ -43,6 +44,7 @@ public static class Shortcuts
         if (i.DueInDays is < 0 or > 60) throw new RuleException("Échéance entre aujourd’hui et 60 jours.");
         if (!AssignModes.Contains(i.Assign)) throw new RuleException("Attribution inconnue.");
         if (i.Assign == "member" && !h.Members.Any(m => m.Id == i.AssigneeId)) throw new RuleException("Membre inconnu.");
+        Recurrence.Validate(i.Repeat);
     }
 
     public static void Apply(Shortcut s, ShortcutInput i)
@@ -50,6 +52,10 @@ public static class Shortcuts
         s.Title = i.Title.Trim(); s.Description = i.Description?.Trim() ?? ""; s.Kind = i.Kind; s.Priority = i.Priority;
         s.TagIds = i.TagIds.Distinct().ToList(); s.Checklist = i.Checklist.Select(c => c.Trim()).ToList();
         s.DueInDays = i.DueInDays; s.Assign = i.Assign; s.AssigneeId = i.Assign == "member" ? i.AssigneeId : null;
+        // Nouvelle semaine de référence quand la répétition change de rythme ou s’active.
+        var anchor = s.Repeat is { } old && i.Repeat is { } r && old.Mode == r.Mode && old.Every == r.Every && old.Active == r.Active ? old.Anchor : null;
+        s.Repeat = i.Repeat;
+        if (s.Repeat != null) s.Repeat.Anchor = anchor ?? DateOnly.FromDateTime(DateTime.UtcNow);
     }
 
     // Qui reçoit la tâche lancée par [launcher]. À tour de rôle : l’autre membre que la dernière fois.
@@ -91,13 +97,15 @@ public static class Shortcuts
     }
 
     // Pour l’affichage : dernière réalisation, occurrence encore ouverte, nombre d’utilisations.
-    public static ShortcutSummary Summary(Household h, Shortcut s)
+    public static ShortcutSummary Summary(Household h, Shortcut s) => Summary(h, s, DateTimeOffset.UtcNow);
+
+    public static ShortcutSummary Summary(Household h, Shortcut s, DateTimeOffset now)
     {
         var mine = h.Tickets.Where(t => t.ShortcutId == s.Id).ToList();
         return new(s.Id, s.SeedKey, s.Title, s.Description, s.Kind, s.Priority, s.TagIds, s.Checklist, s.DueInDays, s.Assign, s.AssigneeId, s.Order,
             mine.Where(t => t.StageId == "done").Max(t => t.ClosedAt),
             mine.Where(t => !Rules.Closed(t)).OrderBy(t => t.CreatedAt).Select(t => t.Id).FirstOrDefault(),
-            mine.Count);
+            mine.Count, s.Repeat, Recurrence.Preview(h, s, now));
     }
 
     // Raccourcis courants, chargés une seule fois par foyer (supprimables, jamais réinsérés).

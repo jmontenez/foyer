@@ -37,7 +37,7 @@ public static class Demo
         h.Maintenance = false;
         h.Members = seed.Members; h.Stages = seed.Stages; h.Tags = seed.Tags; h.Tickets = seed.Tickets;
         h.Sessions = []; h.Devices = []; h.Notifications = [];
-        h.Shortcuts = seed.Shortcuts; h.ShortcutsSeeded = true;
+        h.Shortcuts = seed.Shortcuts; h.ShortcutsSeeded = true; h.RepeatsSuggested = true;
     }
 
     public static Household Seed(Settings settings, DateOnly today, DateTimeOffset now)
@@ -82,6 +82,7 @@ public static class Demo
         T("Monter l’étagère", "obligation", "normal", "done", null, null, [C, A], [0], performers: [C, A], closedDaysAgo: 3);
         T("Rendre les livres à la médiathèque", "obligation", "low", "abandoned", null, null, [A], [5], closedDaysAgo: 8);
         Shortcuts.SeedOnce(h);
+        Recurrence.SuggestOnce(h);
         // Une lessive déjà faite : « dernière fois il y a 2 jours » dans le panneau de création.
         T("Faire une lessive", "obligation", "normal", "done", null, null, [A], [8], performers: [A], closedDaysAgo: 2).ShortcutId = h.Shortcuts.First(s => s.SeedKey == "laundry").Id;
         return h;
@@ -102,7 +103,13 @@ public sealed class DemoReset(Store store, Settings settings, ILogger<DemoReset>
             var local = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone);
             var next = new DateTimeOffset(local.Date.AddHours(4), local.Offset);
             if (next <= local) next = next.AddDays(1);
-            await Task.Delay(next - local, stoppingToken);
+            // Sans traitements différés en démonstration : les répétitions avancent ici, chaque minute.
+            while (DateTimeOffset.UtcNow < next && !stoppingToken.IsCancellationRequested)
+            {
+                await store.Update(h => { var now = DateTimeOffset.UtcNow; Recurrence.Tick(h, now); Rules.Schedule(h, now); h.Notifications.Clear(); return true; });
+                var wait = next - DateTimeOffset.UtcNow;
+                await Task.Delay(wait < TimeSpan.FromMinutes(1) ? (wait > TimeSpan.Zero ? wait : TimeSpan.Zero) : TimeSpan.FromMinutes(1), stoppingToken);
+            }
             await store.Update(h => { Demo.Reset(h, settings, DateTimeOffset.UtcNow); return true; });
             log.LogInformation("Démonstration remise à zéro.");
         }
