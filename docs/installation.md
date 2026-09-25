@@ -188,3 +188,15 @@ Mise en place, une fois :
 4. Vérifier sans déployer : `sudo -u foyer … auto_update.py … --check`.
 
 Renouveler le jeton avant expiration ; un jeton expiré arrête les déploiements (erreur 401 au journal) sans toucher au service en place.
+
+## 9. Démonstration publique
+
+`https://demofoyer.jmops.fr` montre l’application à d’autres personnes sans toucher au foyer réel : site web complet et serveur utilisable par l’APK (*Configurer le serveur* → cette adresse). Connexion par « Camille » ou « Alex » (comptes fictifs), aucune connexion Google.
+
+- **Isolation** : compte macOS dédié `foyerdemo` sans aucun secret de production, VM colima distincte (`foyer-demo`, 1 CPU, 1,5 Go, disque 10 Go), fichier `deploy/compose.demo.yaml` (base propre, aucun secret Google/Firebase, API en lecture seule, ressources plafonnées), port `127.0.0.1:5081`, route Cloudflare `demofoyer.jmops.fr` → `http://127.0.0.1:5081`.
+- **Verrou** : `PublicDemo=true` refuse de démarrer sans deux adresses fictives en `.invalid`, avec une configuration Google ou Firebase, ou avec les traitements différés. La démonstration ne peut donc pas être activée sur de vraies données.
+- **Limites** : images désactivées, commentaires de 1 000 caractères au plus, 150 tâches, 30 commentaires par tâche, 30 tags, 300 sessions ; appareils acceptés sans être enregistrés (aucune notification) ; `X-Robots-Tag: noindex` ; limitation de requêtes habituelle par visiteur.
+- **Données** : jeu fictif réaliste, dates relatives au jour ; remise à zéro complète au démarrage si la base est vide puis chaque nuit à 4 h (sessions comprises).
+- **Mises à jour** : `auto_update.py --compose deploy/compose.demo.yaml --image foyer-demo-api --no-apk` sous le compte `foyerdemo`, avec son propre LaunchDaemon ; même release que la production, sans publication d’APK.
+
+Risque résiduel accepté : n’importe qui peut écrire du texte visible des autres visiteurs jusqu’à la remise à zéro suivante.

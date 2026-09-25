@@ -12,6 +12,7 @@ public sealed class Settings(IConfiguration c, IWebHostEnvironment env)
     public string? GoogleClientId { get; } = c["GoogleClientId"];
     public string ClientIpHeader { get; } = c["ClientIpHeader"]?.Trim() ?? "";
     public bool WorkersEnabled { get; } = c.GetValue("WorkersEnabled", false);
+    public bool PublicDemo { get; } = c.GetValue("PublicDemo", false);
     public bool Secure { get; } = !env.IsDevelopment();
     public string ConnectionString { get; } = Connection(c);
     private static string Connection(IConfiguration c)
