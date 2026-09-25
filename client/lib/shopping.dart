@@ -342,72 +342,87 @@ class _ItemSheetState extends State<ItemSheet> {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        0,
-        20,
-        20 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(widget.name, style: Theme.of(context).textTheme.titleLarge),
-          if (widget.inList)
-            Text(
-              'Déjà dans la liste',
-              style: TextStyle(color: c.primary, fontWeight: FontWeight.w600),
-            ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: qty,
-            autofocus: true,
-            maxLength: 40,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => done(),
-            decoration: const InputDecoration(
-              labelText: 'Quantité',
-              hintText: 'ex. 2, 500 g, 1 L',
-              counterText: '',
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text('Rayon', style: TextStyle(color: c.onSurfaceVariant)),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+    return KeyboardBack(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final a in widget.aisles)
-                ChoiceChip(
-                  label: Text(a['name'].toString()),
-                  selected: aisle == a['id'],
-                  onSelected: (_) => setState(() => aisle = a['id']),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
+              Text(widget.name, style: Theme.of(context).textTheme.titleLarge),
               if (widget.inList)
-                TextButton.icon(
-                  onPressed: () => Navigator.pop<ItemChoice>(context, (
-                    qty: '',
-                    aisle: aisle,
-                    remove: true,
-                  )),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Retirer'),
+                Text(
+                  'Déjà dans la liste',
+                  style: TextStyle(
+                    color: c.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              const Spacer(),
-              FilledButton(
-                onPressed: done,
-                child: Text(widget.inList ? 'Enregistrer' : 'Ajouter'),
+              const SizedBox(height: 12),
+              // Le bouton reste à côté du champ : visible même clavier ouvert.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: qty,
+                      autofocus: true,
+                      maxLength: 40,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => done(),
+                      decoration: const InputDecoration(
+                        labelText: 'Quantité',
+                        hintText: 'ex. 2, 500 g, 1 L',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: done,
+                    child: Text(widget.inList ? 'Enregistrer' : 'Ajouter'),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              Text('Rayon', style: TextStyle(color: c.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final a in widget.aisles)
+                    ChoiceChip(
+                      label: Text(a['name'].toString()),
+                      selected: aisle == a['id'],
+                      onSelected: (_) => setState(() => aisle = a['id']),
+                    ),
+                ],
+              ),
+              if (widget.inList) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => Navigator.pop<ItemChoice>(context, (
+                      qty: '',
+                      aisle: aisle,
+                      remove: true,
+                    )),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Retirer de la liste'),
+                  ),
+                ),
+              ],
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -473,9 +488,16 @@ class _IngredientSheetState extends State<IngredientSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Modifier l’ingrédient',
-              style: Theme.of(context).textTheme.titleLarge,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Modifier l’ingrédient',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                FilledButton(onPressed: done, child: const Text('Enregistrer')),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(
@@ -532,8 +554,6 @@ class _IngredientSheetState extends State<IngredientSheet> {
                   icon: const Icon(Icons.delete_outline),
                   label: const Text('Oublier'),
                 ),
-                const Spacer(),
-                FilledButton(onPressed: done, child: const Text('Enregistrer')),
               ],
             ),
           ],
@@ -554,7 +574,9 @@ Future<bool> editIngredient(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (_) => IngredientSheet(ingredient: ingredient, aisles: aisles),
+    builder: (_) => KeyboardBack(
+      child: IngredientSheet(ingredient: ingredient, aisles: aisles),
+    ),
   );
   if (choice == null) return false;
   final path =

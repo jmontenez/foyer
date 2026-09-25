@@ -197,4 +197,62 @@ void main() {
       forget: false,
     ));
   });
+
+  testWidgets(
+    'Clavier ouvert : « Ajouter » reste visible et « retour » ferme le clavier',
+    (tester) async {
+      // Écran bas (téléphone plié à l’horizontale, grand clavier).
+      tester.view.physicalSize = const Size(900, 1000);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 560);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showModalBottomSheet<ItemChoice>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => const ItemSheet(
+                    name: 'Lait',
+                    aisle: 'dairy',
+                    aisles: [
+                      {'id': 'produce', 'name': 'Fruits & légumes'},
+                      {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+                      {'id': 'bakery', 'name': 'Boulangerie'},
+                      {'id': 'meat', 'name': 'Viande & poisson'},
+                      {'id': 'savory', 'name': 'Épicerie salée'},
+                      {'id': 'sweet', 'name': 'Épicerie sucrée'},
+                      {'id': 'drinks', 'name': 'Boissons'},
+                      {'id': 'frozen', 'name': 'Surgelés'},
+                      {'id': 'hygiene', 'name': 'Hygiène'},
+                      {'id': 'cleaning', 'name': 'Entretien'},
+                      {'id': 'other', 'name': 'Autre'},
+                    ],
+                  ),
+                ),
+                child: const Text('ouvrir'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('ouvrir'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final add = tester.getRect(find.text('Ajouter'));
+      expect(add.bottom, lessThanOrEqualTo(1000 - 560));
+      // Premier retour : la feuille reste (le clavier se ferme).
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Ajouter'), findsOneWidget);
+      // Clavier fermé : le retour ferme la feuille.
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Ajouter'), findsNothing);
+    },
+  );
 }

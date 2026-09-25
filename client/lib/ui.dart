@@ -523,6 +523,20 @@ class FilterPill extends StatelessWidget {
   }
 }
 
+/// Feuille avec saisie : tant que le clavier est ouvert, « retour » ferme le clavier, pas la feuille.
+class KeyboardBack extends StatelessWidget {
+  final Widget child;
+  const KeyboardBack({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: MediaQuery.viewInsetsOf(context).bottom == 0,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) FocusManager.instance.primaryFocus?.unfocus();
+    },
+    child: child,
+  );
+}
+
 /// Barre de navigation flottante : l’onglet actif affiche son nom.
 class FloatingNav extends StatelessWidget {
   final int index;
