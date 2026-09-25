@@ -234,6 +234,12 @@ api.MapPut("/shortcuts-order", async (List<string> ids, Store store) => await st
     foreach (var (id, i) in ids.Select((id, i) => (id, i))) h.Shortcuts.First(s => s.Id == id).Order = i;
     return Results.NoContent();
 }));
+api.MapPost("/tickets/{id}/done", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    var me = Security.Member(ctx, h); var t = Find(h, id);
+    Rules.Done(h, t, me.Id, DateTimeOffset.UtcNow);
+    return t;
+}));
 api.MapPost("/tickets/{id}/skip", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
 {
     var me = Security.Member(ctx, h); var t = Find(h, id);
