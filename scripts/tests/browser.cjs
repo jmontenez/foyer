@@ -25,6 +25,15 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByText('Backlog Tab 4 of 6', {exact:true}).click();
   await cardOf(title).waitFor();
   await page.screenshot({path:'artifacts/browser/backlog-desktop.png',fullPage:true});
+  // Un filtre de personne choisi ailleurs ne masque rien dans le Backlog (pas de pastilles).
+  await page.getByText('Aujourd’hui Tab 1 of 6', {exact:true}).click();
+  await page.getByRole('button', {name:'Alex', exact:true}).click();
+  await page.getByText('Backlog Tab 4 of 6', {exact:true}).click();
+  await cardOf(title).waitFor({timeout: 5000}).catch(() => { throw new Error('Filtre de personne caché appliqué au Backlog'); });
+  await page.getByText('Aujourd’hui Tab 1 of 6', {exact:true}).click();
+  await page.getByRole('button', {name:'Tout le foyer', exact:true}).click();
+  await page.getByText('Backlog Tab 4 of 6', {exact:true}).click();
+  await cardOf(title).waitFor();
   await page.setViewportSize({width:390,height:844});
   await page.waitForTimeout(700);
   await page.screenshot({path:'artifacts/browser/backlog-mobile.png',fullPage:true});

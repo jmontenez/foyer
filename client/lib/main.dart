@@ -879,8 +879,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       final people = tab == 4
           ? strings(t['performers'])
           : strings(t['assignees']);
-      if (person == 'none' && people.isNotEmpty) return false;
-      if (person != 'all' && person != 'none' && !people.contains(person)) {
+      // Le Backlog n’affiche pas les pastilles de personne : un filtre choisi dans un autre
+      // onglet ne doit pas y masquer les tâches de l’autre sans qu’on le voie.
+      final byPerson = tab != 3;
+      if (byPerson && person == 'none' && people.isNotEmpty) return false;
+      if (byPerson &&
+          person != 'all' &&
+          person != 'none' &&
+          !people.contains(person)) {
         return false;
       }
       if (tag != 'all' && !strings(t['tagIds']).contains(tag)) return false;
