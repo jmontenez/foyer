@@ -81,6 +81,12 @@ class MainActivity : FlutterActivity() {
         Channels.ensure(this)
     }
 
+    // Application ouverte : ses notifications sont lues (plus de pastille sur l’icône).
+    override fun onResume() {
+        super.onResume()
+        getSystemService(NotificationManager::class.java).cancelAll()
+    }
+
     // Mise à jour hors store : l’APK est téléchargé depuis le serveur Foyer avec la session,
     // vérifié (taille, SHA-256, paquet, version) puis installé par une session PackageInstaller.
     // Android vérifie la signature ; il demande confirmation sauf, à partir d’Android 12, quand
