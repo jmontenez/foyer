@@ -63,4 +63,6 @@ flutter {
 dependencies {
     // Liste défilante du widget Courses (RemoteViewsCompat.setRemoteAdapter, sans service à écrire).
     implementation("androidx.core:core-remoteviews:1.1.0")
+    // Actions des widgets : notre propre file (voir WidgetActions.kt), même version que home_widget.
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 }
