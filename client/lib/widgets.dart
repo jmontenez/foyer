@@ -1,10 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 
 import 'api.dart';
+import 'appearance.dart';
 
 // Widgets Android : l’app écrit un instantané (GET /api/v1/widget) que le code natif affiche.
 // Les actions des widgets s’exécutent ici, en Dart, dans un isolat d’arrière-plan.
@@ -87,11 +88,34 @@ Future<void> _save(Map<String, String?> snapshot) async {
   await _updateAll();
 }
 
+/// Charte de Foyer pour les widgets : couleurs de la palette choisie (ARGB) et angles.
+Map<String, Object> widgetTheme(ThemeData t) {
+  final c = t.colorScheme;
+  int argb(Color x) => x.toARGB32();
+  return {
+    'bg': argb(t.scaffoldBackgroundColor),
+    'card': argb(t.cardTheme.color ?? c.surface),
+    'text': argb(c.onSurface),
+    'muted': argb(c.onSurfaceVariant),
+    'accent': argb(c.primary),
+    'onAccent': argb(c.onPrimary),
+    'late': argb(c.error),
+    'sharp': (t.extension<FoyerTokens>()?.radius ?? 20) < 12,
+  };
+}
+
 /// Récupère les données du jour et met les widgets à jour. Silencieux en cas d’échec
 /// (hors ligne) ; une session expirée vide les widgets.
-Future<void> refreshWidgets(Api api) async {
+/// [theme] (application ouverte) : la charte est aussi mise à jour.
+Future<void> refreshWidgets(Api api, {ThemeData? theme}) async {
   if (!widgetsSupported) return;
   try {
+    if (theme != null) {
+      await HomeWidget.saveWidgetData<String>(
+        'theme',
+        jsonEncode(widgetTheme(theme)),
+      );
+    }
     final data = Map<String, dynamic>.from(
       await api.call('GET', '/api/v1/widget'),
     );

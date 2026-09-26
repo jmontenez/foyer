@@ -26,7 +26,7 @@
                 android:layout_height="wrap_content"
                 android:text="Aujourd’hui"
                 android:textColor="@color/widget_text"
-                android:textSize="17sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
             <TextView
                 android:id="@+id/widget_subtitle"
@@ -38,8 +38,9 @@
         </LinearLayout>
         <ImageView
             android:id="@+id/widget_add"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/widget_add_background"
             android:contentDescription="Nouvelle tâche"
             android:padding="8dp"
             android:src="@drawable/widget_add" />

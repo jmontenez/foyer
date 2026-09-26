@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:foyer/appearance.dart';
 import 'package:foyer/widgets.dart';
 
 void main() {
@@ -78,5 +79,23 @@ void main() {
             as List;
     expect(rows[0], {'id': null, 'text': 'Crèmerie & œufs'});
     expect(rows[1]['pending'], isTrue);
+  });
+
+  test('Charte exportée : palette de l’application et angles', () {
+    final soft = widgetTheme(
+      buildAppTheme(const AppAppearance(paletteId: 'lime-charcoal')),
+    );
+    final theme = buildAppTheme(
+      const AppAppearance(paletteId: 'lime-charcoal', corners: 'sharp'),
+    );
+    final sharp = widgetTheme(theme);
+    expect(soft['sharp'], isFalse);
+    expect(sharp['sharp'], isTrue);
+    expect(sharp['bg'], theme.scaffoldBackgroundColor.toARGB32());
+    expect(sharp['accent'], theme.colorScheme.primary.toARGB32());
+    expect(
+      sharp.keys,
+      containsAll(['card', 'text', 'muted', 'onAccent', 'late']),
+    );
   });
 }

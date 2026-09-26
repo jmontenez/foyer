@@ -49,12 +49,8 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_shopping_info" />
         </receiver>
-        <!-- Actions des widgets exécutées en Dart (home_widget) ; seules nos PendingIntent y mènent. -->
-        <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="false">
-            <intent-filter>
-                <action android:name="es.antonborri.home_widget.action.BACKGROUND" />
-            </intent-filter>
-        </receiver>
+        <!-- Touchers des widgets (fait, article coché), exécutés en Dart ; seules nos PendingIntent y mènent. -->
+        <receiver android:name=".WidgetActionReceiver" android:exported="false" />
         <receiver android:name=".UpdatedReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
