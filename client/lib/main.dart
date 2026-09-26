@@ -139,6 +139,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   DateTime? weekDay;
   String backlogKind = 'all', period = '30';
   Timer? timer;
+  bool foreground = true;
   bool refreshing = false;
   bool pushInitialized = false;
   bool choosingPalette = false;
@@ -208,14 +209,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    foreground = state == AppLifecycleState.resumed;
+    if (foreground) {
+      // Erreur réseau survenue en arrière-plan (Android y coupe le réseau) : on ne l’affiche
+      // pas au retour ; le rafraîchissement dira si le serveur est vraiment injoignable.
+      if (error != null) setState(() => error = null);
       refresh();
       checkUpdate(maxAge: const Duration(seconds: 30));
     }
   }
 
   Future<void> checkRevision() async {
-    if (data == null || refreshing) return;
+    // Seulement au premier plan : en arrière-plan (processus gardé par les widgets), rien à voir.
+    if (!foreground || data == null || refreshing) return;
     try {
       final r = await api.call('GET', '/api/v1/revision');
       if (r['revision'] != data!['revision']) await refresh();
