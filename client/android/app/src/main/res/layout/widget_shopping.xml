@@ -2,6 +2,7 @@
 <!-- Widget « Courses » : en-tête (ouvre Courses), « + » (ajouter un article), liste défilante par
      rayon ; toucher un article le coche en arrière-plan. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_background"
@@ -27,7 +28,7 @@
                 android:maxLines="1"
                 android:text="Courses"
                 android:textColor="@color/widget_text"
-                android:textSize="17sp"
+                android:textSize="20sp"
                 android:textStyle="bold" />
             <TextView
                 android:id="@+id/widget_subtitle"
@@ -38,8 +39,9 @@
         </LinearLayout>
         <ImageView
             android:id="@+id/widget_add"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/widget_add_background"
             android:contentDescription="Ajouter un article"
             android:padding="8dp"
             android:src="@drawable/widget_add" />

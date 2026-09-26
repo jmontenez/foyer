@@ -273,7 +273,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     }
     if (data != null) {
       unawaited(checkUpdate());
-      unawaited(refreshWidgets(api));
+      unawaited(
+        refreshWidgets(api, theme: buildAppTheme(selectedAppearance.value)),
+      );
       if (pendingLink case final link?) {
         pendingLink = null;
         unawaited(followWidgetLink(link));

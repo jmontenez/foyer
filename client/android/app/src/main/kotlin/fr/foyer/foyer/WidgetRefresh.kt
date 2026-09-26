@@ -3,7 +3,6 @@ package fr.foyer.foyer
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
-import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -26,5 +25,5 @@ internal fun requestWidgetRefresh(context: Context) {
     val now = System.currentTimeMillis()
     if (now - prefs.getLong("refreshRequestedAt", 0L) < RETRY_MS) return
     prefs.edit().putLong("refreshRequestedAt", now).apply()
-    runCatching { HomeWidgetBackgroundIntent.getBroadcast(context, Uri.parse("foyer://refresh")).send() }
+    runCatching { enqueueWidgetAction(context, Uri.parse("foyer://refresh"), urgent = false) }
 }
