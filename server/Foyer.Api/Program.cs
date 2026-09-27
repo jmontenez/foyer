@@ -157,6 +157,7 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     todayIds = h.Tickets.Where(t => Rules.TodayView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     notificationsEnabled = settings.WorkersEnabled,
+    unreadNotifications = Rules.Unread(h, Security.Member(ctx, h)),
     shortcuts = h.Shortcuts.OrderBy(s => s.Order).Select(s => Shortcuts.Summary(h, s)),
     shopping = new { lists = Shopping.Lists(h), ingredients = h.Ingredients, aisles = Shopping.Ordered(h) },
     demo = settings.PublicDemo
@@ -168,6 +169,8 @@ api.MapGet("/app/android.apk", () => Updates.Android(settings.Updates) is null
     : Results.File(Path.Combine(settings.Updates, Updates.Apk), "application/vnd.android.package-archive", Updates.Apk, enableRangeProcessing: true));
 api.MapGet("/widget", async (HttpContext ctx, Store store) => await store.Read(h => Widgets.Build(h, Security.Member(ctx, h), DateTimeOffset.UtcNow)));
 api.MapGet("/revision", async (Store store) => await store.Read(h => new { h.Revision, h.Maintenance }));
+api.MapGet("/notifications", async (HttpContext ctx, Store store) => await store.Read(h => { var me = Security.Member(ctx, h); return h.Notifications.Where(n => n.MemberId == me.Id && Rules.Historic(n)).OrderByDescending(n => n.CreatedAt).Select(n => new { n.Id, n.Kind, n.Title, n.Body, n.Count, n.TicketId, n.CreatedAt, unread = Rules.Unseen(me, n) }).ToList(); }));
+api.MapPost("/notifications/seen", async (HttpContext ctx, Store store) => await store.Update(h => { Security.Member(ctx, h).NotificationsSeenAt = DateTimeOffset.UtcNow; return Results.NoContent(); }));
 api.MapGet("/sessions", async (HttpContext ctx, Store store) => await store.Read(h => { var me = Security.Member(ctx, h); return h.Sessions.Where(s => s.MemberId == me.Id).Select(s => new { id = s.Hash, s.DeviceName, s.CreatedAt, s.ExpiresAt, current = s.Hash == Security.Hash(Security.Token(ctx)!) }).ToList(); }));
 api.MapDelete("/sessions/{id}", async (string id, HttpContext ctx, Store store) => await store.Update(h => { var me = Security.Member(ctx, h); h.Sessions.RemoveAll(s => s.Hash == id && s.MemberId == me.Id); h.Devices.RemoveAll(d => d.SessionHash == id && d.MemberId == me.Id); return Results.NoContent(); }));
 api.MapPost("/logout", async (HttpContext ctx, Store store) => { await store.Update(h => { var hash = Security.Hash(Security.Token(ctx)!); h.Sessions.RemoveAll(s => s.Hash == hash); h.Devices.RemoveAll(d => d.SessionHash == hash); return true; }); ctx.Response.Cookies.Delete(Security.Cookie); return Results.NoContent(); });

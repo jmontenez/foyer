@@ -395,6 +395,8 @@ class TaskTile extends StatelessWidget {
 class ScreenHeader extends StatelessWidget {
   final String title, subtitle;
   final Widget profile;
+  // Action supplémentaire entre la recherche et le profil (masquée si null).
+  final Widget? action;
   // Sans recherche (null), le bouton est masqué.
   final VoidCallback? onSearch;
   final bool searching;
@@ -403,6 +405,7 @@ class ScreenHeader extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.profile,
+    this.action,
     this.onSearch,
     this.searching = false,
   });
@@ -455,6 +458,7 @@ class ScreenHeader extends StatelessWidget {
               onPressed: onSearch,
               icon: Icon(searching ? Icons.close : Icons.search),
             ),
+          if (action != null) ...[const SizedBox(width: 6), action!],
           const SizedBox(width: 6),
           profile,
         ],

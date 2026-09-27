@@ -490,6 +490,36 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     await refresh();
   }
 
+  // Historique des notifications ; l'ouvrir marque tout comme lu.
+  Future<void> openNotifications() async {
+    try {
+      final notifications = maps(
+        await api.call('GET', '/api/v1/notifications'),
+      );
+      if (notifications.any((n) => n['unread'] == true)) {
+        await api.call('POST', '/api/v1/notifications/seen');
+        if (mounted) setState(() => data?['unreadNotifications'] = 0);
+      }
+      if (!mounted) return;
+      final ticketId = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => NotificationsPage(notifications: notifications),
+        ),
+      );
+      if (ticketId == null || !mounted || data == null) return;
+      final ticket = maps(
+        data!['tickets'],
+      ).where((t) => t['id'] == ticketId).firstOrNull;
+      if (ticket == null) {
+        message('Cette tâche n’existe plus.');
+      } else {
+        await openTicket(ticket);
+      }
+    } catch (e) {
+      message(e);
+    }
+  }
+
   // Création rapide : un titre et quelques puces ; « Plus de détails » ouvre la fiche complète.
   Future<void> quickCreate() async {
     if (data == null) return;
@@ -1105,6 +1135,25 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                               searching = !searching;
                               if (!searching) query = '';
                             }),
+                      action: IconButton.filled(
+                        tooltip: 'Notifications',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(context).cardTheme.color,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSurface,
+                          side: BorderSide(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        onPressed: openNotifications,
+                        icon: Badge.count(
+                          count: (data!['unreadNotifications'] ?? 0) as int,
+                          isLabelVisible:
+                              ((data!['unreadNotifications'] ?? 0) as int) > 0,
+                          child: const Icon(Icons.notifications_outlined),
+                        ),
+                      ),
                       profile: IconButton(
                         tooltip: 'Réglages',
                         onPressed: () => settingsDialog(),
@@ -2036,6 +2085,56 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+/// Historique des notifications reçues (fenêtre de 30 jours côté serveur).
+/// Se referme avec l'identifiant de la tâche touchée, que le Home ouvre ensuite.
+class NotificationsPage extends StatelessWidget {
+  final List<Map<String, dynamic>> notifications;
+  const NotificationsPage({super.key, required this.notifications});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      leading: IconButton(
+        tooltip: 'Fermer',
+        icon: const Icon(Icons.close),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: const Text('Notifications'),
+    ),
+    body: notifications.isEmpty
+        ? const Center(child: Text('Aucune notification pour le moment.'))
+        : ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
+            children: [
+              for (final n in notifications)
+                ListTile(
+                  leading: Icon(switch (n['kind']) {
+                    'comment' => Icons.chat_bubble_outline,
+                    'assign' => Icons.person_add_alt_outlined,
+                    'digest' => Icons.wb_sunny_outlined,
+                    'start' => Icons.event_available_outlined,
+                    _ => Icons.notifications_outlined,
+                  }),
+                  title: Text(
+                    n['title'].toString(),
+                    style: n['unread'] == true
+                        ? const TextStyle(fontWeight: FontWeight.bold)
+                        : null,
+                  ),
+                  subtitle: Text([
+                    if ((n['body'] ?? '').toString().isNotEmpty)
+                      n['body'].toString(),
+                    timeLabel(n['createdAt']),
+                  ].join('\n')),
+                  isThreeLine: (n['body'] ?? '').toString().isNotEmpty,
+                  onTap: n['ticketId'] == null
+                      ? null
+                      : () => Navigator.pop(context, n['ticketId'].toString()),
+                ),
+            ],
+          ),
+  );
 }
 
 class TicketPage extends StatefulWidget {
