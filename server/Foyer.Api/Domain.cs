@@ -40,6 +40,8 @@ public sealed class Member
     public string DigestTime { get; set; } = "08:00";
     public bool DigestEnabled { get; set; } = true;
     public string? LastDigestDate { get; set; }
+    // Dernière ouverture du panneau Notifications : tout ce qui précède est « lu ».
+    public DateTimeOffset? NotificationsSeenAt { get; set; }
 }
 public record Stage(string Id, string Name, string Category, int Order);
 public record Tag(string Id, string Name, string Color);
@@ -171,6 +173,11 @@ public static class Rules
             t.Assignees, [member], t.TagIds, t.Checklist, t.Version, t.ShortcutId), member, now);
     }
 
+    // Historique in-app : les annonces de mise à jour n'y figurent pas (ciblées par appareil
+    // via BelowVersion et déjà portées par la bannière du client).
+    public static bool Historic(Notification n) => n.Kind != "update";
+    public static bool Unseen(Member m, Notification n) => n.MemberId == m.Id && Historic(n) && n.CreatedAt > (m.NotificationsSeenAt ?? DateTimeOffset.MinValue);
+    public static int Unread(Household h, Member m) => h.Notifications.Count(n => Unseen(m, n));
     // Appareils du destinataire concernés par une notification.
     public static IEnumerable<Device> Recipients(Household h, Notification n) =>
         h.Devices.Where(d => d.MemberId == n.MemberId && (n.BelowVersion is not { } below || d.AppVersion is not { } version || version < below));
