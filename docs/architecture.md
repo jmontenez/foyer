@@ -19,6 +19,7 @@ Une version par ticket refuse les écrasements concurrents (HTTP 409). Les étap
 - Cette semaine : jusqu’au dimanche inclus, avec les retards et les tâches en cours ; les tickets datés du backlog sont inclus.
 - Recherche dans titres, descriptions et commentaires au sein de la vue courante. Historique : terminés/abandonnés, filtrables par période, tags et réalisateurs. Le sélecteur principal concerne les responsables dans les vues actives. Aucun score de contribution.
 - Commentaires datés, auteur identifié et notification du sujet à l’autre membre. Images limitées à 10 Mo, 40 mégapixels et 20 par ticket ; conversion à 2048 px maximum et première image seulement pour les animations.
+- Import de liste de courses : un texte collé (ou un tableau JSON `name`/`qty`/`aisle`) est analysé côté serveur sans écrire (`POST /api/v1/shopping/import/preview`) — puces, numérotation et intertitres ignorés, quantité reconnue en début ou fin de ligne, doublons regroupés. Le rayon est repris du catalogue : nom exact (renommé en canonique), sinon ingrédient dont tous les mots figurent dans le nom importé (« filet de poulet » suit le rayon de Poulet, sans renommage), sinon Autre, à préciser dans la prévisualisation. La validation passe par `POST /api/v1/shopping/items/batch` : tout-ou-rien, 100 articles maximum, chaque article suit la règle d’ajout habituelle (fusion avec l’existant, apprentissage du rayon).
 
 ## Notifications
 
