@@ -3,6 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:foyer/api.dart';
 import 'package:foyer/shopping.dart';
 
+class FakeApi extends Api {
+  final Object Function(String method, String path, Object? body) respond;
+  FakeApi(this.respond) {
+    base = 'https://foyer.test';
+  }
+  @override
+  Future<dynamic> call(String method, String path, [Object? body]) async {
+    final value = respond(method, path, body);
+    if (value is ApiError) throw value;
+    return value;
+  }
+}
+
 void main() {
   final catalog = [
     {'name': 'Lait', 'aisle': 'dairy', 'uses': 3},
@@ -196,6 +209,73 @@ void main() {
       aisle: 'frozen',
       forget: false,
     ));
+  });
+
+  testWidgets('Import : analyse, inconnus en premier, ajout groupé', (
+    tester,
+  ) async {
+    const aisles = [
+      {'id': 'sweet', 'name': 'Épicerie sucrée'},
+      {'id': 'other', 'name': 'Autre'},
+    ];
+    Object? sent;
+    final api = FakeApi((method, path, body) {
+      if (path.endsWith('/shopping/import/preview')) {
+        return [
+          {
+            'name': 'Farine',
+            'qty': '500 g',
+            'aisle': 'sweet',
+            'known': true,
+            'merge': false,
+          },
+          {
+            'name': 'Levure',
+            'qty': null,
+            'aisle': 'other',
+            'known': false,
+            'merge': true,
+          },
+        ];
+      }
+      sent = body;
+      return {'added': 1, 'merged': 1};
+    });
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SizedBox())),
+    );
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    final opened = navigator.push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => ImportPage(api: api, listId: 'draft', aisles: aisles),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      '500 g de farine\nlevure',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Analyser'));
+    await tester.pumpAndSettle();
+    // L’inconnu est en tête, à classer ; l’article déjà listé est signalé.
+    expect(find.text('RAYON À PRÉCISER'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Levure')).dy,
+      lessThan(tester.getTopLeft(find.text('Farine')).dy),
+    );
+    expect(find.text('Autre · déjà dans la liste'), findsOneWidget);
+    expect(find.text('Épicerie sucrée · 500 g'), findsOneWidget);
+    await tester.tap(find.text('Ajouter 2 articles'));
+    await tester.pumpAndSettle();
+    expect(sent, {
+      'list': 'draft',
+      'items': [
+        {'name': 'Farine', 'qty': '500 g', 'aisle': 'sweet'},
+        {'name': 'Levure', 'qty': null, 'aisle': 'other'},
+      ],
+    });
+    expect(await opened, {'added': 1, 'merged': 1});
   });
 
   testWidgets(

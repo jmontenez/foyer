@@ -978,6 +978,28 @@ class _ShoppingViewState extends State<ShoppingView> {
       )
       .then((_) => widget.onChanged());
 
+  // Coller une liste (recette, note, sortie d’assistant) : analyse serveur,
+  // prévisualisation corrigeable, puis ajout en une fois.
+  Future<void> importList(Map<String, dynamic> list) async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => ImportPage(
+          api: widget.api,
+          listId: list['id'].toString(),
+          aisles: aisles,
+        ),
+      ),
+    );
+    await widget.onChanged();
+    if (result == null) return;
+    final added = result['added'] as int? ?? 0;
+    final merged = result['merged'] as int? ?? 0;
+    show(
+      '${plural(added, 'article ajouté', 'articles ajoutés')}'
+      '${merged > 0 ? ', ${plural(merged, 'fusionné')}' : ''}.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -1133,11 +1155,16 @@ class _ShoppingViewState extends State<ShoppingView> {
               PopupMenuButton<String>(
                 tooltip: 'Plus d’options',
                 onSelected: (v) => switch (v) {
+                  'import' => importList(list),
                   'aisles' => reorderAisles(),
                   'ingredients' => ingredientsPage(),
                   _ => clearDone(list),
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'import',
+                    child: Text('Importer une liste…'),
+                  ),
                   const PopupMenuItem(
                     value: 'ingredients',
                     child: Text('Ingrédients'),
@@ -1206,15 +1233,24 @@ class _ShoppingViewState extends State<ShoppingView> {
                 onTap: () => pick(list, query),
               ),
           ],
-          if (items.isEmpty)
+          if (items.isEmpty) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
+              padding: const EdgeInsets.only(top: 32, bottom: 8),
               child: Text(
                 'La liste est vide. Touchez un ingrédient ou tapez son nom. Appui long sur une suggestion pour la modifier.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: c.onSurfaceVariant),
               ),
             ),
+            Center(
+              child: TextButton.icon(
+                onPressed: busy ? null : () => importList(list),
+                icon: const Icon(Icons.content_paste_go_outlined),
+                label: const Text('Importer une liste collée'),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           for (final (aisle, rows) in groups) ...[
             SectionLabel(aisle['name'].toString(), rows.length),
             for (final item in rows) row(item),
@@ -1232,6 +1268,226 @@ class _ShoppingViewState extends State<ShoppingView> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Import d’une liste collée : le serveur analyse le texte (une ligne = un article),
+/// la prévisualisation se corrige (rayon des inconnus en premier), puis tout est ajouté d’un coup.
+class ImportPage extends StatefulWidget {
+  final Api api;
+  final String listId;
+  final List<Map<String, dynamic>> aisles;
+  const ImportPage({
+    super.key,
+    required this.api,
+    required this.listId,
+    required this.aisles,
+  });
+  @override
+  State<ImportPage> createState() => _ImportPageState();
+}
+
+class _ImportPageState extends State<ImportPage> {
+  final text = TextEditingController();
+  // null : phase de saisie ; sinon, articles proposés par le serveur, corrigés sur place.
+  List<Map<String, dynamic>>? rows;
+  bool busy = false;
+
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  void show(String message) =>
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(message)));
+
+  String aisleName(dynamic id) {
+    for (final a in widget.aisles) {
+      if (a['id'] == id) return a['name'].toString();
+    }
+    return 'Autre';
+  }
+
+  Future<void> analyze() async {
+    if (busy || text.text.trim().isEmpty) return;
+    setState(() => busy = true);
+    try {
+      final r = await widget.api
+          .call('POST', '/api/v1/shopping/import/preview', {
+            'list': widget.listId,
+            'text': text.text,
+          });
+      setState(() => rows = _maps(r));
+    } catch (e) {
+      show('$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> edit(Map<String, dynamic> row) async {
+    final choice = await showModalBottomSheet<ItemChoice>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => ItemSheet(
+        name: row['name'].toString(),
+        qty: row['qty']?.toString(),
+        aisle: row['aisle']?.toString(),
+        aisles: widget.aisles,
+      ),
+    );
+    if (choice == null) return;
+    setState(() {
+      row['qty'] = choice.qty;
+      row['aisle'] = choice.aisle;
+      row['known'] = true;
+    });
+  }
+
+  Future<void> submit() async {
+    final items = rows ?? [];
+    if (busy || items.isEmpty) return;
+    setState(() => busy = true);
+    try {
+      final result = await widget.api
+          .call('POST', '/api/v1/shopping/items/batch', {
+            'list': widget.listId,
+            'items': [
+              for (final r in items)
+                {'name': r['name'], 'qty': r['qty'], 'aisle': r['aisle']},
+            ],
+          });
+      if (mounted) {
+        Navigator.pop(context, Map<String, dynamic>.from(result as Map));
+      }
+    } catch (e) {
+      show('$e');
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Widget row(Map<String, dynamic> r) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+    leading: Icon(
+      r['known'] == true ? Icons.check_circle_outline : Icons.help_outline,
+      color: r['known'] == true
+          ? Theme.of(context).colorScheme.primary
+          : Theme.of(context).colorScheme.tertiary,
+    ),
+    title: Text(r['name'].toString()),
+    subtitle: Text(
+      [
+        aisleName(r['aisle']),
+        if ((r['qty'] ?? '').toString().isNotEmpty) r['qty'],
+        if (r['merge'] == true) 'déjà dans la liste',
+      ].join(' · '),
+    ),
+    trailing: IconButton(
+      tooltip: 'Retirer',
+      icon: const Icon(Icons.close),
+      onPressed: () => setState(() => rows!.remove(r)),
+    ),
+    onTap: () => edit(r),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final toFix = (rows ?? []).where((r) => r['known'] != true).toList();
+    final ready = (rows ?? []).where((r) => r['known'] == true).toList();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Importer une liste')),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: rows == null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Collez une liste d’ingrédients : une ligne par article, '
+                    'quantité au début ou à la fin. Les rayons connus seront '
+                    'retrouvés automatiquement.',
+                    style: TextStyle(color: c.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: text,
+                      autofocus: true,
+                      maxLines: null,
+                      minLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText:
+                            '- 500 g de farine\n- 6 œufs\n- 25 cl de lait',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: busy || text.text.trim().isEmpty
+                        ? null
+                        : analyze,
+                    icon: const Icon(Icons.manage_search),
+                    label: const Text('Analyser'),
+                  ),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        if (toFix.isNotEmpty) ...[
+                          SectionLabel('Rayon à préciser', toFix.length),
+                          for (final r in toFix) row(r),
+                        ],
+                        if (ready.isNotEmpty) ...[
+                          SectionLabel('Reconnus', ready.length),
+                          for (final r in ready) row(r),
+                        ],
+                        if (rows!.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            child: Text(
+                              'Plus rien à importer.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: c.onSurfaceVariant),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => setState(() => rows = null),
+                        child: const Text('Modifier le texte'),
+                      ),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: busy || rows!.isEmpty ? null : submit,
+                        icon: const Icon(Icons.playlist_add),
+                        label: Text(
+                          'Ajouter ${plural(rows!.length, 'article')}',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
       ),
     );
   }

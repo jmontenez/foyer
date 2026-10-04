@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 namespace Foyer;
 
 // Ingrédient connu du foyer : alimente l’accès rapide et la recherche de l’écran Courses.
@@ -19,6 +21,13 @@ public record ShoppingItemPatch(bool? Done, string? Qty, string? Aisle);
 public record ShoppingScheduleInput(DateOnly Date, string Mode, string? TargetId);
 public record ShoppingDateInput(DateOnly Date);
 public record IngredientInput(string Name, string? Aisle, string? Qty);
+// Import d’une liste collée : texte analysé en articles (Preview), puis ajout en une fois (Import).
+// Known : rayon trouvé (catalogue ou fourni) ; Merge : l’ingrédient est déjà dans la liste cible.
+public record ShoppingImportInput(string List, string Text);
+public record ShoppingImportItem(string Name, string? Qty, string Aisle, bool Known, bool Merge);
+public record ShoppingBatchItem(string Name, string? Qty, string? Aisle);
+public record ShoppingBatchInput(string List, List<ShoppingBatchItem> Items);
+public record ShoppingImportResult(int Added, int Merged);
 
 // Liste de courses : la checklist d’une tâche Courses (Shopping), ou le brouillon du foyer tant
 // qu’aucune date n’est programmée. Une seule donnée, cochée depuis l’écran Courses ou la tâche.
@@ -211,6 +220,112 @@ public static class Shopping
             var qty = x.Qty == null || c.Qty == null || x.Qty == c.Qty ? x.Qty ?? c.Qty : $"{x.Qty} + {c.Qty}";
             into[index] = x with { Qty = qty?.Length > MaxQty ? qty[..MaxQty] : qty, Done = x.Done && c.Done };
         }
+    }
+
+    // Puces et numérotation en tête de ligne d’une liste collée : « - », « * », « 1. », « [ ] »…
+    static readonly Regex Bullet = new(@"^(?:[-*•·–—>]|\d{1,3}[.)](?=\s)|\[[ xXvV]?\])\s*", RegexOptions.Compiled);
+    const string Num = @"(?:\d+(?:[.,]\d+)?(?:\s*/\s*\d+)?|[½¼¾])";
+    const string Unit = @"(?:kg|kilos?|grammes?|g|mg|litres?|l|dl|cl|ml|c[àa][sc]|c\.?\s*[àa]\s*[sc]\.?|cuill[èe]res?(?:\s*[àa]\s*(?:soupe|caf[ée]))?|sachets?|paquets?|bo[îi]tes?|pots?|tranches?|gousses?|pinc[ée]es?|bottes?|briques?|bouteilles?|barquettes?|tablettes?|rouleaux?|douzaines?|verres?|t[êe]tes?|branches?|feuilles?|brins?|morceaux?|filets?)";
+    static readonly Regex LeadingQty = new($@"^(?<qty>{Num}(?:\s*{Unit})?)(?:\s+de\s+|\s+d[’']\s*|\s+)(?<name>\p{{L}}.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    static readonly Regex TrailingQty = new($@"^(?<name>\p{{L}}.*?)\s*[:,]?\s+(?<qty>{Num}(?:\s*{Unit})?)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Sépare nom et quantité d’une ligne : « 500 g de farine », « 2 tomates », « farine : 500 g ».
+    static (string name, string? qty) SplitQty(string line) =>
+        LeadingQty.Match(line) is { Success: true } m ? (m.Groups["name"].Value, m.Groups["qty"].Value)
+        : TrailingQty.Match(line) is { Success: true } e ? (e.Groups["name"].Value, e.Groups["qty"].Value)
+        : (line, null);
+
+    // Ingrédient du catalogue pour un nom importé : le même nom, sinon celui dont tous les mots
+    // significatifs figurent dans le nom (« filet de poulet » → Poulet). En cas d’égalité, le plus
+    // précis puis le plus utilisé. Un match par mots donne le rayon mais ne renomme pas l’article.
+    static (Ingredient? found, bool exact) MatchCatalog(Household h, string key)
+    {
+        if (h.Ingredients.FirstOrDefault(x => Key(x.Name) == key) is { } same) return (same, true);
+        var words = key.Split(' ').Where(w => w.Length > 2).ToHashSet();
+        var found = h.Ingredients
+            .Select(x => (x, w: Key(x.Name).Split(' ').Where(w => w.Length > 2).ToArray()))
+            .Where(p => p.w.Length > 0 && p.w.All(words.Contains))
+            .OrderByDescending(p => p.w.Length).ThenByDescending(p => p.x.Uses)
+            .Select(p => p.x).FirstOrDefault();
+        return (found, false);
+    }
+
+    static string Capitalize(string s) => char.ToUpperInvariant(s[0]) + s[1..];
+
+    // Analyse un texte collé (une ligne = un article, ou un tableau JSON name/qty/aisle) et propose
+    // des articles prêts à importer, sans rien écrire : l’utilisateur corrige puis valide (Import).
+    public static List<ShoppingImportItem> Preview(Household h, string list, string? text)
+    {
+        var (items, _) = Resolve(h, list);
+        var t = text?.Trim() ?? "";
+        if (t.Length == 0) throw new RuleException("Collez une liste d’ingrédients.");
+        if (t.Length > 20_000) throw new RuleException("Texte limité à 20 000 caractères.");
+        var result = new List<ShoppingImportItem>();
+        void Admit(string rawName, string? rawQty, string? aisle)
+        {
+            var name = rawName.Trim();
+            if (name.Length > MaxName) name = name[..MaxName].Trim();
+            var qty = rawQty?.Trim();
+            if (string.IsNullOrEmpty(qty)) qty = null;
+            if (qty?.Length > MaxQty) qty = qty[..MaxQty].Trim();
+            var key = Key(name);
+            if (key.Length == 0) return;
+            var index = result.FindIndex(x => Key(x.Name) == key);
+            if (index >= 0)
+            {
+                // Même ingrédient sur deux lignes : une seule entrée, quantités mises bout à bout.
+                var x = result[index];
+                var merged = x.Qty == null || qty == null || x.Qty == qty ? x.Qty ?? qty : $"{x.Qty} + {qty}";
+                result[index] = x with { Qty = merged?.Length > MaxQty ? merged[..MaxQty] : merged };
+                return;
+            }
+            if (result.Count >= MaxItems) throw new RuleException($"{MaxItems} articles maximum par import.");
+            var (known, exact) = MatchCatalog(h, key);
+            result.Add(new ShoppingImportItem(exact ? known!.Name : Capitalize(name), qty,
+                KnownAisle(aisle) ? aisle! : known?.Aisle ?? "other", KnownAisle(aisle) || known != null,
+                items.Any(x => Key(x.Text) == key)));
+        }
+        List<ShoppingBatchItem>? json = null;
+        if (t.StartsWith('[')) { try { json = JsonSerializer.Deserialize<List<ShoppingBatchItem>>(t, Defaults.Json); } catch (JsonException) { } }
+        if (json != null)
+        {
+            foreach (var i in json) Admit(i.Name ?? "", i.Qty, i.Aisle);
+        }
+        else
+        {
+            foreach (var raw in t.Split('\n'))
+            {
+                var line = raw.Trim();
+                for (var strip = Bullet.Replace(line, ""); strip != line; strip = Bullet.Replace(line, "")) line = strip.Trim();
+                // Une ligne d’intertitre (« Pour la pâte : ») ou sans lettres n’est pas un article.
+                if (line.Length == 0 || line.EndsWith(':') || !line.Any(char.IsLetter)) continue;
+                var (name, qty) = SplitQty(line);
+                Admit(name, qty, null);
+            }
+        }
+        if (result.Count == 0) throw new RuleException("Aucun article reconnu dans ce texte.");
+        return result;
+    }
+
+    // Importe d’un coup les articles validés dans la prévisualisation. Chaque article passe par
+    // Add (fusion avec l’existant, apprentissage du rayon) ; la limite de la liste est vérifiée
+    // avant d’écrire, et la transaction du Store rend l’ensemble tout-ou-rien.
+    public static ShoppingImportResult Import(Household h, ShoppingBatchInput input, string member, DateTimeOffset now)
+    {
+        var batch = input.Items ?? [];
+        if (batch.Count == 0) throw new RuleException("Aucun article à importer.");
+        if (batch.Count > MaxItems) throw new RuleException($"{MaxItems} articles maximum par import.");
+        var (target, _) = Resolve(h, input.List ?? "");
+        var fresh = batch.Select(i => Key(i.Name?.Trim() ?? "")).Distinct()
+            .Count(k => k.Length > 0 && !target.Any(x => Key(x.Text) == k));
+        if (target.Count + fresh > MaxItems) throw new RuleException($"{MaxItems} articles maximum par liste.");
+        var merged = 0;
+        foreach (var i in batch)
+        {
+            if (target.Any(x => Key(x.Text) == Key(i.Name?.Trim() ?? ""))) merged++;
+            Add(h, new ShoppingItemInput(input.List ?? "", i.Name ?? "", i.Qty, KnownAisle(i.Aisle) ? i.Aisle : null), member, now);
+        }
+        return new ShoppingImportResult(batch.Count - merged, merged);
     }
 
     // Le brouillon rejoint la tâche (lancement du raccourci Courses, répétition, programmation).
