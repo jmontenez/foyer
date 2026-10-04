@@ -269,6 +269,100 @@ public class ShoppingTests
     }
 
     [Fact]
+    public void PreviewParsesBulletsQuantitiesAndSkipsHeaders()
+    {
+        var h = Home();
+        var items = Shopping.Preview(h, Shopping.Draft, """
+            Pour la pâte :
+            - 500 g de farine
+            * 6 œufs
+            1. 25 cl de lait
+            [ ] 2 sachets de levure
+
+            Beurre : 250 g
+            3,5
+            """);
+        Assert.Equal(["Farine", "Œufs", "Lait", "Levure", "Beurre"], items.Select(i => i.Name));
+        Assert.Equal(["500 g", "6", "25 cl", "2 sachets", "250 g"], items.Select(i => i.Qty));
+        // « farine » et « lait » sont au catalogue : rayon repris, nom canonique.
+        Assert.Equal(("sweet", true), (items[0].Aisle, items[0].Known));
+        Assert.Equal(("dairy", true), (items[2].Aisle, items[2].Known));
+        // « levure » est inconnue : rayon Autre, à préciser.
+        Assert.Equal(("other", false), (items[3].Aisle, items[3].Known));
+        Assert.Empty(h.ShoppingDraft); // la prévisualisation n’écrit rien
+    }
+
+    [Fact]
+    public void PreviewGuessesAisleFromCatalogWords()
+    {
+        var h = Home();
+        var items = Shopping.Preview(h, Shopping.Draft, "filet de poulet\ntomates cerises\njus de grenade");
+        // Le rayon vient du mot connu, mais le nom importé est conservé tel quel.
+        Assert.Equal(("Filet de poulet", "meat", true), (items[0].Name, items[0].Aisle, items[0].Known));
+        Assert.Equal(("Tomates cerises", "produce", true), (items[1].Name, items[1].Aisle, items[1].Known));
+        Assert.Equal(("other", false), (items[2].Aisle, items[2].Known));
+    }
+
+    [Fact]
+    public void PreviewMergesDuplicateLinesAndFlagsItemsAlreadyListed()
+    {
+        var h = Home();
+        Add(h, "Farine", "1 kg");
+        var items = Shopping.Preview(h, Shopping.Draft, "200 g de farine\nfarine 100 g\n2 courgettes");
+        var farine = Assert.Single(items, i => i.Name == "Farine");
+        Assert.Equal(("200 g + 100 g", true), (farine.Qty, farine.Merge));
+        Assert.False(Assert.Single(items, i => i.Name == "Courgettes").Merge);
+    }
+
+    [Fact]
+    public void PreviewAcceptsJson()
+    {
+        var h = Home();
+        var items = Shopping.Preview(h, Shopping.Draft,
+            """[{"name":"Lessive","qty":"2 L"},{"name":"Comté","aisle":"dairy"},{"name":"Chips","aisle":"rayon-inconnu"}]""");
+        Assert.Equal(("cleaning", true), (items[0].Aisle, items[0].Known)); // catalogue
+        Assert.Equal(("dairy", true), (items[1].Aisle, items[1].Known)); // rayon fourni
+        Assert.Equal(("other", false), (items[2].Aisle, items[2].Known)); // rayon invalide ignoré
+    }
+
+    [Fact]
+    public void PreviewRejectsEmptyOrUnusableText()
+    {
+        var h = Home();
+        Assert.Throws<RuleException>(() => Shopping.Preview(h, Shopping.Draft, "  "));
+        Assert.Throws<RuleException>(() => Shopping.Preview(h, Shopping.Draft, "Pour la pâte :\n---\n42"));
+        Assert.Throws<RuleException>(() => Shopping.Preview(h, Shopping.Draft, new string('x', 20_001)));
+    }
+
+    [Fact]
+    public void ImportAddsMergesAndLearnsAisles()
+    {
+        var h = Home();
+        Add(h, "Œufs", "6");
+        var result = Shopping.Import(h, new ShoppingBatchInput(Shopping.Draft, [
+            new("Œufs", "12", "dairy"),
+            new("Levure", "2 sachets", "bakery"),
+            new("Courgettes", null, "produce"),
+        ]), "a", Now);
+        Assert.Equal((2, 1), (result.Added, result.Merged));
+        Assert.Equal(3, h.ShoppingDraft.Count);
+        Assert.Equal("12", h.ShoppingDraft.Single(i => i.Text == "Œufs").Qty);
+        // Le rayon validé à l’import est appris pour les prochaines fois.
+        Assert.Equal("bakery", h.Ingredients.Single(i => i.Name == "Levure").Aisle);
+    }
+
+    [Fact]
+    public void ImportIsRefusedWhenTheListWouldOverflow()
+    {
+        var h = Home();
+        for (var i = 0; i < Shopping.MaxItems - 1; i++) Add(h, $"Produit {i}");
+        var batch = new ShoppingBatchInput(Shopping.Draft, [new("Nouveau 1", null, null), new("Nouveau 2", null, null)]);
+        Assert.Throws<RuleException>(() => Shopping.Import(h, batch, "a", Now));
+        Assert.Equal(Shopping.MaxItems - 1, h.ShoppingDraft.Count); // rien n’a été écrit
+        Assert.Throws<RuleException>(() => Shopping.Import(h, new ShoppingBatchInput(Shopping.Draft, []), "a", Now));
+    }
+
+    [Fact]
     public void PreviousHouseholdsDeserializeWithoutShopping()
     {
         var h = System.Text.Json.JsonSerializer.Deserialize<Household>("""{"tickets":[{"title":"x","checklist":[{"id":"1","text":"a","done":false}]}]}""", Defaults.Json)!;

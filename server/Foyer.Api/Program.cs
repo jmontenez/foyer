@@ -265,6 +265,11 @@ api.MapPost("/shortcuts/{id}/launch", async (string id, bool? withList, HttpCont
 // Courses : écritures article par article, pour cocher à deux sans conflit de version.
 api.MapPost("/shopping/items", async (ShoppingItemInput input, HttpContext ctx, Store store) => await store.Update(h =>
     Shopping.Add(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
+// Import d’une liste collée : analyse sans écrire, puis ajout en une fois des articles validés.
+api.MapPost("/shopping/import/preview", async (ShoppingImportInput input, Store store) => await store.Read(h =>
+    Shopping.Preview(h, input.List ?? "", input.Text)));
+api.MapPost("/shopping/items/batch", async (ShoppingBatchInput input, HttpContext ctx, Store store) => await store.Update(h =>
+    Shopping.Import(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
 api.MapPatch("/shopping/items/{list}/{id}", async (string list, string id, ShoppingItemPatch input, HttpContext ctx, Store store) => await store.Update(h =>
     Shopping.Update(h, list, id, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
 api.MapDelete("/shopping/items/{list}/{id}", async (string list, string id, HttpContext ctx, Store store) => await store.Update(h =>
