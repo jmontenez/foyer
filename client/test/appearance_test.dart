@@ -56,6 +56,72 @@ void main() {
     expect(readableOn(const Color(0xFF1F4FE0)), Colors.white);
   });
 
+  test('Palette sur mesure : contrastes lisibles, duos difficiles compris', () {
+    for (final (p, acc, dark) in [
+      ('#FACC15', '#B8F02B', false), // jaune et citron vert sur fond clair
+      ('#0A0A5E', '#FF3D5E', false),
+      ('#FACC15', '#22D3EE', true),
+      ('#7A1FA2', '#E87D32', true),
+      ('#386653', '#B58A44', false),
+    ]) {
+      final appearance = AppAppearance(
+        paletteId: customPaletteId,
+        customPrimary: p,
+        customAccent: acc,
+        customDark: dark,
+      );
+      final theme = buildAppTheme(appearance);
+      final c = theme.colorScheme;
+      expect(
+        theme.brightness,
+        dark ? Brightness.dark : Brightness.light,
+        reason: p,
+      );
+      expect(theme.scaffoldBackgroundColor, paletteFor(appearance).background);
+      for (final pair in [
+        (c.primary, c.onPrimary),
+        (c.secondaryContainer, c.onSecondaryContainer),
+        (c.surface, c.onSurface),
+        (theme.cardTheme.color!, c.onSurface),
+        (theme.cardTheme.color!, c.onSurfaceVariant),
+      ]) {
+        expect(
+          contrast(pair.$1, pair.$2),
+          greaterThanOrEqualTo(4.5),
+          reason: p,
+        );
+      }
+    }
+  });
+
+  test('Hex : lecture stricte, écriture canonique', () {
+    expect(hexOf(const Color(0xFF386653)), '#386653');
+    expect(colorFromHex('#386653'), const Color(0xFF386653));
+    expect(colorFromHex('#facc15'), const Color(0xFFFACC15));
+    expect(colorFromHex('386653'), isNull);
+    expect(colorFromHex('#38665'), isNull);
+    expect(colorFromHex('#GG6653'), isNull);
+    expect(colorFromHex(null), isNull);
+  });
+
+  test('Duo invalide ou absent ramené aux couleurs d’origine', () {
+    final a = AppAppearance.fromMember({
+      'paletteId': 'custom',
+      'customPrimary': 'zz',
+      'customAccent': '#ff0000',
+      'customDark': true,
+    });
+    expect(a.paletteId, customPaletteId);
+    expect((a.customPrimary, a.customAccent), ('#386653', '#FF0000'));
+    expect(a.customDark, isTrue);
+    final palette = paletteFor(a);
+    expect(
+      (palette.name, palette.dark, palette.bold),
+      ('Sur mesure', true, false),
+    );
+    expect(paletteFor(const AppAppearance()).id, 'sage');
+  });
+
   test('Jetons : valeurs inconnues ou absentes ramenées au réglage neutre', () {
     expect(AppAppearance.fromMember(null), const AppAppearance());
     final a = AppAppearance.fromMember({

@@ -188,6 +188,51 @@ Color readableOn(Color background) {
 AppPalette paletteById(String? id) =>
     palettes.firstWhere((p) => p.id == id, orElse: () => palettes[1]);
 
+/// Palette personnalisée : l’utilisateur choisit principal + accent et clair/sombre,
+/// tout le reste est dérivé par le chemin « doux » (jamais `bold`, lisibilité garantie).
+const customPaletteId = 'custom';
+
+Color? colorFromHex(String? v) =>
+    v != null && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(v)
+    ? Color(0xFF000000 | int.parse(v.substring(1), radix: 16))
+    : null;
+
+String hexOf(Color c) =>
+    '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+
+/// Fond teinté dans la teinte du principal, très clair ou très sombre — le même motif
+/// que les fonds accordés à la main des palettes prédéfinies.
+Color customBackground(Color primary, bool dark) {
+  final h = HSLColor.fromColor(primary);
+  return dark
+      ? HSLColor.fromAHSL(
+          1,
+          h.hue,
+          (h.saturation * .35).clamp(0, .35),
+          .055,
+        ).toColor()
+      : HSLColor.fromAHSL(
+          1,
+          h.hue,
+          (h.saturation * .45).clamp(0, .5),
+          .975,
+        ).toColor();
+}
+
+/// La palette effective d’une apparence : prédéfinie, ou construite depuis le duo choisi.
+AppPalette paletteFor(AppAppearance a) {
+  if (a.paletteId != customPaletteId) return paletteById(a.paletteId);
+  final primary = colorFromHex(a.customPrimary) ?? palettes[1].primary;
+  return AppPalette(
+    customPaletteId,
+    'Sur mesure',
+    primary,
+    colorFromHex(a.customAccent) ?? palettes[1].accent,
+    customBackground(primary, a.customDark),
+    dark: a.customDark,
+  );
+}
+
 /// Couple de polices embarquées : titres ([display]) et texte courant ([body]).
 /// Null = police du système. Ajouter l’identifiant à Appearance.FontIds côté serveur.
 class FontPair {
@@ -210,22 +255,37 @@ FontPair fontById(String? id) =>
 @immutable
 class AppAppearance {
   final String paletteId, fontId, listStyle, density, corners;
+  final String customPrimary, customAccent;
+  final bool customDark;
   const AppAppearance({
     this.paletteId = 'sage',
     this.fontId = 'system',
     this.listStyle = 'cards',
     this.density = 'comfortable',
     this.corners = 'soft',
+    this.customPrimary = '#386653',
+    this.customAccent = '#B58A44',
+    this.customDark = false,
   });
 
   /// Valeurs inconnues ou absentes (anciennes données) : réglage neutre.
-  factory AppAppearance.fromMember(Map<dynamic, dynamic>? m) => AppAppearance(
-    paletteId: paletteById(m?['paletteId']?.toString()).id,
-    fontId: fontById(m?['fontId']?.toString()).id,
-    listStyle: m?['listStyle'] == 'rows' ? 'rows' : 'cards',
-    density: m?['density'] == 'compact' ? 'compact' : 'comfortable',
-    corners: m?['corners'] == 'sharp' ? 'sharp' : 'soft',
-  );
+  factory AppAppearance.fromMember(Map<dynamic, dynamic>? m) {
+    final id = m?['paletteId']?.toString();
+    return AppAppearance(
+      paletteId: id == customPaletteId ? customPaletteId : paletteById(id).id,
+      fontId: fontById(m?['fontId']?.toString()).id,
+      listStyle: m?['listStyle'] == 'rows' ? 'rows' : 'cards',
+      density: m?['density'] == 'compact' ? 'compact' : 'comfortable',
+      corners: m?['corners'] == 'sharp' ? 'sharp' : 'soft',
+      customPrimary: colorFromHex(m?['customPrimary']?.toString()) == null
+          ? '#386653'
+          : m!['customPrimary'].toString().toUpperCase(),
+      customAccent: colorFromHex(m?['customAccent']?.toString()) == null
+          ? '#B58A44'
+          : m!['customAccent'].toString().toUpperCase(),
+      customDark: m?['customDark'] == true,
+    );
+  }
 
   AppAppearance copyWith({
     String? paletteId,
@@ -233,20 +293,29 @@ class AppAppearance {
     String? listStyle,
     String? density,
     String? corners,
+    String? customPrimary,
+    String? customAccent,
+    bool? customDark,
   }) => AppAppearance(
     paletteId: paletteId ?? this.paletteId,
     fontId: fontId ?? this.fontId,
     listStyle: listStyle ?? this.listStyle,
     density: density ?? this.density,
     corners: corners ?? this.corners,
+    customPrimary: customPrimary ?? this.customPrimary,
+    customAccent: customAccent ?? this.customAccent,
+    customDark: customDark ?? this.customDark,
   );
 
-  Map<String, String> toJson() => {
+  Map<String, Object> toJson() => {
     'paletteId': paletteId,
     'fontId': fontId,
     'listStyle': listStyle,
     'density': density,
     'corners': corners,
+    'customPrimary': customPrimary,
+    'customAccent': customAccent,
+    'customDark': customDark,
   };
 
   @override
@@ -256,11 +325,22 @@ class AppAppearance {
       other.fontId == fontId &&
       other.listStyle == listStyle &&
       other.density == density &&
-      other.corners == corners;
+      other.corners == corners &&
+      other.customPrimary == customPrimary &&
+      other.customAccent == customAccent &&
+      other.customDark == customDark;
 
   @override
-  int get hashCode =>
-      Object.hash(paletteId, fontId, listStyle, density, corners);
+  int get hashCode => Object.hash(
+    paletteId,
+    fontId,
+    listStyle,
+    density,
+    corners,
+    customPrimary,
+    customAccent,
+    customDark,
+  );
 }
 
 /// Styles prêts à l’emploi : un choix règle tous les jetons, affinables ensuite.
@@ -296,8 +376,17 @@ const stylePresets = [
   ),
 ];
 
-StylePreset? presetOf(AppAppearance a) =>
-    stylePresets.where((p) => p.appearance == a).firstOrNull;
+/// Un style est reconnu sur ses jetons visibles ; le duo personnalisé mémorisé n’entre pas en jeu.
+StylePreset? presetOf(AppAppearance a) => stylePresets
+    .where(
+      (p) =>
+          p.appearance.paletteId == a.paletteId &&
+          p.appearance.fontId == a.fontId &&
+          p.appearance.listStyle == a.listStyle &&
+          p.appearance.density == a.density &&
+          p.appearance.corners == a.corners,
+    )
+    .firstOrNull;
 
 final selectedAppearance = ValueNotifier<AppAppearance>(const AppAppearance());
 
@@ -334,7 +423,7 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
 }
 
 ThemeData buildAppTheme(AppAppearance appearance) {
-  final palette = paletteById(appearance.paletteId);
+  final palette = paletteFor(appearance);
   final font = fontById(appearance.fontId);
   final sharp = appearance.corners == 'sharp';
   final radius = sharp ? 8.0 : 20.0;
@@ -445,10 +534,78 @@ class PalettePicker extends StatefulWidget {
 }
 
 class _PalettePickerState extends State<PalettePicker> {
+  // Curseurs tenus en TSL pour éviter la dérive des allers-retours hexadécimaux
+  // (teinte perdue quand la saturation ou la luminosité touche une borne).
+  late HSLColor primary = HSLColor.fromColor(
+    colorFromHex(selectedAppearance.value.customPrimary)!,
+  );
+  late HSLColor accent = HSLColor.fromColor(
+    colorFromHex(selectedAppearance.value.customAccent)!,
+  );
+
+  // Tout réglage du duo bascule la palette en « Sur mesure », aperçu immédiat.
+  void custom(AppAppearance Function(AppAppearance) change) => setState(
+    () => selectedAppearance.value = change(
+      selectedAppearance.value.copyWith(paletteId: customPaletteId),
+    ),
+  );
+
+  Widget customTab() {
+    final a = selectedAppearance.value;
+    final from = paletteById(a.paletteId);
+    return ListView(
+      children: [
+        if (a.paletteId != customPaletteId)
+          TextButton.icon(
+            onPressed: () {
+              primary = HSLColor.fromColor(from.primary);
+              accent = HSLColor.fromColor(from.accent);
+              custom(
+                (x) => x.copyWith(
+                  customPrimary: hexOf(from.primary),
+                  customAccent: hexOf(from.accent),
+                  customDark: from.dark,
+                ),
+              );
+            },
+            icon: const Icon(Icons.colorize_outlined),
+            label: Text('Partir de « ${from.name} »'),
+          ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Thème sombre'),
+          value: a.paletteId == customPaletteId && a.customDark,
+          onChanged: (v) => custom((x) => x.copyWith(customDark: v)),
+        ),
+        ColorSliders(
+          label: 'Couleur principale',
+          color: primary,
+          onChanged: (c) {
+            primary = c;
+            custom((x) => x.copyWith(customPrimary: hexOf(c.toColor())));
+          },
+        ),
+        const SizedBox(height: 8),
+        ColorSliders(
+          label: 'Accent',
+          color: accent,
+          onChanged: (c) {
+            accent = c;
+            custom((x) => x.copyWith(customAccent: hexOf(c.toColor())));
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: paletteTabs.length,
-    initialIndex: paletteById(selectedAppearance.value.paletteId).bold ? 1 : 0,
+    length: paletteTabs.length + 1,
+    initialIndex: selectedAppearance.value.paletteId == customPaletteId
+        ? 2
+        : paletteById(selectedAppearance.value.paletteId).bold
+        ? 1
+        : 0,
     child: SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -465,7 +622,10 @@ class _PalettePickerState extends State<PalettePicker> {
             ),
             const SizedBox(height: 8),
             TabBar(
-              tabs: [for (final (label, _) in paletteTabs) Tab(text: label)],
+              tabs: [
+                for (final (label, _) in paletteTabs) Tab(text: label),
+                const Tab(text: 'Sur mesure'),
+              ],
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -478,6 +638,7 @@ class _PalettePickerState extends State<PalettePicker> {
                           .map(_tile)
                           .toList(),
                     ),
+                  customTab(),
                 ],
               ),
             ),
@@ -490,10 +651,8 @@ class _PalettePickerState extends State<PalettePicker> {
                 ),
                 const Spacer(),
                 FilledButton(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    selectedAppearance.value.paletteId,
-                  ),
+                  onPressed: () =>
+                      Navigator.pop(context, selectedAppearance.value),
                   child: const Text('Enregistrer mes couleurs'),
                 ),
               ],
@@ -556,6 +715,81 @@ class _PalettePickerState extends State<PalettePicker> {
   );
 }
 
+/// Une couleur du duo personnalisé : pastille d’aperçu et curseurs teinte/saturation/luminosité.
+class ColorSliders extends StatelessWidget {
+  final String label;
+  final HSLColor color;
+  final ValueChanged<HSLColor> onChanged;
+  const ColorSliders({
+    super.key,
+    required this.label,
+    required this.color,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget slider(
+      String name,
+      double value,
+      double max,
+      ValueChanged<double> change,
+    ) => Row(
+      children: [
+        SizedBox(
+          width: 86,
+          child: Text(name, style: TextStyle(color: muted, fontSize: 13)),
+        ),
+        Expanded(
+          child: Slider(value: value, max: max, onChanged: change),
+        ),
+      ],
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: color.toColor(),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(label),
+            const Spacer(),
+            Text(
+              hexOf(color.toColor()),
+              style: TextStyle(color: muted, fontSize: 13),
+            ),
+          ],
+        ),
+        slider('Teinte', color.hue, 360, (v) => onChanged(color.withHue(v))),
+        slider(
+          'Saturation',
+          color.saturation,
+          1,
+          (v) => onChanged(color.withSaturation(v)),
+        ),
+        // Bornée : un principal quasi noir ou blanc rend le fond dérivé inutilisable.
+        slider(
+          'Luminosité',
+          color.lightness.clamp(.05, .95),
+          1,
+          (v) => onChanged(color.withLightness(v.clamp(.05, .95))),
+        ),
+      ],
+    );
+  }
+}
+
 /// Écran Apparence : styles prêts à l’emploi puis réglages fins, prévisualisés en direct.
 /// Renvoie l’apparence à enregistrer, ou null si l’utilisateur annule.
 class AppearancePage extends StatefulWidget {
@@ -574,7 +808,7 @@ class _AppearancePageState extends State<AppearancePage> {
   }
 
   Future<void> choosePalette() async {
-    final id = await showModalBottomSheet<String>(
+    final picked = await showModalBottomSheet<AppAppearance>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -583,7 +817,7 @@ class _AppearancePageState extends State<AppearancePage> {
         child: const PalettePicker(),
       ),
     );
-    choose(id == null ? current : current.copyWith(paletteId: id));
+    choose(picked ?? current);
   }
 
   Widget heading(String label) => Padding(
@@ -666,7 +900,7 @@ class _AppearancePageState extends State<AppearancePage> {
             child: ListTile(
               leading: const Icon(Icons.palette_outlined),
               title: const Text('Couleurs'),
-              subtitle: Text(paletteById(current.paletteId).name),
+              subtitle: Text(paletteFor(current).name),
               trailing: const Icon(Icons.chevron_right),
               onTap: choosePalette,
             ),
@@ -716,7 +950,14 @@ class _AppearancePageState extends State<AppearancePage> {
       excludeSemantics: true,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => choose(preset.appearance),
+        // Le style règle les jetons visibles ; le duo personnalisé mémorisé reste intact.
+        onTap: () => choose(
+          preset.appearance.copyWith(
+            customPrimary: current.customPrimary,
+            customAccent: current.customAccent,
+            customDark: current.customDark,
+          ),
+        ),
         child: Ink(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(

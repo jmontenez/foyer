@@ -73,5 +73,5 @@ public static class Security
         if (!ctx.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.Ordinal) && origin.Length == 0)
             throw new RuleException("Origine navigateur requise.", 403);
     }
-    public static object PublicMember(Member m) => new { m.Id, m.Name, m.DigestTime, m.DigestEnabled, m.PaletteId, m.FontId, m.ListStyle, m.Density, m.Corners };
+    public static object PublicMember(Member m) => new { m.Id, m.Name, m.DigestTime, m.DigestEnabled, m.PaletteId, m.FontId, m.ListStyle, m.Density, m.Corners, m.CustomPrimary, m.CustomAccent, m.CustomDark };
 }
