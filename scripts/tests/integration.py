@@ -102,6 +102,18 @@ assert (tokens["fontId"], tokens["listStyle"], tokens["density"], tokens["corner
 call("PUT", "/api/v1/appearance", {"fontId": "comic-sans"}, a, expected=400)
 kept = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
 assert (kept["fontId"], kept["density"]) == ("grotesk", "compact"), kept
+# Palette sur mesure : duo validé, mémorisé même en repassant sur une palette prédéfinie.
+custom = call(
+    "PUT",
+    "/api/v1/appearance",
+    {"paletteId": "custom", "customPrimary": "#1F4FE0", "customAccent": "#FACC15", "customDark": True},
+    a,
+)
+assert (custom["paletteId"], custom["customPrimary"], custom["customAccent"], custom["customDark"]) == ("custom", "#1F4FE0", "#FACC15", True), custom
+call("PUT", "/api/v1/appearance", {"paletteId": "custom", "customPrimary": "1F4FE0"}, a, expected=400)
+call("PUT", "/api/v1/appearance", {"paletteId": "custom", "customAccent": "#XX4FE0"}, a, expected=400)
+back = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
+assert (back["paletteId"], back["customPrimary"], back["customDark"]) == ("sky-orange", "#1F4FE0", True), back
 call("PUT", "/api/v1/appearance", {"fontId": "system", "listStyle": "cards", "density": "comfortable", "corners": "soft"}, a)
 assert call("GET", "/api/v1/state", token=b)["me"]["paletteId"] == other_palette
 # Raccourcis : exemples pré-chargés, lancement, gestion, lien depuis une création étoffée.

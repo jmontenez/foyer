@@ -47,6 +47,21 @@ public class AppearanceTests
         Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput(null)));
     }
     [Fact]
+    public void CustomPaletteValidatesColorsAndKeepsThem()
+    {
+        var m = new Member();
+        Appearance.Apply(m, new AppearanceInput("custom", CustomPrimary: "#1F4FE0", CustomAccent: "#facc15", CustomDark: true));
+        Assert.Equal(("custom", "#1F4FE0", "#facc15", true), (m.PaletteId, m.CustomPrimary, m.CustomAccent, m.CustomDark));
+        // Repasser sur une palette prédéfinie garde le duo mémorisé.
+        Appearance.Apply(m, "sage");
+        Assert.Equal(("sage", "#1F4FE0", true), (m.PaletteId, m.CustomPrimary, m.CustomDark));
+        Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput("custom", CustomPrimary: "1F4FE0")));
+        Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput("custom", CustomAccent: "#GG4FE0")));
+        Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput("custom", CustomPrimary: "#1F4FE012")));
+        // Tout est validé avant d'appliquer : rien n'a bougé.
+        Assert.Equal(("sage", "#1F4FE0", "#facc15"), (m.PaletteId, m.CustomPrimary, m.CustomAccent));
+    }
+    [Fact]
     public void PreviousMembersGetNeutralTokens()
     {
         var member = System.Text.Json.JsonSerializer.Deserialize<Member>("""{"paletteId":"violet-navy"}""", Defaults.Json)!;
@@ -57,5 +72,6 @@ public class AppearanceTests
     {
         var member = System.Text.Json.JsonSerializer.Deserialize<Member>("{}", Defaults.Json)!;
         Assert.Equal("sage", member.PaletteId);
+        Assert.Equal(("#386653", "#B58A44", false), (member.CustomPrimary, member.CustomAccent, member.CustomDark));
     }
 }
