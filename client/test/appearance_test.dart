@@ -156,6 +156,105 @@ void main() {
     );
   });
 
+  // Reproduit le bug du grand écran : la feuille fermée autrement que par « Annuler »
+  // (barrière touchée en visant l’Enregistrer de la page) perdait les réglages,
+  // et le second Enregistrer ne voyait plus de changement à envoyer.
+  testWidgets('Sur mesure : réglage conservé à la fermeture, Annuler restaure', (
+    tester,
+  ) async {
+    const saved = AppAppearance(
+      paletteId: customPaletteId,
+      customPrimary: '#1F4FE0',
+      customAccent: '#FACC15',
+    );
+    selectedAppearance.value = saved;
+    AppAppearance? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async => result = await Navigator.push(
+                context,
+                MaterialPageRoute<AppAppearance>(
+                  builder: (_) => const AppearancePage(initial: saved),
+                ),
+              ),
+              child: const Text('ouvrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('ouvrir'));
+    await tester.pumpAndSettle();
+    // Palette déjà « Sur mesure » : le sélecteur s’ouvre sur l’onglet des curseurs.
+    await tester.tap(find.text('Couleurs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    expect(selectedAppearance.value.customDark, isTrue);
+    // Fermeture par la barrière (toucher hors de la feuille) : l’aperçu reste.
+    await tester.tapAt(const Offset(400, 10));
+    await tester.pumpAndSettle();
+    expect(selectedAppearance.value.customDark, isTrue);
+    // L’Enregistrer de la page envoie bien le réglage conservé.
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(result, saved.copyWith(customDark: true));
+    // Même parcours avec « Annuler » : retour à l’apparence d’ouverture.
+    selectedAppearance.value = saved;
+    await tester.tap(find.text('ouvrir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Couleurs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(selectedAppearance.value, saved);
+  });
+
+  testWidgets('Le sélecteur valide le duo via « Enregistrer mes couleurs »', (
+    tester,
+  ) async {
+    const saved = AppAppearance(
+      paletteId: customPaletteId,
+      customPrimary: '#1F4FE0',
+      customAccent: '#FACC15',
+    );
+    selectedAppearance.value = saved;
+    AppAppearance? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async => result = await Navigator.push(
+                context,
+                MaterialPageRoute<AppAppearance>(
+                  builder: (_) => const AppearancePage(initial: saved),
+                ),
+              ),
+              child: const Text('ouvrir'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('ouvrir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Couleurs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pump();
+    await tester.tap(find.text('Enregistrer mes couleurs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(result, saved.copyWith(customDark: true));
+  });
+
   test('Styles prêts à l’emploi distincts et reconnus', () {
     expect(stylePresets.map((p) => p.appearance).toSet().length, 3);
     for (final p in stylePresets) {
