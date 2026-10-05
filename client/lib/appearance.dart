@@ -188,8 +188,10 @@ Color readableOn(Color background) {
 AppPalette paletteById(String? id) =>
     palettes.firstWhere((p) => p.id == id, orElse: () => palettes[1]);
 
-/// Palette personnalisée : l’utilisateur choisit principal + accent et clair/sombre,
-/// tout le reste est dérivé par le chemin « doux » (jamais `bold`, lisibilité garantie).
+/// Palette personnalisée : l’utilisateur choisit principal + accent et clair/sombre.
+/// Les couleurs sont appliquées telles quelles (`bold`, comme les palettes marquées) :
+/// ce qu’on règle au curseur est ce qu’on voit, identique en clair et en sombre ;
+/// la lisibilité du texte posé dessus reste garantie par [readableOn].
 const customPaletteId = 'custom';
 
 Color? colorFromHex(String? v) =>
@@ -229,6 +231,7 @@ AppPalette paletteFor(AppAppearance a) {
     primary,
     colorFromHex(a.customAccent) ?? palettes[1].accent,
     customBackground(primary, a.customDark),
+    bold: true,
     dark: a.customDark,
   );
 }

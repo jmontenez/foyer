@@ -56,7 +56,7 @@ void main() {
     expect(readableOn(const Color(0xFF1F4FE0)), Colors.white);
   });
 
-  test('Palette sur mesure : contrastes lisibles, duos difficiles compris', () {
+  test('Palette sur mesure : couleurs exactes et contrastes lisibles', () {
     for (final (p, acc, dark) in [
       ('#FACC15', '#B8F02B', false), // jaune et citron vert sur fond clair
       ('#0A0A5E', '#FF3D5E', false),
@@ -77,6 +77,9 @@ void main() {
         dark ? Brightness.dark : Brightness.light,
         reason: p,
       );
+      // Ce qu’on règle au curseur est ce qu’on voit, en clair comme en sombre.
+      expect(c.primary, colorFromHex(p), reason: p);
+      expect(c.secondaryContainer, colorFromHex(acc), reason: acc);
       expect(theme.scaffoldBackgroundColor, paletteFor(appearance).background);
       for (final pair in [
         (c.primary, c.onPrimary),
@@ -115,9 +118,10 @@ void main() {
     expect((a.customPrimary, a.customAccent), ('#386653', '#FF0000'));
     expect(a.customDark, isTrue);
     final palette = paletteFor(a);
+    // `bold` : les couleurs du duo sont appliquées telles quelles, jamais adoucies.
     expect(
       (palette.name, palette.dark, palette.bold),
-      ('Sur mesure', true, false),
+      ('Sur mesure', true, true),
     );
     expect(paletteFor(const AppAppearance()).id, 'sage');
   });
