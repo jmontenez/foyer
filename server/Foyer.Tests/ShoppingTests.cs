@@ -60,6 +60,36 @@ public class ShoppingTests
     }
 
     [Fact]
+    public void IngredientPhotoIsRememberedReplacedAndRemoved()
+    {
+        var h = Home();
+        // Posée sur un nom inconnu du catalogue : l’ingrédient est créé au passage.
+        Assert.Null(Shopping.SetImage(h, " granola ", "img-1", Now));
+        var granola = h.Ingredients.Single(i => i.Name == "granola");
+        Assert.Equal("img-1", granola.ImageId);
+        // Remplacée : l’ancienne photo est renvoyée, à supprimer du disque par l’appelant.
+        Assert.Equal("img-1", Shopping.SetImage(h, "GRANOLAS", "img-2", Now));
+        Assert.Equal("img-2", granola.ImageId);
+        // Reposer la même photo ne demande aucune suppression.
+        Assert.Null(Shopping.SetImage(h, "granola", "img-2", Now));
+        Assert.Equal("img-2", Shopping.RemoveImage(h, "granola"));
+        Assert.Null(granola.ImageId);
+        Assert.Null(Shopping.RemoveImage(h, "granola"));
+        Assert.Throws<RuleException>(() => Shopping.RemoveImage(h, "inconnu du catalogue"));
+        Assert.Throws<RuleException>(() => Shopping.SetImage(h, " ", "img-3", Now));
+    }
+
+    [Fact]
+    public void ForgettingAnIngredientReturnsItsPhoto()
+    {
+        var h = Home();
+        Shopping.SetImage(h, "Tomates", "img-tomates", Now);
+        Assert.Equal("img-tomates", Shopping.Forget(h, "tomate"));
+        Assert.DoesNotContain(h.Ingredients, i => Shopping.Key(i.Name) == "tomate");
+        Assert.Null(Shopping.Forget(h, "Pain"));
+    }
+
+    [Fact]
     public void EditingAnIngredientFollowsIntoOpenLists()
     {
         var h = Home();
