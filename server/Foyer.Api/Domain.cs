@@ -37,6 +37,10 @@ public sealed class Member
     public string ListStyle { get; set; } = "cards";
     public string Density { get; set; } = "comfortable";
     public string Corners { get; set; } = "soft";
+    // Palette personnalisée (PaletteId = « custom ») : couple principal/accent et clair/sombre.
+    public string CustomPrimary { get; set; } = "#386653";
+    public string CustomAccent { get; set; } = "#B58A44";
+    public bool CustomDark { get; set; }
     public string DigestTime { get; set; } = "08:00";
     public bool DigestEnabled { get; set; } = true;
     public string? LastDigestDate { get; set; }
@@ -223,25 +227,33 @@ public static class Rules
 public static class Appearance
 {
     public static readonly HashSet<string> PaletteIds = ["sky-orange", "sage", "violet-navy", "rose-plum", "navy-gold", "turquoise-coral", "forest-mint", "terracotta-sand", "cherry-cream", "indigo-ice", "slate-copper",
-        "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon", "ink-coral"];
+        "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon", "ink-coral", "custom"];
     public static readonly HashSet<string> FontIds = ["system", "grotesk", "serif", "manrope"];
     public static readonly HashSet<string> ListStyles = ["cards", "rows"];
     public static readonly HashSet<string> Densities = ["comfortable", "compact"];
     public static readonly HashSet<string> CornerStyles = ["soft", "sharp"];
+    // Couleur de palette personnalisée : « #RRGGBB » strict, le client dérive le reste du thème.
+    static bool Hex(string v) => v.Length == 7 && v[0] == '#' && v.Skip(1).All(char.IsAsciiHexDigit);
     public static void Apply(Member member, string? paletteId) => Apply(member, new AppearanceInput(paletteId));
     // Chaque jeton est facultatif (les anciennes versions n’envoient que la palette) ; tout est validé avant d’appliquer.
     public static void Apply(Member member, AppearanceInput input)
     {
-        if (input.PaletteId is null && input.FontId is null && input.ListStyle is null && input.Density is null && input.Corners is null) throw new RuleException("Palette inconnue.");
+        if (input.PaletteId is null && input.FontId is null && input.ListStyle is null && input.Density is null && input.Corners is null
+            && input.CustomPrimary is null && input.CustomAccent is null && input.CustomDark is null) throw new RuleException("Palette inconnue.");
         if (input.PaletteId is not null && !PaletteIds.Contains(input.PaletteId)) throw new RuleException("Palette inconnue.");
         if (input.FontId is not null && !FontIds.Contains(input.FontId)) throw new RuleException("Police inconnue.");
         if (input.ListStyle is not null && !ListStyles.Contains(input.ListStyle)) throw new RuleException("Affichage inconnu.");
         if (input.Density is not null && !Densities.Contains(input.Density)) throw new RuleException("Densité inconnue.");
         if (input.Corners is not null && !CornerStyles.Contains(input.Corners)) throw new RuleException("Angles inconnus.");
+        if (input.CustomPrimary is not null && !Hex(input.CustomPrimary)) throw new RuleException("Couleur invalide.");
+        if (input.CustomAccent is not null && !Hex(input.CustomAccent)) throw new RuleException("Couleur invalide.");
         member.PaletteId = input.PaletteId ?? member.PaletteId;
         member.FontId = input.FontId ?? member.FontId;
         member.ListStyle = input.ListStyle ?? member.ListStyle;
         member.Density = input.Density ?? member.Density;
         member.Corners = input.Corners ?? member.Corners;
+        member.CustomPrimary = input.CustomPrimary ?? member.CustomPrimary;
+        member.CustomAccent = input.CustomAccent ?? member.CustomAccent;
+        member.CustomDark = input.CustomDark ?? member.CustomDark;
     }
 }

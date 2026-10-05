@@ -507,9 +507,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
       );
       if (ticketId == null || !mounted || data == null) return;
-      final ticket = maps(
-        data!['tickets'],
-      ).where((t) => t['id'] == ticketId).firstOrNull;
+      final ticket = maps(data!['tickets'])
+          .where((t) => t['id'] == ticketId)
+          .firstOrNull;
       if (ticket == null) {
         message('Cette tâche n’existe plus.');
       } else {
@@ -1139,9 +1139,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         tooltip: 'Notifications',
                         style: IconButton.styleFrom(
                           backgroundColor: Theme.of(context).cardTheme.color,
-                          foregroundColor: Theme.of(
-                            context,
-                          ).colorScheme.onSurface,
+                          foregroundColor: Theme.of(context)
+                              .colorScheme
+                              .onSurface,
                           side: BorderSide(
                             color: Theme.of(context).colorScheme.outlineVariant,
                           ),
@@ -1836,7 +1836,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     title: const Text('Apparence'),
                     subtitle: Text(
                       presetOf(AppAppearance.fromMember(me))?.name ??
-                          paletteById(me['paletteId']).name,
+                          paletteFor(AppAppearance.fromMember(me)).name,
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -2122,11 +2122,13 @@ class NotificationsPage extends StatelessWidget {
                         ? const TextStyle(fontWeight: FontWeight.bold)
                         : null,
                   ),
-                  subtitle: Text([
-                    if ((n['body'] ?? '').toString().isNotEmpty)
-                      n['body'].toString(),
-                    timeLabel(n['createdAt']),
-                  ].join('\n')),
+                  subtitle: Text(
+                    [
+                      if ((n['body'] ?? '').toString().isNotEmpty)
+                        n['body'].toString(),
+                      timeLabel(n['createdAt']),
+                    ].join('\n'),
+                  ),
                   isThreeLine: (n['body'] ?? '').toString().isNotEmpty,
                   onTap: n['ticketId'] == null
                       ? null
