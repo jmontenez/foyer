@@ -290,6 +290,55 @@ call(
     content="multipart/form-data; boundary=" + boundary,
     expected=400,
 )
+# Photo d’ingrédient : mémorisée au catalogue, servie par /images, remplacée puis retirée.
+photo = call(
+    "POST",
+    "/api/v1/shopping/ingredients/Tomates/image",
+    token=a,
+    raw=multipart(png),
+    content="multipart/form-data; boundary=" + boundary,
+)
+tomatoes = next(
+    i
+    for i in call("GET", "/api/v1/state", token=a)["shopping"]["ingredients"]
+    if i["name"] == "Tomates"
+)
+assert tomatoes["imageId"] == photo["imageId"], tomatoes
+assert call("GET", "/api/v1/images/" + photo["imageId"], token=b).startswith(b"\xff\xd8")
+call("GET", "/api/v1/images/" + photo["imageId"], expected=401)
+# Remplacement (même clé d’ingrédient, autre casse) : l’ancienne photo n’est plus servie.
+replaced = call(
+    "POST",
+    "/api/v1/shopping/ingredients/tomate/image",
+    token=b,
+    raw=multipart(png),
+    content="multipart/form-data; boundary=" + boundary,
+)
+assert replaced["imageId"] != photo["imageId"], replaced
+call("GET", "/api/v1/images/" + photo["imageId"], token=a, expected=404)
+# Photo sur un nom inconnu : l’ingrédient est créé ; retrait, puis la photo disparaît.
+fresh = call(
+    "POST",
+    "/api/v1/shopping/ingredients/Granola/image",
+    token=a,
+    raw=multipart(png),
+    content="multipart/form-data; boundary=" + boundary,
+)
+assert any(
+    i["name"] == "Granola" and i["imageId"] == fresh["imageId"]
+    for i in call("GET", "/api/v1/state", token=a)["shopping"]["ingredients"]
+)
+call("DELETE", "/api/v1/shopping/ingredients/Granola/image", token=a, expected=204)
+call("GET", "/api/v1/images/" + fresh["imageId"], token=a, expected=404)
+call(
+    "DELETE",
+    "/api/v1/shopping/ingredients/Inconnu%20du%20catalogue/image",
+    token=a,
+    expected=404,
+)
+# Oublier un ingrédient supprime aussi sa photo du disque (plus servie).
+call("DELETE", "/api/v1/shopping/ingredients/Tomates", token=a, expected=204)
+call("GET", "/api/v1/images/" + replaced["imageId"], token=a, expected=404)
 call(
     "PUT",
     "/api/v1/preferences",

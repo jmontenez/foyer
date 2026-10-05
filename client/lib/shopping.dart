@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
 import 'ui.dart';
@@ -304,21 +307,187 @@ Future<List<String>?> askPerformers(
   return ok == true ? chosen.toList() : null;
 }
 
-/// Résultat de la feuille d’article : quantité et rayon, ou retrait de la liste.
-typedef ItemChoice = ({String qty, String aisle, bool remove});
+// Octets des photos d’ingrédients déjà chargées, par identifiant : une photo remplacée change
+// d’identifiant, le cache ne sert donc jamais une version périmée. Un échec est retenté.
+final _photoCache = <String, Future<Uint8List>>{};
+
+Future<Uint8List> _photoBytes(Api api, String id) =>
+    _photoCache.putIfAbsent(id, () async {
+      try {
+        return await api.imageBytes(id);
+      } catch (_) {
+        _photoCache.remove(id);
+        rethrow;
+      }
+    });
+
+/// Vignette de la photo d’un ingrédient ; un toucher l’ouvre en grand.
+class IngredientPhoto extends StatelessWidget {
+  final Api api;
+  final String id;
+  final double size;
+  const IngredientPhoto({
+    super.key,
+    required this.api,
+    required this.id,
+    this.size = 40,
+  });
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    future: _photoBytes(api, id),
+    builder: (c, s) => s.hasData
+        ? InkWell(
+            onTap: () => showDialog<void>(
+              context: c,
+              builder: (d) => Dialog(
+                child: InteractiveViewer(child: Image.memory(s.data!)),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                s.data!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+              ),
+            ),
+          )
+        : SizedBox(
+            width: size,
+            height: size,
+            child: Center(
+              child: s.hasError
+                  ? const Icon(Icons.broken_image)
+                  : const CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+  );
+}
+
+/// Champ photo des feuilles article/ingrédient : vignette actuelle ou choisie, galerie, retrait.
+/// Les octets choisis (ou le retrait) remontent par [onChanged] ; l’envoi reste à l’appelant.
+class PhotoField extends StatefulWidget {
+  final Api api;
+  final String? imageId;
+  final void Function(Uint8List? photo, bool removePhoto) onChanged;
+  const PhotoField({
+    super.key,
+    required this.api,
+    required this.onChanged,
+    this.imageId,
+  });
+  @override
+  State<PhotoField> createState() => _PhotoFieldState();
+}
+
+class _PhotoFieldState extends State<PhotoField> {
+  Uint8List? photo;
+  bool removePhoto = false, picking = false;
+  bool get has => photo != null || (widget.imageId != null && !removePhoto);
+
+  Future<void> pick() async {
+    if (picking) return;
+    setState(() => picking = true);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 85,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        photo = bytes;
+        removePhoto = false;
+      });
+      widget.onChanged(photo, removePhoto);
+    } finally {
+      if (mounted) setState(() => picking = false);
+    }
+  }
+
+  void clear() {
+    setState(() {
+      photo = null;
+      removePhoto = true;
+    });
+    widget.onChanged(null, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Photo', style: TextStyle(color: c.onSurfaceVariant)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            if (photo != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  photo!,
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(width: 10),
+            ] else if (widget.imageId != null && !removePhoto) ...[
+              IngredientPhoto(api: widget.api, id: widget.imageId!, size: 48),
+              const SizedBox(width: 10),
+            ],
+            TextButton.icon(
+              onPressed: picking ? null : pick,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(has ? 'Changer' : 'Ajouter une photo'),
+            ),
+            if (has) TextButton(onPressed: clear, child: const Text('Retirer')),
+          ],
+        ),
+        Text(
+          'Attachée à l’ingrédient, la photo revient à chaque ajout.',
+          style: TextStyle(color: c.onSurfaceVariant, fontSize: 13),
+        ),
+      ],
+    );
+  }
+}
+
+/// Résultat de la feuille d’article : quantité, rayon et photo, ou retrait de la liste.
+typedef ItemChoice = ({
+  String qty,
+  String aisle,
+  bool remove,
+  Uint8List? photo,
+  bool removePhoto,
+});
 
 class ItemSheet extends StatefulWidget {
   final String name;
   final String? qty, aisle;
   final bool inList;
   final List<Map<String, dynamic>> aisles;
+  final Api api;
+  // Photo actuelle de l’ingrédient au catalogue, et affichage du champ photo (pas à l’import).
+  final String? imageId;
+  final bool withPhoto;
   const ItemSheet({
     super.key,
     required this.name,
     required this.aisles,
+    required this.api,
     this.qty,
     this.aisle,
     this.inList = false,
+    this.imageId,
+    this.withPhoto = false,
   });
   @override
   State<ItemSheet> createState() => _ItemSheetState();
@@ -327,6 +496,8 @@ class ItemSheet extends StatefulWidget {
 class _ItemSheetState extends State<ItemSheet> {
   late final qty = TextEditingController(text: widget.qty ?? '');
   late String aisle = widget.aisle ?? 'other';
+  Uint8List? photo;
+  bool removePhoto = false;
   @override
   void dispose() {
     qty.dispose();
@@ -337,6 +508,8 @@ class _ItemSheetState extends State<ItemSheet> {
     qty: qty.text.trim(),
     aisle: aisle,
     remove: false,
+    photo: photo,
+    removePhoto: removePhoto,
   ));
 
   @override
@@ -405,6 +578,17 @@ class _ItemSheetState extends State<ItemSheet> {
                     ),
                 ],
               ),
+              if (widget.withPhoto) ...[
+                const SizedBox(height: 12),
+                PhotoField(
+                  api: widget.api,
+                  imageId: widget.imageId,
+                  onChanged: (p, r) {
+                    photo = p;
+                    removePhoto = r;
+                  },
+                ),
+              ],
               if (widget.inList) ...[
                 const SizedBox(height: 12),
                 Align(
@@ -414,6 +598,8 @@ class _ItemSheetState extends State<ItemSheet> {
                       qty: '',
                       aisle: aisle,
                       remove: true,
+                      photo: null,
+                      removePhoto: false,
                     )),
                     icon: const Icon(Icons.delete_outline),
                     label: const Text('Retirer de la liste'),
@@ -434,15 +620,19 @@ typedef IngredientChoice = ({
   String qty,
   String aisle,
   bool forget,
+  Uint8List? photo,
+  bool removePhoto,
 });
 
 class IngredientSheet extends StatefulWidget {
   final Map<String, dynamic> ingredient;
   final List<Map<String, dynamic>> aisles;
+  final Api api;
   const IngredientSheet({
     super.key,
     required this.ingredient,
     required this.aisles,
+    required this.api,
   });
   @override
   State<IngredientSheet> createState() => _IngredientSheetState();
@@ -456,6 +646,8 @@ class _IngredientSheetState extends State<IngredientSheet> {
     text: widget.ingredient['lastQty']?.toString() ?? '',
   );
   late String aisle = widget.ingredient['aisle']?.toString() ?? 'other';
+  Uint8List? photo;
+  bool removePhoto = false;
   @override
   void dispose() {
     name.dispose();
@@ -470,6 +662,8 @@ class _IngredientSheetState extends State<IngredientSheet> {
       qty: qty.text.trim(),
       aisle: aisle,
       forget: false,
+      photo: photo,
+      removePhoto: removePhoto,
     ));
   }
 
@@ -542,6 +736,17 @@ class _IngredientSheetState extends State<IngredientSheet> {
               style: TextStyle(color: c.onSurfaceVariant, fontSize: 13),
             ),
             const SizedBox(height: 12),
+            PhotoField(
+              api: widget.api,
+              imageId: (widget.ingredient['imageId'] ?? '').toString().isEmpty
+                  ? null
+                  : widget.ingredient['imageId'].toString(),
+              onChanged: (p, r) {
+                photo = p;
+                removePhoto = r;
+              },
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 TextButton.icon(
@@ -550,6 +755,8 @@ class _IngredientSheetState extends State<IngredientSheet> {
                     qty: '',
                     aisle: aisle,
                     forget: true,
+                    photo: null,
+                    removePhoto: false,
                   )),
                   icon: const Icon(Icons.delete_outline),
                   label: const Text('Oublier'),
@@ -575,7 +782,7 @@ Future<bool> editIngredient(
     showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => KeyboardBack(
-      child: IngredientSheet(ingredient: ingredient, aisles: aisles),
+      child: IngredientSheet(ingredient: ingredient, aisles: aisles, api: api),
     ),
   );
   if (choice == null) return false;
@@ -590,6 +797,15 @@ Future<bool> editIngredient(
         'aisle': choice.aisle,
         'qty': choice.qty,
       });
+      // La photo après le renommage éventuel : l’ingrédient porte déjà son nouveau nom.
+      final renamed =
+          '/api/v1/shopping/ingredients/${Uri.encodeComponent(choice.name)}';
+      if (choice.removePhoto && choice.photo == null) {
+        await api.call('DELETE', '$renamed/image');
+      }
+      if (choice.photo != null) {
+        await api.ingredientImage(choice.name, choice.photo!, 'photo.jpg');
+      }
     }
     return true;
   } catch (e) {
@@ -659,6 +875,12 @@ class _IngredientsPageState extends State<IngredientsPage> {
               for (final i in of(a['id']))
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: (i['imageId'] ?? '').toString().isEmpty
+                      ? null
+                      : IngredientPhoto(
+                          api: widget.api,
+                          id: i['imageId'].toString(),
+                        ),
                   title: Text(i['name'].toString()),
                   subtitle: (i['lastQty'] ?? '').toString().isEmpty
                       ? null
@@ -763,6 +985,18 @@ class _ShoppingViewState extends State<ShoppingView> {
     }
   }
 
+  // Photo au catalogue pour cet ingrédient (joint par clé, comme le serveur).
+  String? photoOf(String name) {
+    final key = ingredientKey(name);
+    for (final i in catalog) {
+      if (ingredientKey(i['name'].toString()) == key) {
+        final id = (i['imageId'] ?? '').toString();
+        return id.isEmpty ? null : id;
+      }
+    }
+    return null;
+  }
+
   Future<ItemChoice?> sheet(
     String name, {
     String? qty,
@@ -778,6 +1012,9 @@ class _ShoppingViewState extends State<ShoppingView> {
       aisle: aisle,
       inList: inList,
       aisles: aisles,
+      api: widget.api,
+      imageId: photoOf(name),
+      withPhoto: widget.data['demo'] != true,
     ),
   );
 
@@ -819,6 +1056,22 @@ class _ShoppingViewState extends State<ShoppingView> {
           '/api/v1/shopping/items/${list['id']}/${existing['id']}',
           {'done': false, 'qty': choice.qty, 'aisle': choice.aisle},
         );
+      }
+      // La photo vit sur l’ingrédient du catalogue : posée ou retirée ici, elle vaut partout.
+      if (!choice.remove) {
+        final target =
+            existing?['text']?.toString() ??
+            ingredient?['name']?.toString() ??
+            name;
+        if (choice.removePhoto && choice.photo == null) {
+          await widget.api.call(
+            'DELETE',
+            '/api/v1/shopping/ingredients/${Uri.encodeComponent(target)}/image',
+          );
+        }
+        if (choice.photo != null) {
+          await widget.api.ingredientImage(target, choice.photo!, 'photo.jpg');
+        }
       }
     });
   }
@@ -1060,38 +1313,48 @@ class _ShoppingViewState extends State<ShoppingView> {
       );
     }
 
-    Widget row(Map<String, dynamic> item) => Dismissible(
-      key: ValueKey('${list['id']}-${item['id']}'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: c.errorContainer,
-        child: Icon(Icons.delete_outline, color: c.onErrorContainer),
-      ),
-      onDismissed: (_) => remove(list, item),
-      child: CheckboxListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-        controlAffinity: ListTileControlAffinity.leading,
-        value: item['done'] == true,
-        onChanged: (_) => toggle(list, item),
-        title: Text(
-          item['text'].toString(),
-          style: item['done'] == true
-              ? TextStyle(
-                  decoration: TextDecoration.lineThrough,
-                  color: c.onSurfaceVariant,
-                )
-              : null,
+    Widget row(Map<String, dynamic> item) {
+      final photoId = photoOf(item['text'].toString());
+      return Dismissible(
+        key: ValueKey('${list['id']}-${item['id']}'),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          color: c.errorContainer,
+          child: Icon(Icons.delete_outline, color: c.onErrorContainer),
         ),
-        secondary: TextButton(
-          onPressed: () => pick(list, item['text'].toString()),
-          child: Text(
-            (item['qty'] ?? '').toString().isEmpty ? 'Qté' : item['qty'],
+        onDismissed: (_) => remove(list, item),
+        child: CheckboxListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+          controlAffinity: ListTileControlAffinity.leading,
+          value: item['done'] == true,
+          onChanged: (_) => toggle(list, item),
+          title: Text(
+            item['text'].toString(),
+            style: item['done'] == true
+                ? TextStyle(
+                    decoration: TextDecoration.lineThrough,
+                    color: c.onSurfaceVariant,
+                  )
+                : null,
+          ),
+          secondary: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (photoId != null)
+                IngredientPhoto(api: widget.api, id: photoId),
+              TextButton(
+                onPressed: () => pick(list, item['text'].toString()),
+                child: Text(
+                  (item['qty'] ?? '').toString().isEmpty ? 'Qté' : item['qty'],
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: widget.onChanged,
@@ -1316,11 +1579,11 @@ class _ImportPageState extends State<ImportPage> {
     if (busy || text.text.trim().isEmpty) return;
     setState(() => busy = true);
     try {
-      final r = await widget.api
-          .call('POST', '/api/v1/shopping/import/preview', {
-            'list': widget.listId,
-            'text': text.text,
-          });
+      final r = await widget.api.call(
+        'POST',
+        '/api/v1/shopping/import/preview',
+        {'list': widget.listId, 'text': text.text},
+      );
       setState(() => rows = _maps(r));
     } catch (e) {
       show('$e');
@@ -1339,6 +1602,7 @@ class _ImportPageState extends State<ImportPage> {
         qty: row['qty']?.toString(),
         aisle: row['aisle']?.toString(),
         aisles: widget.aisles,
+        api: widget.api,
       ),
     );
     if (choice == null) return;
@@ -1354,14 +1618,17 @@ class _ImportPageState extends State<ImportPage> {
     if (busy || items.isEmpty) return;
     setState(() => busy = true);
     try {
-      final result = await widget.api
-          .call('POST', '/api/v1/shopping/items/batch', {
-            'list': widget.listId,
-            'items': [
-              for (final r in items)
-                {'name': r['name'], 'qty': r['qty'], 'aisle': r['aisle']},
-            ],
-          });
+      final result = await widget.api.call(
+        'POST',
+        '/api/v1/shopping/items/batch',
+        {
+          'list': widget.listId,
+          'items': [
+            for (final r in items)
+              {'name': r['name'], 'qty': r['qty'], 'aisle': r['aisle']},
+          ],
+        },
+      );
       if (mounted) {
         Navigator.pop(context, Map<String, dynamic>.from(result as Map));
       }
