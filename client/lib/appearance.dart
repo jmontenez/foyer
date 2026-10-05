@@ -534,6 +534,9 @@ class PalettePicker extends StatefulWidget {
 }
 
 class _PalettePickerState extends State<PalettePicker> {
+  // L’apparence à l’ouverture, pour que « Annuler » la restaure — capturée tout de suite,
+  // avant le moindre réglage.
+  late final AppAppearance opened;
   // Curseurs tenus en TSL pour éviter la dérive des allers-retours hexadécimaux
   // (teinte perdue quand la saturation ou la luminosité touche une borne).
   late HSLColor primary = HSLColor.fromColor(
@@ -542,6 +545,12 @@ class _PalettePickerState extends State<PalettePicker> {
   late HSLColor accent = HSLColor.fromColor(
     colorFromHex(selectedAppearance.value.customAccent)!,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    opened = selectedAppearance.value;
+  }
 
   // Tout réglage du duo bascule la palette en « Sur mesure », aperçu immédiat.
   void custom(AppAppearance Function(AppAppearance) change) => setState(
@@ -646,7 +655,12 @@ class _PalettePickerState extends State<PalettePicker> {
             Row(
               children: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  // Seul « Annuler » revient en arrière ; toute autre fermeture
+                  // (barrière, glissement) garde l’aperçu à l’écran.
+                  onPressed: () {
+                    selectedAppearance.value = opened;
+                    Navigator.pop(context);
+                  },
                   child: const Text('Annuler'),
                 ),
                 const Spacer(),
@@ -669,38 +683,43 @@ class _PalettePickerState extends State<PalettePicker> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Semantics(
         selected: selected,
-        child: ListTile(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          tileColor: selected
+        // Material propre à la tuile : fond et ripple restent clippés par la liste, au lieu
+        // d’être peints sur le Material de la feuille et de déborder au-dessus des onglets.
+        child: Material(
+          color: selected
               ? Theme.of(context).colorScheme.primaryContainer
               : Theme.of(context).cardTheme.color,
-          leading: Container(
-            width: 72,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: p.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            leading: Container(
+              width: 72,
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: p.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _swatch(p.primary),
+                  const SizedBox(width: 6),
+                  _swatch(p.accent),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _swatch(p.primary),
-                const SizedBox(width: 6),
-                _swatch(p.accent),
-              ],
-            ),
-          ),
-          title: Text(p.name),
-          subtitle: p.dark ? const Text('Thème sombre') : null,
-          trailing: selected ? const Icon(Icons.check_circle) : null,
-          onTap: () => setState(
-            () => selectedAppearance.value = selectedAppearance.value.copyWith(
-              paletteId: p.id,
+            title: Text(p.name),
+            subtitle: p.dark ? const Text('Thème sombre') : null,
+            trailing: selected ? const Icon(Icons.check_circle) : null,
+            onTap: () => setState(
+              () => selectedAppearance.value = selectedAppearance.value
+                  .copyWith(paletteId: p.id),
             ),
           ),
         ),
@@ -817,7 +836,10 @@ class _AppearancePageState extends State<AppearancePage> {
         child: const PalettePicker(),
       ),
     );
-    choose(picked ?? current);
+    // Feuille fermée par la barrière ou un glissement (sur grand écran, le bouton
+    // Enregistrer de la page passe par la barrière) : on garde ce qui est à l’écran.
+    // « Annuler » a déjà restauré l’apparence d’ouverture avant de fermer.
+    choose(picked ?? selectedAppearance.value);
   }
 
   Widget heading(String label) => Padding(
