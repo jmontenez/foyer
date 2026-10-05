@@ -105,11 +105,22 @@ class Api {
     return value;
   }
 
-  Future<void> image(String ticket, List<int> bytes, String name) async {
-    final request = http.MultipartRequest(
-      'POST',
-      uri('/api/v1/tickets/$ticket/images'),
-    );
+  Future<void> image(String ticket, List<int> bytes, String name) =>
+      _upload('/api/v1/tickets/$ticket/images', bytes, name);
+
+  /// Photo d’un ingrédient du catalogue des courses (créé au besoin par le serveur).
+  Future<void> ingredientImage(
+    String ingredient,
+    List<int> bytes,
+    String name,
+  ) => _upload(
+    '/api/v1/shopping/ingredients/${Uri.encodeComponent(ingredient)}/image',
+    bytes,
+    name,
+  );
+
+  Future<void> _upload(String path, List<int> bytes, String name) async {
+    final request = http.MultipartRequest('POST', uri(path));
     request.headers.addAll(headers);
     request.files.add(
       http.MultipartFile.fromBytes('image', bytes, filename: name),

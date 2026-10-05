@@ -12,6 +12,8 @@ public sealed class Ingredient
     public int Uses { get; set; }
     public string? LastQty { get; set; }
     public DateTimeOffset? LastUsedAt { get; set; }
+    // Photo mémorisée au catalogue : visible sur l’article de chaque liste, elle revient à chaque ajout.
+    public string? ImageId { get; set; }
 }
 
 public record Aisle(string Id, string Name);
@@ -201,9 +203,38 @@ public static class Shopping
         return known;
     }
 
-    public static void Forget(Household h, string name)
+    // Renvoie la photo de l’ingrédient oublié, pour que l’appelant supprime le fichier.
+    public static string? Forget(Household h, string name)
     {
-        if (h.Ingredients.RemoveAll(x => Key(x.Name) == Key(name ?? "")) == 0) throw new RuleException("Ingrédient introuvable.", 404);
+        var gone = h.Ingredients.Where(x => Key(x.Name) == Key(name ?? "")).ToList();
+        if (gone.Count == 0) throw new RuleException("Ingrédient introuvable.", 404);
+        foreach (var x in gone) h.Ingredients.Remove(x);
+        return gone.Select(x => x.ImageId).FirstOrDefault(i => i != null);
+    }
+
+    // Pose la photo d’un ingrédient, créé au besoin (article d’une liste encore inconnu du
+    // catalogue). Renvoie la photo remplacée, pour que l’appelant supprime le fichier.
+    public static string? SetImage(Household h, string name, string imageId, DateTimeOffset now)
+    {
+        var n = name?.Trim() ?? "";
+        if (n.Length is < 1 or > MaxName) throw new RuleException($"Nom d’ingrédient requis ({MaxName} caractères maximum).");
+        if (h.Ingredients.FirstOrDefault(x => Key(x.Name) == Key(n)) is not { } known)
+        {
+            Remember(h, n, "other", null, false, now);
+            known = h.Ingredients.First(x => Key(x.Name) == Key(n));
+        }
+        var old = known.ImageId;
+        known.ImageId = imageId;
+        return old == imageId ? null : old;
+    }
+
+    // Renvoie la photo retirée, pour que l’appelant supprime le fichier.
+    public static string? RemoveImage(Household h, string name)
+    {
+        var known = h.Ingredients.FirstOrDefault(x => Key(x.Name) == Key(name ?? "")) ?? throw new RuleException("Ingrédient introuvable.", 404);
+        var old = known.ImageId;
+        known.ImageId = null;
+        return old;
     }
 
     // Réunit [from] dans [into] : même ingrédient = un seul article, quantités mises bout à bout.

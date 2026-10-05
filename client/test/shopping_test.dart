@@ -174,13 +174,14 @@ void main() {
               onPressed: () async => result = await showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => const IngredientSheet(
-                  ingredient: {
+                builder: (_) => IngredientSheet(
+                  api: Api(),
+                  ingredient: const {
                     'name': 'Yaourts',
                     'aisle': 'dairy',
                     'lastQty': '4',
                   },
-                  aisles: [
+                  aisles: const [
                     {'id': 'dairy', 'name': 'Crèmerie & œufs'},
                     {'id': 'frozen', 'name': 'Surgelés'},
                   ],
@@ -208,6 +209,8 @@ void main() {
       qty: '4',
       aisle: 'frozen',
       forget: false,
+      photo: null,
+      removePhoto: false,
     ));
   });
 
@@ -251,10 +254,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byType(TextField),
-      '500 g de farine\nlevure',
-    );
+    await tester.enterText(find.byType(TextField), '500 g de farine\nlevure');
     await tester.pump();
     await tester.tap(find.text('Analyser'));
     await tester.pumpAndSettle();
@@ -294,10 +294,11 @@ void main() {
                 onPressed: () => showModalBottomSheet<ItemChoice>(
                   context: context,
                   isScrollControlled: true,
-                  builder: (_) => const ItemSheet(
+                  builder: (_) => ItemSheet(
                     name: 'Lait',
                     aisle: 'dairy',
-                    aisles: [
+                    api: Api(),
+                    aisles: const [
                       {'id': 'produce', 'name': 'Fruits & légumes'},
                       {'id': 'dairy', 'name': 'Crèmerie & œufs'},
                       {'id': 'bakery', 'name': 'Boulangerie'},

@@ -291,7 +291,11 @@ api.MapPost("/shopping/schedule", async (ShoppingScheduleInput input, HttpContex
 }));
 api.MapPut("/shopping/ingredients/{name}", async (string name, IngredientInput input, HttpContext ctx, Store store) => await store.Update(h =>
     Shopping.EditIngredient(h, name, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
-api.MapDelete("/shopping/ingredients/{name}", async (string name, Store store) => await store.Update(h => { Shopping.Forget(h, name); return Results.NoContent(); }));
+api.MapDelete("/shopping/ingredients/{name}", async (string name, Store store) =>
+{
+    if (await store.Update(h => Shopping.Forget(h, name)) is { } removed) File.Delete(Path.Combine(settings.Images, removed + ".jpg"));
+    return Results.NoContent();
+});
 api.MapPut("/shopping/aisle-order", async (List<string> ids, Store store) => await store.Update(h => { Shopping.ReorderAisles(h, ids); return Results.NoContent(); }));
 api.MapPost("/tags", async (TagInput input, Store store) => await store.Update(h =>
 {
@@ -314,6 +318,46 @@ api.MapPost("/tickets/{id}/images", async (string id, HttpContext ctx, Store sto
     // Aucun fichier d’inconnus hébergé ni décodé sur la démonstration publique.
     if (settings.PublicDemo) throw new RuleException("Les images sont désactivées dans la démonstration.", 403);
     await store.Read(h => Find(h, id));
+    var (imageId, path) = await SaveUpload(ctx, settings);
+    var bytes = await File.ReadAllBytesAsync(path); var attachment = new Attachment(imageId, imageId + ".jpg", Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length, DateTimeOffset.UtcNow);
+    try { return await store.Update(h => { if (h.Maintenance) throw new RuleException("Maintenance en cours.", 503); var me = Security.Member(ctx, h); var t = Find(h, id); if (t.Images.Count >= 20) throw new RuleException("20 images maximum par ticket."); t.Images.Add(attachment); t.Version++; Rules.Event(t, me.Id, "image", "Image ajoutée", DateTimeOffset.UtcNow); return t; }); }
+    catch { File.Delete(path); throw; }
+});
+// Photo d’un ingrédient : rattachée au catalogue (pas à un article), elle suit l’ingrédient
+// dans toutes les listes et revient à chaque nouvel ajout. Une seule photo par ingrédient.
+api.MapPost("/shopping/ingredients/{name}/image", async (string name, HttpContext ctx, Store store) =>
+{
+    if (settings.PublicDemo) throw new RuleException("Les images sont désactivées dans la démonstration.", 403);
+    var (imageId, path) = await SaveUpload(ctx, settings);
+    string? replaced;
+    try { replaced = await store.Update(h => { if (h.Maintenance) throw new RuleException("Maintenance en cours.", 503); return Shopping.SetImage(h, name, imageId, DateTimeOffset.UtcNow); }); }
+    catch { File.Delete(path); throw; }
+    if (replaced != null) File.Delete(Path.Combine(settings.Images, replaced + ".jpg"));
+    return Results.Ok(new { imageId });
+});
+api.MapDelete("/shopping/ingredients/{name}/image", async (string name, Store store) =>
+{
+    if (await store.Update(h => Shopping.RemoveImage(h, name)) is { } removed) File.Delete(Path.Combine(settings.Images, removed + ".jpg"));
+    return Results.NoContent();
+});
+api.MapGet("/images/{id}", async (string id, Store store) =>
+{
+    // Toujours un nom de fichier issu d’une référence stockée, jamais du chemin demandé.
+    var file = await store.Read(h =>
+        h.Tickets.SelectMany(t => t.Images).FirstOrDefault(i => i.Id == id)?.FileName
+        ?? (h.Ingredients.Any(x => x.ImageId == id) ? id + ".jpg" : null))
+        ?? throw new RuleException("Image introuvable.", 404);
+    return Results.File(Path.Combine(settings.Images, file), "image/jpeg");
+});
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
+app.UseDefaultFiles(); app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache" });
+app.MapFallback(async ctx => { if (ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/auth")) { ctx.Response.StatusCode = 404; return; } var index = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html"); if (File.Exists(index)) { ctx.Response.ContentType = "text/html"; await ctx.Response.SendFileAsync(index); } else { ctx.Response.StatusCode = 503; await ctx.Response.WriteAsync("Client web non compilé. Consultez docs/installation.md."); } });
+app.Run();
+static Ticket Find(Household h, string id) => h.Tickets.FirstOrDefault(t => t.Id == id) ?? throw new RuleException("Ticket introuvable.", 404);
+// Image envoyée en multipart : décodée, redressée, réduite à 2048 px, débarrassée de ses
+// métadonnées (EXIF/IPTC/XMP), réencodée en JPEG sous un identifiant neuf.
+static async Task<(string imageId, string path)> SaveUpload(HttpContext ctx, Settings settings)
+{
     var form = await ctx.Request.ReadFormAsync(); var file = form.Files.GetFile("image") ?? throw new RuleException("Image requise.");
     if (file.Length > 10 * 1024 * 1024 || file.Length == 0) throw new RuleException("Image limitée à 10 Mo.");
     using var source = new MemoryStream(); await file.CopyToAsync(source); source.Position = 0;
@@ -327,21 +371,9 @@ api.MapPost("/tickets/{id}/images", async (string id, HttpContext ctx, Store sto
         image.Metadata.ExifProfile = null; image.Metadata.IptcProfile = null; image.Metadata.XmpProfile = null;
         var imageId = Guid.NewGuid().ToString("N"); var path = Path.Combine(settings.Images, imageId + ".jpg");
         await image.SaveAsJpegAsync(path);
-        var bytes = await File.ReadAllBytesAsync(path); var attachment = new Attachment(imageId, imageId + ".jpg", Convert.ToHexString(SHA256.HashData(bytes)), bytes.Length, DateTimeOffset.UtcNow);
-        try { return await store.Update(h => { if (h.Maintenance) throw new RuleException("Maintenance en cours.", 503); var me = Security.Member(ctx, h); var t = Find(h, id); if (t.Images.Count >= 20) throw new RuleException("20 images maximum par ticket."); t.Images.Add(attachment); t.Version++; Rules.Event(t, me.Id, "image", "Image ajoutée", DateTimeOffset.UtcNow); return t; }); }
-        catch { File.Delete(path); throw; }
+        return (imageId, path);
     }
-});
-api.MapGet("/images/{id}", async (string id, Store store) =>
-{
-    var image = await store.Read(h => h.Tickets.SelectMany(t => t.Images).FirstOrDefault(i => i.Id == id)) ?? throw new RuleException("Image introuvable.", 404);
-    return Results.File(Path.Combine(settings.Images, image.FileName), "image/jpeg");
-});
-if (app.Environment.IsDevelopment()) app.MapOpenApi();
-app.UseDefaultFiles(); app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache" });
-app.MapFallback(async ctx => { if (ctx.Request.Path.StartsWithSegments("/api") || ctx.Request.Path.StartsWithSegments("/auth")) { ctx.Response.StatusCode = 404; return; } var index = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html"); if (File.Exists(index)) { ctx.Response.ContentType = "text/html"; await ctx.Response.SendFileAsync(index); } else { ctx.Response.StatusCode = 503; await ctx.Response.WriteAsync("Client web non compilé. Consultez docs/installation.md."); } });
-app.Run();
-static Ticket Find(Household h, string id) => h.Tickets.FirstOrDefault(t => t.Id == id) ?? throw new RuleException("Ticket introuvable.", 404);
+}
 public record GoogleLogin(string IdToken);
 public record PreferenceInput(string DigestTime, bool DigestEnabled);
 public record DeviceInput(string Token, long? AppVersion = null);
