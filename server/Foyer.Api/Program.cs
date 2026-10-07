@@ -119,7 +119,7 @@ if (demoLogin)
     {
         if (who is < 0 or > 1) throw new RuleException("Compte de démonstration inconnu.", 404);
         if (!settings.PublicDemo && (ctx.Connection.RemoteIpAddress is not { } remote || !System.Net.IPAddress.IsLoopback(remote))) throw new RuleException("Démo locale uniquement.", 403);
-        Security.CheckWrite(ctx, settings);
+        Security.CheckLogin(ctx, settings); // accepte aussi l'app Android (pas d'Origin), cf. canal beta
         var email = settings.AllowedEmails.ElementAtOrDefault(who) ?? throw new RuleException("Démo non configurée.");
         var login = await store.Update(h => { var l = Security.Login(h, settings, $"demo-{who}", email, who == 0 ? "Camille" : "Alex", settings.PublicDemo ? "Démonstration" : "Démo locale"); if (settings.PublicDemo) Demo.PruneSessions(h); return l; });
         ctx.Response.Cookies.Append(Security.Cookie, login.token, new CookieOptions { HttpOnly = true, Secure = settings.Secure, SameSite = SameSiteMode.Lax, Path = "/" });
