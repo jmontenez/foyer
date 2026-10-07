@@ -1060,7 +1060,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
       );
     }
-    final wide = MediaQuery.sizeOf(context).width > 900;
+    // Seuil mesuré sur les pliants (Fold 5 ouvert 690, Magic V5 724) : au-delà,
+    // le menu passe sur le côté (rail) plutôt qu'en bas. Fermés (~350), ils gardent
+    // le bandeau bas.
+    final wide = MediaQuery.sizeOf(context).width >= 640;
     final today =
         DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
     final subtitles = [
@@ -1129,6 +1132,18 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 selectedIndex: destination,
                 onDestinationSelected: openDestination,
                 labelType: NavigationRailLabelType.all,
+                // Bande teintée par l'accent du duo (le rail coloré du sketch) ;
+                // le signe actif reçoit un tampon au coin coupé dans le principal.
+                backgroundColor: Color.alphaBlend(
+                  Theme.of(context).colorScheme.secondaryContainer.withValues(
+                    alpha: Theme.of(context).brightness == Brightness.dark
+                        ? .30
+                        : .48,
+                  ),
+                  Theme.of(context).scaffoldBackgroundColor,
+                ),
+                indicatorColor: Theme.of(context).colorScheme.primary,
+                indicatorShape: cutShape(12),
                 destinations: [
                   for (final (i, (sign, label)) in destinations.indexed)
                     NavigationRailDestination(
@@ -1136,7 +1151,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         sign,
                         size: 22,
                         color: i == destination
-                            ? Theme.of(context).colorScheme.primary
+                            ? Theme.of(context).colorScheme.onPrimary
                             : Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       label: Text(label),
@@ -2614,6 +2629,102 @@ class _TicketPageState extends State<TicketPage> {
   bool get closedTicket =>
       t['stageId'] == 'done' || t['stageId'] == 'abandoned';
 
+  // Checklist (étapes ou liste de courses) : case ciselée, retrait, ajout.
+  // Partagé entre la création et l'édition d'une fiche (une seule source).
+  List<Widget> checklistBlock() => [
+    ...checklistHeading(),
+    ...checklistItems().map(
+      (item) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CutCheck(
+          value: item['done'] == true,
+          semanticLabel: itemLabel(item),
+          onChanged: (v) => setState(() {
+            t['checklist'] = maps(t['checklist'])
+                .map((c) => c['id'] == item['id'] ? {...c, 'done': v} : c)
+                .toList();
+            dirty = true;
+          }),
+        ),
+        onTap: () => setState(() {
+          HapticFeedback.selectionClick();
+          t['checklist'] = maps(t['checklist'])
+              .map(
+                (c) => c['id'] == item['id']
+                    ? {...c, 'done': c['done'] != true}
+                    : c,
+              )
+              .toList();
+          dirty = true;
+        }),
+        title: Text(itemLabel(item)),
+        trailing: IconButton(
+          tooltip: 'Retirer',
+          icon: const Icon(Icons.close),
+          onPressed: () => setState(() {
+            t['checklist'] = maps(t['checklist'])
+              ..removeWhere((c) => c['id'] == item['id']);
+            dirty = true;
+          }),
+        ),
+      ),
+    ),
+    TextButton.icon(
+      onPressed: addCheck,
+      icon: const Icon(Icons.add),
+      label: const Text('Ajouter une étape'),
+    ),
+  ];
+
+  // Galerie d'images de la fiche (masquée en démo), partagée création/édition.
+  List<Widget> imagesBlock() => [
+    if (widget.data['demo'] != true) heading('Images'),
+    if (widget.data['demo'] != true)
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: maps(t['images']).map((image) {
+          final key = image['id'].toString();
+          return FutureBuilder<Uint8List>(
+            future: imageCache.putIfAbsent(key, () => api.imageBytes(key)),
+            builder: (c, s) => s.hasData
+                ? InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (c) => Dialog(
+                        child: InteractiveViewer(child: Image.memory(s.data!)),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        s.data!,
+                        width: 120,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                : SizedBox(
+                    width: 120,
+                    height: 100,
+                    child: Center(
+                      child: s.hasError
+                          ? const Icon(Icons.broken_image)
+                          : const CircularProgressIndicator(),
+                    ),
+                  ),
+          );
+        }).toList(),
+      ),
+    if (widget.data['demo'] != true)
+      TextButton.icon(
+        onPressed: saving ? null : upload,
+        icon: const Icon(Icons.add_photo_alternate_outlined),
+        label: const Text('Ajouter une image'),
+      ),
+  ];
+
   Future<void> finish() async {
     // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
     HapticFeedback.mediumImpact();
@@ -3409,101 +3520,8 @@ class _TicketPageState extends State<TicketPage> {
                         ),
                       ],
                     ),
-                    ...checklistHeading(),
-                    ...checklistItems().map(
-                      (item) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: CutCheck(
-                          value: item['done'] == true,
-                          semanticLabel: itemLabel(item),
-                          onChanged: (v) => setState(() {
-                            t['checklist'] = maps(t['checklist'])
-                                .map(
-                                  (c) => c['id'] == item['id']
-                                      ? {...c, 'done': v}
-                                      : c,
-                                )
-                                .toList();
-                            dirty = true;
-                          }),
-                        ),
-                        onTap: () => setState(() {
-                          HapticFeedback.selectionClick();
-                          t['checklist'] = maps(t['checklist'])
-                              .map(
-                                (c) => c['id'] == item['id']
-                                    ? {...c, 'done': c['done'] != true}
-                                    : c,
-                              )
-                              .toList();
-                          dirty = true;
-                        }),
-                        title: Text(itemLabel(item)),
-                        trailing: IconButton(
-                          tooltip: 'Retirer',
-                          icon: const Icon(Icons.close),
-                          onPressed: () => setState(() {
-                            t['checklist'] = maps(t['checklist'])
-                              ..removeWhere((c) => c['id'] == item['id']);
-                            dirty = true;
-                          }),
-                        ),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: addCheck,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ajouter une étape'),
-                    ),
-                    if (widget.data['demo'] != true) heading('Images'),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: maps(t['images']).map((image) {
-                        final key = image['id'].toString();
-                        return FutureBuilder<Uint8List>(
-                          future: imageCache.putIfAbsent(
-                            key,
-                            () => api.imageBytes(key),
-                          ),
-                          builder: (c, s) => s.hasData
-                              ? InkWell(
-                                  onTap: () => showDialog<void>(
-                                    context: context,
-                                    builder: (c) => Dialog(
-                                      child: InteractiveViewer(
-                                        child: Image.memory(s.data!),
-                                      ),
-                                    ),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.memory(
-                                      s.data!,
-                                      width: 120,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                )
-                              : SizedBox(
-                                  width: 120,
-                                  height: 100,
-                                  child: Center(
-                                    child: s.hasError
-                                        ? const Icon(Icons.broken_image)
-                                        : const CircularProgressIndicator(),
-                                  ),
-                                ),
-                        );
-                      }).toList(),
-                    ),
-                    if (widget.data['demo'] != true)
-                      TextButton.icon(
-                        onPressed: saving ? null : upload,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const Text('Ajouter une image'),
-                      ),
+                    ...checklistBlock(),
+                    ...imagesBlock(),
                   ],
                 ] else ...[
                   ...summary(),
@@ -3544,101 +3562,8 @@ class _TicketPageState extends State<TicketPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ...checklistHeading(),
-                  ...checklistItems().map(
-                    (item) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CutCheck(
-                        value: item['done'] == true,
-                        semanticLabel: itemLabel(item),
-                        onChanged: (v) => setState(() {
-                          t['checklist'] = maps(t['checklist'])
-                              .map(
-                                (c) => c['id'] == item['id']
-                                    ? {...c, 'done': v}
-                                    : c,
-                              )
-                              .toList();
-                          dirty = true;
-                        }),
-                      ),
-                      onTap: () => setState(() {
-                        HapticFeedback.selectionClick();
-                        t['checklist'] = maps(t['checklist'])
-                            .map(
-                              (c) => c['id'] == item['id']
-                                  ? {...c, 'done': c['done'] != true}
-                                  : c,
-                            )
-                            .toList();
-                        dirty = true;
-                      }),
-                      title: Text(itemLabel(item)),
-                      trailing: IconButton(
-                        tooltip: 'Retirer',
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(() {
-                          t['checklist'] = maps(t['checklist'])
-                            ..removeWhere((c) => c['id'] == item['id']);
-                          dirty = true;
-                        }),
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: addCheck,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Ajouter une étape'),
-                  ),
-                  if (widget.data['demo'] != true) heading('Images'),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: maps(t['images']).map((image) {
-                      final key = image['id'].toString();
-                      return FutureBuilder<Uint8List>(
-                        future: imageCache.putIfAbsent(
-                          key,
-                          () => api.imageBytes(key),
-                        ),
-                        builder: (c, s) => s.hasData
-                            ? InkWell(
-                                onTap: () => showDialog<void>(
-                                  context: context,
-                                  builder: (c) => Dialog(
-                                    child: InteractiveViewer(
-                                      child: Image.memory(s.data!),
-                                    ),
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.memory(
-                                    s.data!,
-                                    width: 120,
-                                    height: 100,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              )
-                            : SizedBox(
-                                width: 120,
-                                height: 100,
-                                child: Center(
-                                  child: s.hasError
-                                      ? const Icon(Icons.broken_image)
-                                      : const CircularProgressIndicator(),
-                                ),
-                              ),
-                      );
-                    }).toList(),
-                  ),
-                  if (widget.data['demo'] != true)
-                    TextButton.icon(
-                      onPressed: saving ? null : upload,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Ajouter une image'),
-                    ),
+                  ...checklistBlock(),
+                  ...imagesBlock(),
                   heading('On en parle'),
                   ...maps(t['comments']).map(
                     (c) => Card(
