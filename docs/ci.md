@@ -16,10 +16,13 @@ Se connecter au compte GitHub autorisé, ouvrir **Actions → Tests et builds Fo
 
 Un push sur `main` ou un tag `v*` lance la même validation puis crée une préversion dans **Releases** : APK, `foyer-android.json`, build web `foyer-web.tar.gz` et `SHA256SUMS` couvrant l’APK et le build web. Le dépôt étant privé, ces fichiers nécessitent aussi un accès au dépôt. Ce workflow ne publie rien sur Google Play et n’accède jamais au serveur : c’est le Mac qui récupère les releases `ci-N` (voir [déploiement automatique](installation.md#8-déploiement-automatique)).
 
+Un push sur la branche `redesign` produit de la même manière une prerelease **`beta-N`** : l’app **« Foyer β »** (`fr.foyer.foyer.beta`), installable à côté de l’app principale et pointée sur l’instance de validation — jamais déployée par le Mac (seuls les tags `ci-N` sont retenus). Détails et limites : [beta.md](beta.md).
+
 ## Configuration
 
 - Variable Actions `FIREBASE_ANDROID_JSON` : contenu de la configuration **cliente** google-services.json ; jamais un compte de service.
 - Variable optionnelle `FOYER_API_URL` : origine HTTPS définitive du serveur. Absente pour le moment ; saisie dans l’application.
+- Variable `FOYER_BETA_API_URL` : origine HTTPS de l’instance de validation du canal beta (la démo publique). Requise seulement pour les builds de la branche `redesign`.
 - Firebase côté serveur et secret OAuth Web ne sont pas nécessaires aux builds et ne doivent pas être ajoutés aux artefacts.
 
 Les APK release utilisent une clé RSA dédiée persistante via les secrets Actions `ANDROID_KEYSTORE_BASE64`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_PASSWORD` et `ANDROID_KEY_ALIAS`. Seul le job Android reçoit ces secrets ; copie de clé temporaire effacée même après échec. La signature est vérifiée avant publication.
