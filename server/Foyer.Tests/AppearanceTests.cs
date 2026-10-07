@@ -34,6 +34,20 @@ public class AppearanceTests
         Appearance.Apply(member, id);
         Assert.Equal(id, member.PaletteId);
     }
+    // Refonte « Découpes » : ids v2 acceptés en amont, le temps de la beta.
+    [Theory]
+    [InlineData("d2-sauge")]
+    [InlineData("d2-encre")]
+    [InlineData("d2-terre")]
+    [InlineData("d2-sauge-nuit")]
+    [InlineData("d2-braise-nuit")]
+    [InlineData("d2-prune-nuit")]
+    public void RedesignPalettesAreAccepted(string id)
+    {
+        var member = new Member();
+        Appearance.Apply(member, id);
+        Assert.Equal(id, member.PaletteId);
+    }
     [Fact]
     public void DesignTokensAreValidatedTogetherAndKeptWhenOmitted()
     {
