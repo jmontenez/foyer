@@ -1040,6 +1040,93 @@ class _StampPainter extends CustomPainter {
   bool shouldRepaint(_StampPainter old) => old.color != color;
 }
 
+/// État vide « Découpes » : une petite composition de signes superposés en
+/// marge, un titre adulte et direct, une phrase d’explication. Jamais de
+/// mascotte ni de félicitation ; les signes vivent au-dessus du texte, pas
+/// dessous.
+class EmptyState extends StatelessWidget {
+  final String title, message;
+  final List<FoyerSign> signs;
+  const EmptyState({
+    super.key,
+    required this.title,
+    required this.message,
+    this.signs = const [FoyerSign.star, FoyerSign.leaf, FoyerSign.house],
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = tokensOf(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 40, 28, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 150,
+              height: 104,
+              child: CustomPaint(
+                painter: _ComposedSigns(signs, c.secondaryContainer, c.primary),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: t.displayFont,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: c.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposedSigns extends CustomPainter {
+  final List<FoyerSign> signs;
+  final Color a, b;
+  _ComposedSigns(this.signs, this.a, this.b);
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Trois signes de tailles et teintes différentes, posés en biais —
+    // comme des découpes de papier éparpillées, pas une grille.
+    final spots = [
+      (Offset(size.width * .18, size.height * .30), 58.0, -.18, a),
+      (Offset(size.width * .60, size.height * .12), 44.0, .12, b),
+      (Offset(size.width * .66, size.height * .56), 50.0, .22, a),
+    ];
+    for (final (i, (center, s, angle, color)) in spots.indexed) {
+      if (i >= signs.length) break;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(angle);
+      canvas.translate(-s / 2, -s / 2);
+      final painter = _SignPainter(
+        signs[i],
+        color.withValues(alpha: i == 1 ? .9 : .5),
+      );
+      painter.paint(canvas, Size.square(s));
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ComposedSigns old) =>
+      old.a != a || old.b != b || old.signs != signs;
+}
+
 /// Titre de section d’une liste (« EN RETARD 1 »), avec un signe Découpes
 /// facultatif en marge (rayons de courses).
 class SectionLabel extends StatelessWidget {

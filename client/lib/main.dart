@@ -1109,7 +1109,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ? null
           : FloatingActionButton(
               tooltip: 'Une nouvelle tâche',
-              shape: const CircleBorder(),
+              shape: cutShape(tokensOf(context).cut + 4),
               onPressed: quickCreate,
               child: const Icon(Icons.add, size: 28),
             ),
@@ -1580,25 +1580,27 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     }
   }
 
-  Widget empty() => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.spa_outlined,
-          size: 52,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        SizedBox(height: 16),
-        Text(
-          'De la place pour la suite.',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        SizedBox(height: 8),
-        Text('Aucune tâche ne correspond à cette vue.'),
-      ],
-    ),
-  );
+  Widget empty() {
+    // Message adulte et direct, propre à la vue ouverte.
+    final (title, message) = switch (tab) {
+      0 => (
+        'De la place pour la suite.',
+        'Rien à faire maintenant. Profitez-en.',
+      ),
+      1 => ('Semaine dégagée.', 'Aucune tâche datée d’ici dimanche.'),
+      3 => ('Rien en attente.', 'Les idées sans date se posent ici.'),
+      4 => (
+        'Le journal est vide.',
+        'Ce qu’on termine ou qu’on décide de ne pas faire s’y retrouvera.',
+      ),
+      _ => (
+        'De la place pour la suite.',
+        'Aucune tâche ne correspond à cette vue.',
+      ),
+    };
+    return EmptyState(title: title, message: message);
+  }
+
   // Déplacer une carte d’étape : même enregistrement que la fiche, avec contrôle de version.
   Future<void> moveTicket(Map<String, dynamic> t, String stageId) async {
     try {
