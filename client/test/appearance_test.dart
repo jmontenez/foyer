@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foyer/appearance.dart';
+import 'package:foyer/ui.dart';
 
 double contrast(Color x, Color y) {
   final a = x.computeLuminance(), b = y.computeLuminance();
@@ -145,22 +147,35 @@ void main() {
     expect(a.toJson()['fontId'], 'system');
   });
 
-  test('Thème : polices, angles et densité appliqués', () {
-    final braise = buildAppTheme(stylePresets.first.appearance);
-    final tokens = braise.extension<FoyerTokens>()!;
-    expect(braise.brightness, Brightness.dark);
-    expect(braise.textTheme.headlineLarge?.fontFamily, 'SpaceGrotesk');
-    expect(braise.textTheme.bodyMedium?.fontFamily, 'DMSans');
-    expect((tokens.radius, tokens.compact, tokens.rows), (20.0, false, false));
-    final liste = buildAppTheme(
-      stylePresets.last.appearance.copyWith(corners: 'sharp'),
-    );
-    final t = liste.extension<FoyerTokens>()!;
-    expect((t.radius, t.compact, t.rows), (8.0, true, true));
-    expect(liste.visualDensity, VisualDensity.compact);
+  test('Thème : typo Découpes fixe, coin coupé, angles et densité', () {
+    final theme = buildAppTheme(const AppAppearance());
+    final tokens = theme.extension<FoyerTokens>()!;
+    // Axes réduits : la police n'est plus un réglage — titres Manrope, texte Atkinson.
+    expect(theme.textTheme.headlineLarge?.fontFamily, 'Manrope');
+    expect(theme.textTheme.titleLarge?.fontFamily, 'Manrope');
+    expect(theme.textTheme.bodyMedium?.fontFamily, 'Atkinson');
     expect(
-      buildAppTheme(const AppAppearance()).textTheme.headlineLarge?.fontFamily,
-      isNot('SpaceGrotesk'),
+      (tokens.radius, tokens.cut, tokens.compact, tokens.rows),
+      (20.0, 16.0, false, false),
+    );
+    expect(tokens.displayFont, 'Manrope');
+    final compact = buildAppTheme(
+      const AppAppearance(
+        corners: 'sharp',
+        density: 'compact',
+        listStyle: 'rows',
+      ),
+    );
+    final t = compact.extension<FoyerTokens>()!;
+    expect((t.radius, t.cut, t.compact, t.rows), (8.0, 10.0, true, true));
+    expect(compact.visualDensity, VisualDensity.compact);
+    // Même typo quel que soit l'ancien réglage de police stocké.
+    expect(
+      buildAppTheme(const AppAppearance(fontId: 'serif'))
+          .textTheme
+          .headlineLarge
+          ?.fontFamily,
+      'Manrope',
     );
   });
 
@@ -263,15 +278,39 @@ void main() {
     expect(result, saved.copyWith(customDark: true));
   });
 
-  test('Styles prêts à l’emploi distincts et reconnus', () {
-    expect(stylePresets.map((p) => p.appearance).toSet().length, 3);
-    for (final p in stylePresets) {
-      expect(presetOf(p.appearance), p);
-      expect(palettes.any((x) => x.id == p.appearance.paletteId), isTrue);
-    }
-    expect(
-      presetOf(stylePresets.first.appearance.copyWith(corners: 'sharp')),
-      isNull,
+  testWidgets('CutCheck : coche au toucher, retour haptique, sémantique', (
+    tester,
+  ) async {
+    var value = false;
+    final haptics = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => CutCheck(
+              value: value,
+              semanticLabel: 'Tomates',
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.bySemanticsLabel('Tomates'));
+    await tester.pumpAndSettle();
+    expect(value, isTrue);
+    expect(haptics, isNotEmpty);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
     );
   });
 }

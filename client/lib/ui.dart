@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 import 'appearance.dart';
 
@@ -132,6 +133,335 @@ class _DashedCircle extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedCircle old) => old.color != color;
+}
+
+/// Case « coupée au ciseau » : l’hexagone irrégulier de la famille Découpes.
+/// Enfoncement au toucher (emprunt « Objet ») et retour haptique léger.
+class CutCheck extends StatefulWidget {
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final double size;
+  final String? semanticLabel;
+  const CutCheck({
+    super.key,
+    required this.value,
+    this.onChanged,
+    this.size = 26,
+    this.semanticLabel,
+  });
+  @override
+  State<CutCheck> createState() => _CutCheckState();
+}
+
+class _CutCheckState extends State<CutCheck> {
+  bool pressed = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final enabled = widget.onChanged != null;
+    return Semantics(
+      checked: widget.value,
+      enabled: enabled,
+      label: widget.semanticLabel,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => pressed = true) : null,
+        onTapCancel: () => setState(() => pressed = false),
+        onTap: enabled
+            ? () {
+                setState(() => pressed = false);
+                HapticFeedback.selectionClick();
+                widget.onChanged!(!widget.value);
+              }
+            : null,
+        // Marge interne : zone tactile confortable sans grossir le dessin.
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: AnimatedScale(
+            scale: pressed ? .86 : 1,
+            duration: Duration(
+              milliseconds: MediaQuery.disableAnimationsOf(context) ? 0 : 90,
+            ),
+            child: CustomPaint(
+              size: Size.square(widget.size),
+              painter: _CutCheckPainter(
+                value: widget.value,
+                border: enabled ? c.onSurface : c.outline,
+                fill: c.primary,
+                mark: c.onPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CutCheckPainter extends CustomPainter {
+  final bool value;
+  final Color border, fill, mark;
+  _CutCheckPainter({
+    required this.value,
+    required this.border,
+    required this.fill,
+    required this.mark,
+  });
+
+  // Le « rond coupé au ciseau » : volontairement irrégulier, jamais un cercle.
+  static Path shape(Size s) => Path()
+    ..moveTo(s.width * .50, 0)
+    ..lineTo(s.width * .96, s.height * .18)
+    ..lineTo(s.width, s.height * .62)
+    ..lineTo(s.width * .72, s.height)
+    ..lineTo(s.width * .14, s.height * .92)
+    ..lineTo(0, s.height * .38)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = shape(size);
+    if (value) {
+      canvas.drawPath(path, Paint()..color = fill);
+      final check = Path()
+        ..moveTo(size.width * .26, size.height * .52)
+        ..lineTo(size.width * .44, size.height * .70)
+        ..lineTo(size.width * .76, size.height * .32);
+      canvas.drawPath(
+        check,
+        Paint()
+          ..color = mark
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = size.width * .11
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    } else {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = border
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CutCheckPainter old) =>
+      old.value != value ||
+      old.border != border ||
+      old.fill != fill ||
+      old.mark != mark;
+}
+
+/// Famille de signes « Découpes » : formes pleines, asymétriques, une par usage.
+/// Elles vivent en marge (rayons, sections, états), jamais sous le texte.
+enum FoyerSign {
+  leaf,
+  drop,
+  jar,
+  epi,
+  flake,
+  fish,
+  cup,
+  bubbles,
+  star,
+  house,
+  bag,
+}
+
+/// Signe d’un rayon de courses (ids du serveur, repli : cabas).
+FoyerSign aisleSign(String? id) => switch (id) {
+  'produce' => FoyerSign.leaf,
+  'bakery' => FoyerSign.epi,
+  'dairy' => FoyerSign.drop,
+  'meat' => FoyerSign.fish,
+  'savory' => FoyerSign.jar,
+  'sweet' => FoyerSign.star,
+  'drinks' => FoyerSign.cup,
+  'frozen' => FoyerSign.flake,
+  'hygiene' => FoyerSign.bubbles,
+  'cleaning' => FoyerSign.house,
+  _ => FoyerSign.bag,
+};
+
+class SignIcon extends StatelessWidget {
+  final FoyerSign sign;
+  final double size;
+  final Color? color;
+  const SignIcon(this.sign, {super.key, this.size = 18, this.color});
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _SignPainter(
+      sign,
+      color ?? Theme.of(context).colorScheme.secondaryContainer,
+    ),
+  );
+}
+
+class _SignPainter extends CustomPainter {
+  final FoyerSign sign;
+  final Color color;
+  _SignPainter(this.sign, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Dessins dans un repère 24×24, remis à l'échelle.
+    canvas.scale(size.width / 24, size.height / 24);
+    final fill = Paint()..color = color;
+    Path poly(List<(double, double)> pts) {
+      final p = Path()..moveTo(pts.first.$1, pts.first.$2);
+      for (final (x, y) in pts.skip(1)) {
+        p.lineTo(x, y);
+      }
+      return p..close();
+    }
+
+    switch (sign) {
+      case FoyerSign.leaf:
+        canvas.drawPath(
+          Path()
+            ..moveTo(4, 20)
+            ..cubicTo(3, 10, 9, 3, 20, 2)
+            ..cubicTo(21, 10, 18, 18, 10, 20)
+            ..cubicTo(8, 20.5, 5, 20.5, 4, 20)
+            ..close(),
+          fill,
+        );
+      case FoyerSign.drop:
+        canvas.drawPath(
+          Path()
+            ..moveTo(12, 2)
+            ..cubicTo(17, 8, 21, 12, 20, 17)
+            ..cubicTo(19.3, 21, 16, 23, 12, 23)
+            ..cubicTo(8, 23, 4.4, 21, 4, 17)
+            ..cubicTo(3, 12, 8, 8, 12, 2)
+            ..close(),
+          fill,
+        );
+      case FoyerSign.jar:
+        canvas.drawRRect(
+          RRect.fromLTRBR(7, 3, 17, 6.5, const Radius.circular(1.5)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(5.5, 8, 18.5, 22, const Radius.circular(4)),
+          fill,
+        );
+      case FoyerSign.epi:
+        canvas.drawPath(
+          poly([
+            (12, 2),
+            (17, 8),
+            (13, 8),
+            (13, 11),
+            (18, 11),
+            (22, 17),
+            (14, 17),
+            (14, 22),
+            (10, 22),
+            (10, 17),
+            (3, 17),
+            (7, 11),
+            (11, 11),
+            (11, 8),
+            (8, 8),
+          ]),
+          fill,
+        );
+      case FoyerSign.flake:
+        canvas.drawPath(
+          poly([
+            (12, 1),
+            (14, 7),
+            (20, 4),
+            (17, 10),
+            (23, 12),
+            (17, 14),
+            (20, 20),
+            (14, 17),
+            (12, 23),
+            (10, 17),
+            (4, 20),
+            (7, 14),
+            (1, 12),
+            (7, 10),
+            (4, 4),
+            (10, 7),
+          ]),
+          fill,
+        );
+      case FoyerSign.fish:
+        canvas.drawOval(
+          Rect.fromCenter(center: const Offset(10, 12), width: 15, height: 10),
+          fill,
+        );
+        canvas.drawPath(poly([(16, 12), (22.5, 6.5), (22.5, 17.5)]), fill);
+      case FoyerSign.cup:
+        canvas.drawPath(
+          poly([(6, 4), (18, 4), (16.5, 21.5), (7.5, 21.5)]),
+          fill,
+        );
+      case FoyerSign.bubbles:
+        canvas.drawCircle(const Offset(9, 9), 6, fill);
+        canvas.drawCircle(const Offset(17, 14), 4.2, fill);
+        canvas.drawCircle(const Offset(10.5, 19), 2.8, fill);
+      case FoyerSign.star:
+        canvas.drawPath(
+          poly([
+            (12, 2),
+            (14.6, 8.8),
+            (22, 9),
+            (16.6, 13.8),
+            (18.5, 21),
+            (12, 17.2),
+            (5.5, 21),
+            (7.4, 13.8),
+            (2, 9),
+            (9.4, 8.8),
+          ]),
+          fill,
+        );
+      case FoyerSign.house:
+        canvas.drawPath(
+          poly([
+            (3, 11),
+            (12, 3),
+            (21, 11),
+            (18, 11),
+            (18, 21),
+            (14, 21),
+            (14, 15),
+            (10, 15),
+            (10, 21),
+            (6, 21),
+            (6, 11),
+          ]),
+          fill,
+        );
+      case FoyerSign.bag:
+        canvas.drawPath(
+          poly([(5, 8), (19, 8), (17.5, 21.5), (6.5, 21.5)]),
+          fill,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(9, 8)
+            ..cubicTo(9, 3.5, 15, 3.5, 15, 8),
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignPainter old) =>
+      old.sign != sign || old.color != color;
 }
 
 enum TaskBadge { late, urgent, high }
@@ -421,7 +751,17 @@ class ScreenHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(subtitle, style: TextStyle(color: c.onSurfaceVariant)),
+                // Étiquette en petites capitales espacées : la ligne de structure
+                // du « carnet » Découpes, au-dessus du grand titre.
+                Text(
+                  subtitle.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
+                    color: c.onSurfaceVariant,
+                  ),
+                ),
                 // Le point est décoratif : lu « Aujourd’hui », pas « Aujourd’hui point ».
                 Semantics(
                   header: true,
@@ -433,13 +773,14 @@ class ScreenHeader extends StatelessWidget {
                       children: [
                         TextSpan(
                           text: '.',
-                          style: TextStyle(color: c.primary),
+                          style: TextStyle(color: c.secondaryContainer),
                         ),
                       ],
                     ),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: -.5,
+                      height: 1.05,
                       color: c.onSurface,
                     ),
                   ),
@@ -683,12 +1024,20 @@ class FloatingNav extends StatelessWidget {
   return (padding: p, selectedPadding: p, label: false);
 }
 
-/// Titre de section d’une liste (« EN RETARD 1 »).
+/// Titre de section d’une liste (« EN RETARD 1 »), avec un signe Découpes
+/// facultatif en marge (rayons de courses).
 class SectionLabel extends StatelessWidget {
   final String label;
   final int count;
   final Color? color;
-  const SectionLabel(this.label, this.count, {super.key, this.color});
+  final FoyerSign? sign;
+  const SectionLabel(
+    this.label,
+    this.count, {
+    super.key,
+    this.color,
+    this.sign,
+  });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -698,6 +1047,10 @@ class SectionLabel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
         child: Row(
           children: [
+            if (sign != null) ...[
+              SignIcon(sign!, size: 17),
+              const SizedBox(width: 7),
+            ],
             Text(
               label.toUpperCase(),
               style: TextStyle(

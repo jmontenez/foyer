@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
@@ -871,7 +870,11 @@ class _IngredientsPageState extends State<IngredientsPage> {
           ),
           for (final a in widget.aisles)
             if (of(a['id']).isNotEmpty) ...[
-              SectionLabel(a['name'].toString(), of(a['id']).length),
+              SectionLabel(
+                a['name'].toString(),
+                of(a['id']).length,
+                sign: aisleSign(a['id']?.toString()),
+              ),
               for (final i in of(a['id']))
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1182,6 +1185,8 @@ class _ShoppingViewState extends State<ShoppingView> {
         .where((t) => t['id'] == list['id'])
         .firstOrNull;
     if (ticket == null) return;
+    // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
+    HapticFeedback.mediumImpact();
     final me = widget.data['me']?['id']?.toString();
     final assignees = (ticket['assignees'] as List? ?? []).cast<String>();
     final performers = await askPerformers(
@@ -1325,11 +1330,19 @@ class _ShoppingViewState extends State<ShoppingView> {
           child: Icon(Icons.delete_outline, color: c.onErrorContainer),
         ),
         onDismissed: (_) => remove(list, item),
-        child: CheckboxListTile(
+        child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          controlAffinity: ListTileControlAffinity.leading,
-          value: item['done'] == true,
-          onChanged: (_) => toggle(list, item),
+          // Case « coupée au ciseau » (CutCheck) : elle porte son propre retour
+          // haptique ; le toucher sur le reste de la ligne coche aussi.
+          leading: CutCheck(
+            value: item['done'] == true,
+            onChanged: (_) => toggle(list, item),
+            semanticLabel: item['text'].toString(),
+          ),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            toggle(list, item);
+          },
           title: Text(
             item['text'].toString(),
             style: item['done'] == true
@@ -1339,7 +1352,7 @@ class _ShoppingViewState extends State<ShoppingView> {
                   )
                 : null,
           ),
-          secondary: Row(
+          trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (photoId != null)
@@ -1515,7 +1528,11 @@ class _ShoppingViewState extends State<ShoppingView> {
             const SizedBox(height: 16),
           ],
           for (final (aisle, rows) in groups) ...[
-            SectionLabel(aisle['name'].toString(), rows.length),
+            SectionLabel(
+              aisle['name'].toString(),
+              rows.length,
+              sign: aisleSign(aisle['id']?.toString()),
+            ),
             for (final item in rows) row(item),
           ],
           if (basket.isNotEmpty) ...[

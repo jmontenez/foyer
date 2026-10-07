@@ -68,7 +68,7 @@ void main() {
   testWidgets('Tâche en carte : badge, progression, commentaire au singulier', (
     tester,
   ) async {
-    await pump(tester, stylePresets.first.appearance);
+    await pump(tester, const AppAppearance());
     expect(find.byType(Card), findsOneWidget);
     expect(find.text('URGENT'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
@@ -82,7 +82,10 @@ void main() {
   });
 
   testWidgets('Tâche en ligne selon le jeton d’affichage', (tester) async {
-    await pump(tester, stylePresets.last.appearance);
+    await pump(
+      tester,
+      const AppAppearance(listStyle: 'rows', density: 'compact'),
+    );
     expect(find.byType(Card), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(

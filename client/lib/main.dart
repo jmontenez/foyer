@@ -1835,8 +1835,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     leading: const Icon(Icons.palette_outlined),
                     title: const Text('Apparence'),
                     subtitle: Text(
-                      presetOf(AppAppearance.fromMember(me))?.name ??
-                          paletteFor(AppAppearance.fromMember(me)).name,
+                      paletteFor(AppAppearance.fromMember(me)).name,
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -2567,6 +2566,8 @@ class _TicketPageState extends State<TicketPage> {
       t['stageId'] == 'done' || t['stageId'] == 'abandoned';
 
   Future<void> finish() async {
+    // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
+    HapticFeedback.mediumImpact();
     final me = widget.data['me']?['id']?.toString();
     final performers = await askPerformers(context, members, {
       ...strings(t['assignees']),
@@ -3361,12 +3362,35 @@ class _TicketPageState extends State<TicketPage> {
                     ),
                     ...checklistHeading(),
                     ...checklistItems().map(
-                      (item) => CheckboxListTile(
+                      (item) => ListTile(
                         contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: item['done'],
+                        leading: CutCheck(
+                          value: item['done'] == true,
+                          semanticLabel: itemLabel(item),
+                          onChanged: (v) => setState(() {
+                            t['checklist'] = maps(t['checklist'])
+                                .map(
+                                  (c) => c['id'] == item['id']
+                                      ? {...c, 'done': v}
+                                      : c,
+                                )
+                                .toList();
+                            dirty = true;
+                          }),
+                        ),
+                        onTap: () => setState(() {
+                          HapticFeedback.selectionClick();
+                          t['checklist'] = maps(t['checklist'])
+                              .map(
+                                (c) => c['id'] == item['id']
+                                    ? {...c, 'done': c['done'] != true}
+                                    : c,
+                              )
+                              .toList();
+                          dirty = true;
+                        }),
                         title: Text(itemLabel(item)),
-                        secondary: IconButton(
+                        trailing: IconButton(
                           tooltip: 'Retirer',
                           icon: const Icon(Icons.close),
                           onPressed: () => setState(() {
@@ -3375,16 +3399,6 @@ class _TicketPageState extends State<TicketPage> {
                             dirty = true;
                           }),
                         ),
-                        onChanged: (v) => setState(() {
-                          t['checklist'] = maps(t['checklist'])
-                              .map(
-                                (c) => c['id'] == item['id']
-                                    ? {...c, 'done': v}
-                                    : c,
-                              )
-                              .toList();
-                          dirty = true;
-                        }),
                       ),
                     ),
                     TextButton.icon(
@@ -3483,12 +3497,35 @@ class _TicketPageState extends State<TicketPage> {
                   const SizedBox(height: 12),
                   ...checklistHeading(),
                   ...checklistItems().map(
-                    (item) => CheckboxListTile(
+                    (item) => ListTile(
                       contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      value: item['done'],
+                      leading: CutCheck(
+                        value: item['done'] == true,
+                        semanticLabel: itemLabel(item),
+                        onChanged: (v) => setState(() {
+                          t['checklist'] = maps(t['checklist'])
+                              .map(
+                                (c) => c['id'] == item['id']
+                                    ? {...c, 'done': v}
+                                    : c,
+                              )
+                              .toList();
+                          dirty = true;
+                        }),
+                      ),
+                      onTap: () => setState(() {
+                        HapticFeedback.selectionClick();
+                        t['checklist'] = maps(t['checklist'])
+                            .map(
+                              (c) => c['id'] == item['id']
+                                  ? {...c, 'done': c['done'] != true}
+                                  : c,
+                            )
+                            .toList();
+                        dirty = true;
+                      }),
                       title: Text(itemLabel(item)),
-                      secondary: IconButton(
+                      trailing: IconButton(
                         tooltip: 'Retirer',
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
@@ -3497,15 +3534,6 @@ class _TicketPageState extends State<TicketPage> {
                           dirty = true;
                         }),
                       ),
-                      onChanged: (v) => setState(() {
-                        t['checklist'] = maps(t['checklist'])
-                            .map(
-                              (c) =>
-                                  c['id'] == item['id'] ? {...c, 'done': v} : c,
-                            )
-                            .toList();
-                        dirty = true;
-                      }),
                     ),
                   ),
                   TextButton.icon(

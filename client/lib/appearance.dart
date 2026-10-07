@@ -414,51 +414,6 @@ class AppAppearance {
   );
 }
 
-/// Styles prêts à l’emploi : un choix règle tous les jetons, affinables ensuite.
-class StylePreset {
-  final String id, name, description;
-  final AppAppearance appearance;
-  const StylePreset(this.id, this.name, this.description, this.appearance);
-}
-
-const stylePresets = [
-  StylePreset(
-    'braise',
-    'Braise',
-    'Sombre · cartes',
-    AppAppearance(paletteId: 'ember-night', fontId: 'grotesk'),
-  ),
-  StylePreset(
-    'sauge',
-    'Sauge',
-    'Clair · cartes',
-    AppAppearance(paletteId: 'sage', fontId: 'serif'),
-  ),
-  StylePreset(
-    'liste',
-    'Liste',
-    'Clair · lignes',
-    AppAppearance(
-      paletteId: 'ink-coral',
-      fontId: 'manrope',
-      listStyle: 'rows',
-      density: 'compact',
-    ),
-  ),
-];
-
-/// Un style est reconnu sur ses jetons visibles ; le duo personnalisé mémorisé n’entre pas en jeu.
-StylePreset? presetOf(AppAppearance a) => stylePresets
-    .where(
-      (p) =>
-          p.appearance.paletteId == a.paletteId &&
-          p.appearance.fontId == a.fontId &&
-          p.appearance.listStyle == a.listStyle &&
-          p.appearance.density == a.density &&
-          p.appearance.corners == a.corners,
-    )
-    .firstOrNull;
-
 final selectedAppearance = ValueNotifier<AppAppearance>(const AppAppearance());
 
 /// Jetons non couverts par ThemeData, lus par les composants de Foyer.
@@ -515,7 +470,11 @@ OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) =>
 
 ThemeData buildAppTheme(AppAppearance appearance) {
   final palette = paletteFor(appearance);
-  final font = fontById(appearance.fontId);
+  // Typo de la direction « Découpes » : titres Manrope (graisses fortes), texte
+  // Atkinson Hyperlegible. Le choix de police n'est plus un réglage public
+  // (axes réduits) ; `fontId` reste stocké côté serveur pour compatibilité.
+  const bodyFont = 'Atkinson';
+  const displayFont = 'Manrope';
   final sharp = appearance.corners == 'sharp';
   final radius = sharp ? 8.0 : 20.0;
   final fieldRadius = sharp ? 6.0 : 14.0;
@@ -554,7 +513,7 @@ ThemeData buildAppTheme(AppAppearance appearance) {
       : Colors.white;
   final base = ThemeData(
     useMaterial3: true,
-    fontFamily: font.body,
+    fontFamily: bodyFont,
     visualDensity: appearance.density == 'compact'
         ? VisualDensity.compact
         : VisualDensity.standard,
@@ -591,27 +550,24 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     ),
   );
   // Titres dans la police d’affichage ; le texte courant garde la police de lecture.
-  final display = font.display;
   final text = base.textTheme;
   return base.copyWith(
-    textTheme: display == null
-        ? text
-        : text.copyWith(
-            displayLarge: text.displayLarge?.copyWith(fontFamily: display),
-            displayMedium: text.displayMedium?.copyWith(fontFamily: display),
-            displaySmall: text.displaySmall?.copyWith(fontFamily: display),
-            headlineLarge: text.headlineLarge?.copyWith(fontFamily: display),
-            headlineMedium: text.headlineMedium?.copyWith(fontFamily: display),
-            headlineSmall: text.headlineSmall?.copyWith(fontFamily: display),
-            titleLarge: text.titleLarge?.copyWith(fontFamily: display),
-          ),
+    textTheme: text.copyWith(
+      displayLarge: text.displayLarge?.copyWith(fontFamily: displayFont),
+      displayMedium: text.displayMedium?.copyWith(fontFamily: displayFont),
+      displaySmall: text.displaySmall?.copyWith(fontFamily: displayFont),
+      headlineLarge: text.headlineLarge?.copyWith(fontFamily: displayFont),
+      headlineMedium: text.headlineMedium?.copyWith(fontFamily: displayFont),
+      headlineSmall: text.headlineSmall?.copyWith(fontFamily: displayFont),
+      titleLarge: text.titleLarge?.copyWith(fontFamily: displayFont),
+    ),
     extensions: [
       FoyerTokens(
         radius: radius,
         cut: cut,
         compact: appearance.density == 'compact',
         rows: appearance.listStyle == 'rows',
-        displayFont: display,
+        displayFont: displayFont,
       ),
     ],
   );
@@ -994,16 +950,9 @@ class _AppearancePageState extends State<AppearancePage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         children: [
-          heading('Style'),
-          Row(
-            children: [
-              for (final preset in stylePresets) ...[
-                if (preset != stylePresets.first) const SizedBox(width: 10),
-                Expanded(child: presetCard(preset, colors)),
-              ],
-            ],
-          ),
-          heading('Réglages fins'),
+          // Axes réduits : la direction Découpes fixe police, angles et style de
+          // liste ; restent la palette/le duo et la densité.
+          heading('Couleurs'),
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(
@@ -1014,30 +963,12 @@ class _AppearancePageState extends State<AppearancePage> {
               onTap: choosePalette,
             ),
           ),
-          const SizedBox(height: 16),
-          segmented(
-            'Police',
-            [for (final f in fontPairs) (f.id, f.name, f.display)],
-            current.fontId,
-            (v) => current.copyWith(fontId: v),
-          ),
-          segmented(
-            'Affichage des tâches',
-            [('cards', 'Cartes', null), ('rows', 'Lignes', null)],
-            current.listStyle,
-            (v) => current.copyWith(listStyle: v),
-          ),
+          heading('Confort'),
           segmented(
             'Densité',
             [('comfortable', 'Aérée', null), ('compact', 'Compacte', null)],
             current.density,
             (v) => current.copyWith(density: v),
-          ),
-          segmented(
-            'Angles',
-            [('soft', 'Doux', null), ('sharp', 'Marqués', null)],
-            current.corners,
-            (v) => current.copyWith(corners: v),
           ),
           const SizedBox(height: 8),
           Text(
@@ -1045,79 +976,6 @@ class _AppearancePageState extends State<AppearancePage> {
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget presetCard(StylePreset preset, ColorScheme colors) {
-    final palette = paletteById(preset.appearance.paletteId);
-    final selected = preset.appearance == current;
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: '${preset.name}, ${preset.description}',
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        // Le style règle les jetons visibles ; le duo personnalisé mémorisé reste intact.
-        onTap: () => choose(
-          preset.appearance.copyWith(
-            customPrimary: current.customPrimary,
-            customAccent: current.customAccent,
-            customDark: current.customDark,
-          ),
-        ),
-        child: Ink(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected ? colors.primary : colors.outlineVariant,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 52,
-                decoration: BoxDecoration(
-                  color: palette.background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colors.outlineVariant),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final c in [palette.primary, palette.accent])
-                      Container(
-                        width: 18,
-                        height: 18,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          color: c,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                preset.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontFamily: fontById(preset.appearance.fontId).display,
-                ),
-              ),
-              Text(
-                preset.description,
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
