@@ -1891,6 +1891,25 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       },
                       child: const Text('Rechercher une mise à jour'),
                     ),
+                  // Canal beta : repères de validation (build installé, taille logique
+                  // de l'écran — la mesure sert à régler le seuil deux-volets).
+                  if (appChannel != 'stable')
+                    ListTile(
+                      leading: const Icon(Icons.science_outlined),
+                      title: Text('Canal $appChannel'),
+                      isThreeLine: true,
+                      subtitle: FutureBuilder<int?>(
+                        future: Updater.installedVersionOrNull(),
+                        builder: (c2, snap) {
+                          final size = MediaQuery.sizeOf(c2);
+                          return Text(
+                            'Build ${snap.data ?? '…'} · écran logique '
+                            '${size.width.round()} × ${size.height.round()} pt\n'
+                            'Mises à jour à la main (releases GitHub beta-N).',
+                          );
+                        },
+                      ),
+                    ),
                   if (!kIsWeb)
                     TextButton(
                       onPressed: () {

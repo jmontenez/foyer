@@ -22,6 +22,11 @@ class AndroidUpdate {
   );
 }
 
+/// Canal de distribution injecté à la compilation (CI : scripts/ci/firebase.py).
+/// « beta » = app « Foyer β » installée à côté de l’app principale, mise à jour
+/// à la main depuis les releases GitHub beta-N — jamais par le serveur.
+const appChannel = String.fromEnvironment('CHANNEL', defaultValue: 'stable');
+
 // Mises à jour hors store, Android uniquement : le serveur Foyer distribue l’APK signé
 // aux membres connectés ; le téléchargement, les vérifications et l’appel à l’installateur
 // sont faits côté natif (MainActivity.kt).
@@ -51,6 +56,9 @@ class Updater {
 
   /// Version plus récente publiée par le serveur, sinon null (y compris si rien n’est publié).
   static Future<AndroidUpdate?> available(Api api, int installed) async {
+    // Le serveur ne publie que l’APK du canal stable : une beta ne doit jamais
+    // se faire « mettre à jour » vers l’app principale (package différent).
+    if (appChannel != 'stable') return null;
     final dynamic body;
     try {
       body = await api.call('GET', '/api/v1/app/android');
