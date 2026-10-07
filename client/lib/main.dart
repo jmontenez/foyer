@@ -132,6 +132,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   int tab = 0;
   // Dernière vue ouverte dans « Prévu » (Semaine 1, Tableau 2, Un jour 3).
   int lastPlanned = 1;
+  // Deux volets (écran ouvert) : fiche affichée à droite plutôt qu'en route
+  // plein écran. `selectedTicketId` = null pour une nouvelle tâche dans le volet.
+  bool detailOpen = false;
+  String? selectedTicketId;
+  GlobalKey<_TicketPageState> detailKey = GlobalKey<_TicketPageState>();
   String person = 'all', query = '', tag = 'all';
   bool searching = false;
   DateTime? historyFrom, historyTo;
@@ -482,12 +487,35 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> openTicket([Map<String, dynamic>? ticket]) async {
     if (data == null) return;
+    // Écran ouvert : la fiche s'affiche dans le volet de droite (pas de route
+    // plein écran). On confirme d'abord l'abandon d'une saisie en cours.
+    if (MediaQuery.sizeOf(context).width >= 640) {
+      final leave =
+          await (detailKey.currentState?.confirmLeave() ?? Future.value(true));
+      if (!leave || !mounted) return;
+      setState(() {
+        detailOpen = true;
+        selectedTicketId = ticket?['id']?.toString();
+        detailKey = GlobalKey<_TicketPageState>();
+      });
+      return;
+    }
     final result = await Navigator.of(context).push(
       MaterialPageRoute<String>(
         builder: (_) => TicketPage(data: data!, ticket: ticket),
       ),
     );
     // « Ouvrir la liste de courses » depuis une tâche Courses.
+    if (result == 'shopping' && mounted) setState(() => tab = 5);
+    await refresh();
+  }
+
+  // Fermeture du volet de fiche : rafraîchit la liste et suit « Courses ».
+  Future<void> closeDetail([String? result]) async {
+    setState(() {
+      detailOpen = false;
+      selectedTicketId = null;
+    });
     if (result == 'shopping' && mounted) setState(() => tab = 5);
     await refresh();
   }
@@ -1159,199 +1187,245 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 ],
               ),
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ScreenHeader(
-                      title: title,
-                      subtitle: subtitles[tab],
-                      searching: searching,
-                      // Courses a sa propre recherche d’ingrédients.
-                      onSearch: tab == 5
-                          ? null
-                          : () => setState(() {
-                              searching = !searching;
-                              if (!searching) query = '';
-                            }),
-                      action: IconButton.filled(
-                        tooltip: 'Notifications',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(context).cardTheme.color,
-                          foregroundColor: Theme.of(context)
-                              .colorScheme
-                              .onSurface,
-                          side: BorderSide(
-                            color: Theme.of(context).colorScheme.outlineVariant,
-                          ),
-                        ),
-                        onPressed: openNotifications,
-                        icon: Badge.count(
-                          count: (data!['unreadNotifications'] ?? 0) as int,
-                          isLabelVisible:
-                              ((data!['unreadNotifications'] ?? 0) as int) > 0,
-                          child: const Icon(Icons.notifications_outlined),
-                        ),
-                      ),
-                      profile: IconButton(
-                        tooltip: 'Réglages',
-                        onPressed: () => settingsDialog(),
-                        icon: ExcludeSemantics(
-                          child: MemberAvatar(
-                            name: me['name'].toString(),
-                            index: meIndex < 0 ? 0 : meIndex,
-                            size: 36,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (searching && tab != 5)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                        child: TextField(
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            hintText: 'Rechercher dans cette vue…',
-                            prefixIcon: Icon(Icons.search),
-                            isDense: true,
-                          ),
-                          onChanged: (v) => setState(() => query = v),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (error != null)
-                            MaterialBanner(
-                              content: Text(error!),
-                              actions: [
-                                TextButton(
-                                  onPressed: refresh,
-                                  child: const Text('Réessayer'),
+                          ScreenHeader(
+                            title: title,
+                            subtitle: subtitles[tab],
+                            searching: searching,
+                            // Courses a sa propre recherche d’ingrédients.
+                            onSearch: tab == 5
+                                ? null
+                                : () => setState(() {
+                                    searching = !searching;
+                                    if (!searching) query = '';
+                                  }),
+                            action: IconButton.filled(
+                              tooltip: 'Notifications',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Theme.of(context)
+                                    .cardTheme
+                                    .color,
+                                foregroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface,
+                                side: BorderSide(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant,
                                 ),
-                              ],
-                            ),
-                          if (update != null && !updateDismissed)
-                            MaterialBanner(
-                              leading: const Icon(Icons.system_update_outlined),
-                              content: Text(
-                                'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
                               ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      setState(() => updateDismissed = true),
-                                  child: const Text('Plus tard'),
-                                ),
-                                FilledButton(
-                                  onPressed: installingUpdate
-                                      ? null
-                                      : installUpdate,
-                                  child: Text(
-                                    installingUpdate
-                                        ? 'Téléchargement…'
-                                        : 'Installer',
-                                  ),
-                                ),
-                              ],
+                              onPressed: openNotifications,
+                              icon: Badge.count(
+                                count:
+                                    (data!['unreadNotifications'] ?? 0) as int,
+                                isLabelVisible:
+                                    ((data!['unreadNotifications'] ?? 0)
+                                        as int) >
+                                    0,
+                                child: const Icon(Icons.notifications_outlined),
+                              ),
                             ),
-                          if (data!['demo'] == true)
+                            profile: IconButton(
+                              tooltip: 'Réglages',
+                              onPressed: () => settingsDialog(),
+                              icon: ExcludeSemantics(
+                                child: MemberAvatar(
+                                  name: me['name'].toString(),
+                                  index: meIndex < 0 ? 0 : meIndex,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (searching && tab != 5)
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.science_outlined,
-                                    size: 18,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Démonstration : données fictives, remises à zéro chaque nuit.',
-                                      style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                              child: TextField(
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'Rechercher dans cette vue…',
+                                  prefixIcon: Icon(Icons.search),
+                                  isDense: true,
+                                ),
+                                onChanged: (v) => setState(() => query = v),
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (error != null)
+                                  MaterialBanner(
+                                    content: Text(error!),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: refresh,
+                                        child: const Text('Réessayer'),
                                       ),
+                                    ],
+                                  ),
+                                if (update != null && !updateDismissed)
+                                  MaterialBanner(
+                                    leading: const Icon(
+                                      Icons.system_update_outlined,
+                                    ),
+                                    content: Text(
+                                      'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => setState(
+                                          () => updateDismissed = true,
+                                        ),
+                                        child: const Text('Plus tard'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: installingUpdate
+                                            ? null
+                                            : installUpdate,
+                                        child: Text(
+                                          installingUpdate
+                                              ? 'Téléchargement…'
+                                              : 'Installer',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                if (data!['demo'] == true)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.science_outlined,
+                                          size: 18,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Démonstration : données fictives, remises à zéro chaque nuit.',
+                                            style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                if (data!['maintenance'] == true)
+                                  const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text(
+                                      'Maintenance en cours : modifications temporairement suspendues.',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Sélecteur de vue de « Prévu » : Semaine / Tableau / Un jour.
+                          if (destination == 2)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                              child: Row(
+                                children: [
+                                  for (final (t, label) in [
+                                    (1, 'Semaine'),
+                                    (2, 'Tableau'),
+                                    (3, 'Un jour'),
+                                  ])
+                                    FilterPill(
+                                      label: label,
+                                      selected: tab == t,
+                                      onTap: () => setState(() {
+                                        tab = t;
+                                        lastPlanned = t;
+                                      }),
+                                    ),
                                 ],
                               ),
                             ),
-                          if (data!['maintenance'] == true)
-                            const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Text(
-                                'Maintenance en cours : modifications temporairement suspendues.',
+                          if (tab != 5) ...[
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: Row(
+                                children: filterPills(members, me, selectedTag),
                               ),
                             ),
+                            const SizedBox(height: 12),
+                          ],
+                          Expanded(
+                            child: tab == 5
+                                ? ShoppingView(
+                                    focusSearch: shoppingSearch,
+                                    data: data!,
+                                    api: api,
+                                    onChanged: refresh,
+                                    onOpenTicket: openTicket,
+                                  )
+                                : tab == 2
+                                ? board(tickets)
+                                : RefreshIndicator(
+                                    onRefresh: refresh,
+                                    child: ListView(
+                                      padding: EdgeInsets.fromLTRB(
+                                        0,
+                                        rows ? 0 : 4,
+                                        0,
+                                        100,
+                                      ),
+                                      children: listFor(
+                                        tickets,
+                                        members,
+                                        today,
+                                      ),
+                                    ),
+                                  ),
+                          ),
                         ],
                       ),
                     ),
-                    // Sélecteur de vue de « Prévu » : Semaine / Tableau / Un jour.
-                    if (destination == 2)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                        child: Row(
-                          children: [
-                            for (final (t, label) in [
-                              (1, 'Semaine'),
-                              (2, 'Tableau'),
-                              (3, 'Un jour'),
-                            ])
-                              FilterPill(
-                                label: label,
-                                selected: tab == t,
-                                onTap: () => setState(() {
-                                  tab = t;
-                                  lastPlanned = t;
-                                }),
-                              ),
-                          ],
-                        ),
-                      ),
-                    if (tab != 5) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: filterPills(members, me, selectedTag),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                  ),
+                  if (wide && detailOpen) ...[
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                     Expanded(
-                      child: tab == 5
-                          ? ShoppingView(
-                              focusSearch: shoppingSearch,
-                              data: data!,
-                              api: api,
-                              onChanged: refresh,
-                              onOpenTicket: openTicket,
-                            )
-                          : tab == 2
-                          ? board(tickets)
-                          : RefreshIndicator(
-                              onRefresh: refresh,
-                              child: ListView(
-                                padding: EdgeInsets.fromLTRB(
-                                  0,
-                                  rows ? 0 : 4,
-                                  0,
-                                  100,
-                                ),
-                                children: listFor(tickets, members, today),
+                      flex: 2,
+                      child: TicketPage(
+                        key: detailKey,
+                        data: data!,
+                        embedded: true,
+                        ticket: selectedTicketId == null
+                            ? null
+                            : maps(data!['tickets']).firstWhere(
+                                (x) => x['id'] == selectedTicketId,
+                                orElse: () => <String, dynamic>{},
                               ),
-                            ),
+                        onClose: closeDetail,
+                      ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
           ],
@@ -2224,7 +2298,17 @@ class NotificationsPage extends StatelessWidget {
 class TicketPage extends StatefulWidget {
   final Map<String, dynamic> data;
   final Map<String, dynamic>? ticket;
-  const TicketPage({super.key, required this.data, this.ticket});
+  // Mode panneau (écran ouvert) : la fiche vit dans un volet, sans route ni
+  // AppBar ; sa fermeture passe par onClose au lieu de Navigator.pop.
+  final bool embedded;
+  final void Function(String? result)? onClose;
+  const TicketPage({
+    super.key,
+    required this.data,
+    this.ticket,
+    this.embedded = false,
+    this.onClose,
+  });
   @override
   State<TicketPage> createState() => _TicketPageState();
 }
@@ -2284,6 +2368,41 @@ class _TicketPageState extends State<TicketPage> {
           .map((m) => m['name'].toString())
           .firstOrNull ??
       (id == 'system' ? 'Automatisation' : id);
+  // Fermeture : route vers le parent en mode panneau, sinon dépile la route.
+  void dismiss([String? result]) {
+    if (widget.embedded) {
+      widget.onClose?.call(result);
+    } else {
+      Navigator.pop(context, result);
+    }
+  }
+
+  // Confirme l'abandon des modifications non enregistrées (partagé entre le
+  // bouton Retour de la route et le changement de fiche dans le volet).
+  Future<bool> confirmLeave() async {
+    if (!dirty) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Quitter sans enregistrer ?'),
+        content: const Text(
+          'Les modifications de ce ticket ne sont pas encore enregistrées.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Continuer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Quitter'),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
+  }
+
   Future<void> save({bool close = true}) async {
     if (saving) return;
     if (title.text.trim().isEmpty) {
@@ -2323,7 +2442,7 @@ class _TicketPageState extends State<TicketPage> {
         });
         if (close) {
           await WidgetsBinding.instance.endOfFrame;
-          if (mounted) Navigator.pop(context);
+          if (mounted) dismiss();
         }
       }
     } catch (e) {
@@ -2618,7 +2737,7 @@ class _TicketPageState extends State<TicketPage> {
         child: TextButton.icon(
           onPressed: () async {
             if (dirty) await save(close: false);
-            if (mounted && !dirty) Navigator.pop(context, 'shopping');
+            if (mounted && !dirty) dismiss('shopping');
           },
           icon: const Icon(Icons.shopping_basket_outlined),
           label: const Text('Ouvrir la liste de courses'),
@@ -2939,7 +3058,7 @@ class _TicketPageState extends State<TicketPage> {
     try {
       await api.call('POST', '/api/v1/tickets/${t['id']}/skip');
       message('Passée cette fois : la suivante est prévue.');
-      if (mounted) Navigator.pop(context);
+      if (mounted) dismiss();
     } catch (e) {
       message(e);
     }
@@ -3247,533 +3366,514 @@ class _TicketPageState extends State<TicketPage> {
       {'id': 'done', 'name': 'Terminé'},
       {'id': 'abandoned', 'name': 'Abandonné / décidé de ne pas faire'},
     ];
+    final topActions = <Widget>[
+      if (existing && (t['priority'] == 'urgent' || t['priority'] == 'high'))
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: PriorityBadge(
+            t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
+          ),
+        ),
+      if (existing)
+        PopupMenuButton<String>(
+          tooltip: 'Plus d’actions',
+          onSelected: (v) => v == 'abandon' ? abandon() : saveAsShortcut(),
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'shortcut',
+              child: ListTile(
+                leading: Icon(Icons.bolt_outlined),
+                title: Text('Enregistrer comme raccourci'),
+              ),
+            ),
+            if (t['stageId'] != 'done' && t['stageId'] != 'abandoned')
+              const PopupMenuItem(
+                value: 'abandon',
+                child: ListTile(
+                  leading: Icon(Icons.do_not_disturb_on_outlined),
+                  title: Text('Abandonner'),
+                  subtitle: Text(
+                    'Décidé de ne pas faire, gardé dans l’historique',
+                  ),
+                ),
+              ),
+          ],
+        ),
+      Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: FilledButton(
+          onPressed: saving ? null : () => save(),
+          child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+        ),
+      ),
+    ];
+    final body = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 60),
+          children: [
+            if (!existing) ...[
+              TextField(
+                controller: title,
+                maxLength: 160,
+                // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                autofocus: t['id'] == null,
+                style: TextStyle(
+                  fontFamily: tokensOf(context).displayFont,
+                  fontSize: existing ? 28 : 24,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Qu’est-ce qu’on a en tête ?',
+                  counterText: '',
+                  border: existing ? InputBorder.none : null,
+                  enabledBorder: existing ? InputBorder.none : null,
+                  filled: existing ? false : null,
+                  contentPadding: existing ? EdgeInsets.zero : null,
+                ),
+              ),
+              if (!details)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => details = true),
+                    icon: const Icon(Icons.tune),
+                    label: const Text(
+                      'Ajouter des détails, une date, un responsable…',
+                    ),
+                  ),
+                ),
+              if (details) ...[
+                heading(existing ? 'Notes' : 'L’essentiel'),
+                TextField(
+                  controller: description,
+                  minLines: 3,
+                  maxLines: 8,
+                  maxLength: 12000,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes et contexte',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: t['stageId'],
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Avancement'),
+                  items: stageItems
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s['id'].toString(),
+                          child: Text(
+                            s['name'].toString(),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    t['stageId'] = v;
+                    dirty = true;
+                  }),
+                ),
+                if (t['stageId'] == 'done') ...[
+                  heading('Qui l’a réalisé ?'),
+                  const Text('Choix explicite, indépendant des responsables.'),
+                  memberChoices('performers'),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: t['kind'],
+                        decoration: const InputDecoration(labelText: 'Type'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'obligation',
+                            child: Text('Obligation'),
+                          ),
+                          DropdownMenuItem(value: 'wish', child: Text('Envie')),
+                        ],
+                        onChanged: (v) => setState(() {
+                          t['kind'] = v;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: t['priority'],
+                        decoration: const InputDecoration(
+                          labelText: 'Priorité',
+                        ),
+                        items: ['low', 'normal', 'high', 'urgent']
+                            .map(
+                              (p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(priorityName(p)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          t['priority'] = v;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                heading('Qui s’en occupe ?'),
+                memberChoices('assignees'),
+                heading('Quand ?'),
+                ...['startDate', 'dueDate'].map(
+                  (key) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today_outlined),
+                    title: Text(
+                      key == 'startDate' ? 'À faire à partir du' : 'Échéance',
+                    ),
+                    subtitle: Text(
+                      t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                    ),
+                    onTap: () => datePick(key),
+                    trailing: t[key] == null
+                        ? null
+                        : IconButton(
+                            onPressed: () => setState(() {
+                              t[key] = null;
+                              dirty = true;
+                            }),
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+                ),
+                heading('Les tags'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    ...tags.map(
+                      (tag) => FilterChip(
+                        avatar: Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: Color(
+                            int.parse(
+                              tag['color'].toString().replaceFirst('#', 'FF'),
+                              radix: 16,
+                            ),
+                          ),
+                        ),
+                        label: Text(tag['name']),
+                        selected: strings(t['tagIds']).contains(tag['id']),
+                        onSelected: (v) => setState(() {
+                          final list = strings(t['tagIds']);
+                          v ? list.add(tag['id']) : list.remove(tag['id']);
+                          t['tagIds'] = list;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.add, size: 18),
+                      label: const Text('Nouveau tag'),
+                      onPressed: addTag,
+                    ),
+                  ],
+                ),
+                ...checklistBlock(),
+                ...imagesBlock(),
+              ],
+            ] else ...[
+              ...summary(),
+              TextField(
+                controller: title,
+                maxLength: 160,
+                // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                autofocus: t['id'] == null,
+                style: TextStyle(
+                  fontFamily: tokensOf(context).displayFont,
+                  fontSize: existing ? 28 : 24,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Qu’est-ce qu’on a en tête ?',
+                  counterText: '',
+                  border: existing ? InputBorder.none : null,
+                  enabledBorder: existing ? InputBorder.none : null,
+                  filled: existing ? false : null,
+                  contentPadding: existing ? EdgeInsets.zero : null,
+                ),
+              ),
+              ...actions(),
+              heading(existing ? 'Notes' : 'L’essentiel'),
+              TextField(
+                controller: description,
+                minLines: 3,
+                maxLines: 8,
+                maxLength: 12000,
+                decoration: const InputDecoration(
+                  labelText: 'Notes et contexte',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...checklistBlock(),
+              ...imagesBlock(),
+              heading('On en parle'),
+              ...maps(t['comments']).map(
+                (c) => Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${name(c['authorId'])} · ${timeLabel(c['at'])}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(c['text']),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              TextField(
+                controller: comment,
+                minLines: 1,
+                maxLines: 5,
+                maxLength: 6000,
+                decoration: const InputDecoration(
+                  hintText: 'Une avancée, une question, une décision…',
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: saving ? null : postComment,
+                  icon: const Icon(Icons.send_outlined),
+                  label: const Text('Commenter'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Tous les réglages'),
+                subtitle: const Text(
+                  'Avancement, type, priorité, responsables, dates, tags',
+                ),
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: t['stageId'],
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Avancement'),
+                    items: stageItems
+                        .map(
+                          (s) => DropdownMenuItem(
+                            value: s['id'].toString(),
+                            child: Text(
+                              s['name'].toString(),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      t['stageId'] = v;
+                      dirty = true;
+                    }),
+                  ),
+                  if (t['stageId'] == 'done') ...[
+                    heading('Qui l’a réalisé ?'),
+                    const Text(
+                      'Choix explicite, indépendant des responsables.',
+                    ),
+                    memberChoices('performers'),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: t['kind'],
+                          decoration: const InputDecoration(labelText: 'Type'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'obligation',
+                              child: Text('Obligation'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'wish',
+                              child: Text('Envie'),
+                            ),
+                          ],
+                          onChanged: (v) => setState(() {
+                            t['kind'] = v;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: t['priority'],
+                          decoration: const InputDecoration(
+                            labelText: 'Priorité',
+                          ),
+                          items: ['low', 'normal', 'high', 'urgent']
+                              .map(
+                                (p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(priorityName(p)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() {
+                            t['priority'] = v;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                  heading('Qui s’en occupe ?'),
+                  memberChoices('assignees'),
+                  heading('Quand ?'),
+                  ...['startDate', 'dueDate'].map(
+                    (key) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today_outlined),
+                      title: Text(
+                        key == 'startDate' ? 'À faire à partir du' : 'Échéance',
+                      ),
+                      subtitle: Text(
+                        t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                      ),
+                      onTap: () => datePick(key),
+                      trailing: t[key] == null
+                          ? null
+                          : IconButton(
+                              onPressed: () => setState(() {
+                                t[key] = null;
+                                dirty = true;
+                              }),
+                              icon: const Icon(Icons.close),
+                            ),
+                    ),
+                  ),
+                  heading('Les tags'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ...tags.map(
+                        (tag) => FilterChip(
+                          avatar: Icon(
+                            Icons.circle,
+                            size: 12,
+                            color: Color(
+                              int.parse(
+                                tag['color'].toString().replaceFirst('#', 'FF'),
+                                radix: 16,
+                              ),
+                            ),
+                          ),
+                          label: Text(tag['name']),
+                          selected: strings(t['tagIds']).contains(tag['id']),
+                          onSelected: (v) => setState(() {
+                            final list = strings(t['tagIds']);
+                            v ? list.add(tag['id']) : list.remove(tag['id']);
+                            t['tagIds'] = list;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add, size: 18),
+                        label: const Text('Nouveau tag'),
+                        onPressed: addTag,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              heading('Le fil de cette tâche'),
+              ...maps(t['history']).reversed.map(
+                (a) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.history, size: 18),
+                  title: Text(activityDetail(a)),
+                  subtitle: Text(
+                    '${name(a['actorId'])} · ${timeLabel(a['at'])}',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (widget.embedded) {
+      // Volet (écran ouvert) : en-tête propre au panneau (fermer + actions),
+      // puis le corps. Pas de route à dépiler, pas d'AppBar.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Fermer',
+                  icon: const Icon(Icons.close),
+                  onPressed: () async {
+                    if (await confirmLeave()) dismiss();
+                  },
+                ),
+                const Spacer(),
+                ...topActions,
+              ],
+            ),
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return PopScope(
       canPop: !dirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final leave = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Quitter sans enregistrer ?'),
-            content: const Text(
-              'Les modifications de ce ticket ne sont pas encore enregistrées.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(c, false),
-                child: const Text('Continuer'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(c, true),
-                child: const Text('Quitter'),
-              ),
-            ],
-          ),
-        );
-        if (leave == true && context.mounted) {
+        if (await confirmLeave() && mounted) {
           setState(() => dirty = false);
           await WidgetsBinding.instance.endOfFrame;
-          if (context.mounted) Navigator.pop(context);
+          if (mounted) dismiss();
         }
       },
       child: Scaffold(
         appBar: AppBar(
           title: Text(t['id'] == null ? 'Une nouvelle tâche' : ''),
-          actions: [
-            if (existing &&
-                (t['priority'] == 'urgent' || t['priority'] == 'high'))
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: PriorityBadge(
-                  t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
-                ),
-              ),
-            if (existing)
-              PopupMenuButton<String>(
-                tooltip: 'Plus d’actions',
-                onSelected: (v) =>
-                    v == 'abandon' ? abandon() : saveAsShortcut(),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'shortcut',
-                    child: ListTile(
-                      leading: Icon(Icons.bolt_outlined),
-                      title: Text('Enregistrer comme raccourci'),
-                    ),
-                  ),
-                  if (t['stageId'] != 'done' && t['stageId'] != 'abandoned')
-                    const PopupMenuItem(
-                      value: 'abandon',
-                      child: ListTile(
-                        leading: Icon(Icons.do_not_disturb_on_outlined),
-                        title: Text('Abandonner'),
-                        subtitle: Text(
-                          'Décidé de ne pas faire, gardé dans l’historique',
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: FilledButton(
-                onPressed: saving ? null : () => save(),
-                child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
-              ),
-            ),
-          ],
+          actions: topActions,
         ),
-        body: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 60),
-              children: [
-                if (!existing) ...[
-                  TextField(
-                    controller: title,
-                    maxLength: 160,
-                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    autofocus: t['id'] == null,
-                    style: TextStyle(
-                      fontFamily: tokensOf(context).displayFont,
-                      fontSize: existing ? 28 : 24,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Qu’est-ce qu’on a en tête ?',
-                      counterText: '',
-                      border: existing ? InputBorder.none : null,
-                      enabledBorder: existing ? InputBorder.none : null,
-                      filled: existing ? false : null,
-                      contentPadding: existing ? EdgeInsets.zero : null,
-                    ),
-                  ),
-                  if (!details)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: TextButton.icon(
-                        onPressed: () => setState(() => details = true),
-                        icon: const Icon(Icons.tune),
-                        label: const Text(
-                          'Ajouter des détails, une date, un responsable…',
-                        ),
-                      ),
-                    ),
-                  if (details) ...[
-                    heading(existing ? 'Notes' : 'L’essentiel'),
-                    TextField(
-                      controller: description,
-                      minLines: 3,
-                      maxLines: 8,
-                      maxLength: 12000,
-                      decoration: const InputDecoration(
-                        labelText: 'Notes et contexte',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: t['stageId'],
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Avancement',
-                      ),
-                      items: stageItems
-                          .map(
-                            (s) => DropdownMenuItem(
-                              value: s['id'].toString(),
-                              child: Text(
-                                s['name'].toString(),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        t['stageId'] = v;
-                        dirty = true;
-                      }),
-                    ),
-                    if (t['stageId'] == 'done') ...[
-                      heading('Qui l’a réalisé ?'),
-                      const Text(
-                        'Choix explicite, indépendant des responsables.',
-                      ),
-                      memberChoices('performers'),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: t['kind'],
-                            decoration: const InputDecoration(
-                              labelText: 'Type',
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'obligation',
-                                child: Text('Obligation'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'wish',
-                                child: Text('Envie'),
-                              ),
-                            ],
-                            onChanged: (v) => setState(() {
-                              t['kind'] = v;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: t['priority'],
-                            decoration: const InputDecoration(
-                              labelText: 'Priorité',
-                            ),
-                            items: ['low', 'normal', 'high', 'urgent']
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(priorityName(p)),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              t['priority'] = v;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                      ],
-                    ),
-                    heading('Qui s’en occupe ?'),
-                    memberChoices('assignees'),
-                    heading('Quand ?'),
-                    ...['startDate', 'dueDate'].map(
-                      (key) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.calendar_today_outlined),
-                        title: Text(
-                          key == 'startDate'
-                              ? 'À faire à partir du'
-                              : 'Échéance',
-                        ),
-                        subtitle: Text(
-                          t[key] == null ? 'Sans date' : dateLabel(t[key]),
-                        ),
-                        onTap: () => datePick(key),
-                        trailing: t[key] == null
-                            ? null
-                            : IconButton(
-                                onPressed: () => setState(() {
-                                  t[key] = null;
-                                  dirty = true;
-                                }),
-                                icon: const Icon(Icons.close),
-                              ),
-                      ),
-                    ),
-                    heading('Les tags'),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        ...tags.map(
-                          (tag) => FilterChip(
-                            avatar: Icon(
-                              Icons.circle,
-                              size: 12,
-                              color: Color(
-                                int.parse(
-                                  tag['color'].toString().replaceFirst(
-                                    '#',
-                                    'FF',
-                                  ),
-                                  radix: 16,
-                                ),
-                              ),
-                            ),
-                            label: Text(tag['name']),
-                            selected: strings(t['tagIds']).contains(tag['id']),
-                            onSelected: (v) => setState(() {
-                              final list = strings(t['tagIds']);
-                              v ? list.add(tag['id']) : list.remove(tag['id']);
-                              t['tagIds'] = list;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 18),
-                          label: const Text('Nouveau tag'),
-                          onPressed: addTag,
-                        ),
-                      ],
-                    ),
-                    ...checklistBlock(),
-                    ...imagesBlock(),
-                  ],
-                ] else ...[
-                  ...summary(),
-                  TextField(
-                    controller: title,
-                    maxLength: 160,
-                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    autofocus: t['id'] == null,
-                    style: TextStyle(
-                      fontFamily: tokensOf(context).displayFont,
-                      fontSize: existing ? 28 : 24,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Qu’est-ce qu’on a en tête ?',
-                      counterText: '',
-                      border: existing ? InputBorder.none : null,
-                      enabledBorder: existing ? InputBorder.none : null,
-                      filled: existing ? false : null,
-                      contentPadding: existing ? EdgeInsets.zero : null,
-                    ),
-                  ),
-                  ...actions(),
-                  heading(existing ? 'Notes' : 'L’essentiel'),
-                  TextField(
-                    controller: description,
-                    minLines: 3,
-                    maxLines: 8,
-                    maxLength: 12000,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes et contexte',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...checklistBlock(),
-                  ...imagesBlock(),
-                  heading('On en parle'),
-                  ...maps(t['comments']).map(
-                    (c) => Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${name(c['authorId'])} · ${timeLabel(c['at'])}',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SelectableText(c['text']),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  TextField(
-                    controller: comment,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: 6000,
-                    decoration: const InputDecoration(
-                      hintText: 'Une avancée, une question, une décision…',
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.tonalIcon(
-                      onPressed: saving ? null : postComment,
-                      icon: const Icon(Icons.send_outlined),
-                      label: const Text('Commenter'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text('Tous les réglages'),
-                    subtitle: const Text(
-                      'Avancement, type, priorité, responsables, dates, tags',
-                    ),
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: t['stageId'],
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Avancement',
-                        ),
-                        items: stageItems
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s['id'].toString(),
-                                child: Text(
-                                  s['name'].toString(),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          t['stageId'] = v;
-                          dirty = true;
-                        }),
-                      ),
-                      if (t['stageId'] == 'done') ...[
-                        heading('Qui l’a réalisé ?'),
-                        const Text(
-                          'Choix explicite, indépendant des responsables.',
-                        ),
-                        memberChoices('performers'),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: t['kind'],
-                              decoration: const InputDecoration(
-                                labelText: 'Type',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'obligation',
-                                  child: Text('Obligation'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'wish',
-                                  child: Text('Envie'),
-                                ),
-                              ],
-                              onChanged: (v) => setState(() {
-                                t['kind'] = v;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: t['priority'],
-                              decoration: const InputDecoration(
-                                labelText: 'Priorité',
-                              ),
-                              items: ['low', 'normal', 'high', 'urgent']
-                                  .map(
-                                    (p) => DropdownMenuItem(
-                                      value: p,
-                                      child: Text(priorityName(p)),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) => setState(() {
-                                t['priority'] = v;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-                      heading('Qui s’en occupe ?'),
-                      memberChoices('assignees'),
-                      heading('Quand ?'),
-                      ...['startDate', 'dueDate'].map(
-                        (key) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.calendar_today_outlined),
-                          title: Text(
-                            key == 'startDate'
-                                ? 'À faire à partir du'
-                                : 'Échéance',
-                          ),
-                          subtitle: Text(
-                            t[key] == null ? 'Sans date' : dateLabel(t[key]),
-                          ),
-                          onTap: () => datePick(key),
-                          trailing: t[key] == null
-                              ? null
-                              : IconButton(
-                                  onPressed: () => setState(() {
-                                    t[key] = null;
-                                    dirty = true;
-                                  }),
-                                  icon: const Icon(Icons.close),
-                                ),
-                        ),
-                      ),
-                      heading('Les tags'),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          ...tags.map(
-                            (tag) => FilterChip(
-                              avatar: Icon(
-                                Icons.circle,
-                                size: 12,
-                                color: Color(
-                                  int.parse(
-                                    tag['color'].toString().replaceFirst(
-                                      '#',
-                                      'FF',
-                                    ),
-                                    radix: 16,
-                                  ),
-                                ),
-                              ),
-                              label: Text(tag['name']),
-                              selected: strings(t['tagIds'])
-                                  .contains(tag['id']),
-                              onSelected: (v) => setState(() {
-                                final list = strings(t['tagIds']);
-                                v
-                                    ? list.add(tag['id'])
-                                    : list.remove(tag['id']);
-                                t['tagIds'] = list;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                          ActionChip(
-                            avatar: const Icon(Icons.add, size: 18),
-                            label: const Text('Nouveau tag'),
-                            onPressed: addTag,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  heading('Le fil de cette tâche'),
-                  ...maps(t['history']).reversed.map(
-                    (a) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      leading: const Icon(Icons.history, size: 18),
-                      title: Text(activityDetail(a)),
-                      subtitle: Text(
-                        '${name(a['actorId'])} · ${timeLabel(a['at'])}',
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+        body: body,
       ),
     );
   }
