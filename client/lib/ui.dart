@@ -270,6 +270,9 @@ enum FoyerSign {
   star,
   house,
   bag,
+  sun,
+  cal,
+  book,
 }
 
 /// Signe d’un rayon de courses (ids du serveur, repli : cabas).
@@ -455,6 +458,44 @@ class _SignPainter extends CustomPainter {
             ..color = color
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2,
+        );
+      case FoyerSign.sun:
+        canvas.drawCircle(const Offset(12, 12), 5.2, fill);
+        for (var i = 0; i < 8; i++) {
+          canvas.save();
+          canvas.translate(12, 12);
+          canvas.rotate(i * 0.7854 + (i.isEven ? 0 : .12)); // rayons inégaux
+          canvas.drawRRect(
+            RRect.fromLTRBR(-1.1, -11, 1.1, -7.2, const Radius.circular(1)),
+            fill,
+          );
+          canvas.restore();
+        }
+      case FoyerSign.cal:
+        canvas.drawRRect(
+          RRect.fromLTRBR(4, 5, 20, 21, const Radius.circular(2.5)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(7, 2, 9.2, 7, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(14.8, 2, 17, 7, const Radius.circular(1)),
+          fill,
+        );
+      case FoyerSign.book:
+        canvas.drawPath(
+          Path()
+            ..moveTo(12, 5)
+            ..cubicTo(9, 3.5, 6, 3.5, 4, 4.5)
+            ..lineTo(4, 19)
+            ..cubicTo(7, 18, 10, 18.5, 12, 20)
+            ..cubicTo(14, 18.5, 17, 18, 20, 19)
+            ..lineTo(20, 4.5)
+            ..cubicTo(18, 3.5, 15, 3.5, 12, 5)
+            ..close(),
+          fill,
         );
     }
   }
@@ -882,10 +923,11 @@ class KeyboardBack extends StatelessWidget {
   );
 }
 
-/// Barre de navigation flottante : l’onglet actif affiche son nom.
+/// Bandeau de navigation « Découpes » : une bande de papier au coin coupé,
+/// quatre destinations signées ; l’active porte un tampon dans le principal.
 class FloatingNav extends StatelessWidget {
   final int index;
-  final List<(IconData, String)> items;
+  final List<(FoyerSign, String)> items;
   final ValueChanged<int> onSelected;
   const FloatingNav({
     super.key,
@@ -897,131 +939,104 @@ class FloatingNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: Material(
-          color: Theme.of(context).cardTheme.color,
-          elevation: 2,
-          shadowColor: Colors.black26,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(t.radius + 4),
-            side: BorderSide(color: c.outlineVariant),
-          ),
-          child: SizedBox(
-            height: 64,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final layout = navLayout(
-                    box.maxWidth,
-                    items.length,
-                    measureLabel(context, items[index].$2),
-                  );
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      for (final (i, (icon, label)) in items.indexed)
-                        Semantics(
-                          selected: i == index,
-                          button: true,
-                          label: label,
-                          excludeSemantics: true,
-                          child: Tooltip(
-                            message: label,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => onSelected(i),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                height: 46,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: i == index
-                                      ? layout.selectedPadding
-                                      : layout.padding,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: i == index
-                                      ? c.primary
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      icon,
-                                      size: 22,
-                                      color: i == index
-                                          ? c.onPrimary
-                                          : c.onSurfaceVariant,
+    return Material(
+      color: Theme.of(context).cardTheme.color,
+      elevation: 6,
+      shadowColor: Colors.black26,
+      shape: cutShape(t.cut + 6, side: BorderSide(color: c.outlineVariant)),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 66,
+          child: Row(
+            children: [
+              for (final (i, (sign, label)) in items.indexed)
+                Expanded(
+                  child: Semantics(
+                    selected: i == index,
+                    button: true,
+                    label: label,
+                    excludeSemantics: true,
+                    child: Tooltip(
+                      message: label,
+                      child: InkWell(
+                        onTap: () => onSelected(i),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              width: 46,
+                              height: 32,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (i == index)
+                                    CustomPaint(
+                                      size: const Size(44, 32),
+                                      painter: _StampPainter(c.primary),
                                     ),
-                                    if (i == index && layout.label) ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        label,
-                                        style: TextStyle(
-                                          color: c.onPrimary,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
+                                  SignIcon(
+                                    sign,
+                                    size: 19,
+                                    color: i == index
+                                        ? c.onPrimary
+                                        : c.onSurfaceVariant,
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 2),
+                            Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontFamily: t.displayFont,
+                                fontWeight: i == index
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                                color: i == index
+                                    ? c.onSurface
+                                    : c.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
     );
   }
-
-  static double measureLabel(BuildContext context, String label) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: DefaultTextStyle.of(context).style
-            .copyWith(fontWeight: FontWeight.w700),
-      ),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    return painter.width;
-  }
 }
 
-/// Place de la barre : marges réduites si besoin, puis onglet actif sans son nom
-/// (grande police ou petit écran) plutôt que de rogner le dernier onglet.
-({double padding, double selectedPadding, bool label}) navLayout(
-  double width,
-  int count,
-  double labelWidth,
-) {
-  const icon = 22.0, gap = 8.0;
-  for (final (padding, selected) in [(12.0, 14.0), (8.0, 10.0)]) {
-    final needed =
-        (count - 1) * (icon + 2 * padding) +
-        icon +
-        gap +
-        labelWidth +
-        2 * selected;
-    if (needed <= width) {
-      return (padding: padding, selectedPadding: selected, label: true);
-    }
+/// Tampon irrégulier derrière le signe actif — même famille que les découpes.
+class _StampPainter extends CustomPainter {
+  final Color color;
+  _StampPainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * .48, 0)
+        ..lineTo(w, h * .14)
+        ..lineTo(w * .92, h * .78)
+        ..lineTo(w * .58, h)
+        ..lineTo(w * .08, h * .88)
+        ..lineTo(0, h * .26)
+        ..close(),
+      Paint()..color = color,
+    );
   }
-  final padding = ((width / count) - icon) / 2;
-  final p = padding.clamp(4.0, 12.0);
-  return (padding: p, selectedPadding: p, label: false);
+
+  @override
+  bool shouldRepaint(_StampPainter old) => old.color != color;
 }
 
 /// Titre de section d’une liste (« EN RETARD 1 »), avec un signe Découpes

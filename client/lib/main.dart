@@ -130,6 +130,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   bool loading = true, signing = false;
   String? error;
   int tab = 0;
+  // Dernière vue ouverte dans « Prévu » (Semaine 1, Tableau 2, Un jour 3).
+  int lastPlanned = 1;
   String person = 'all', query = '', tag = 'all';
   bool searching = false;
   DateTime? historyFrom, historyTo;
@@ -1070,14 +1072,31 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Ce qu’il faut rapporter',
     ];
     final tickets = visible();
-    const views = [
-      (Icons.wb_sunny_outlined, 'Aujourd’hui'),
-      (Icons.date_range_outlined, 'Semaine'),
-      (Icons.view_kanban_outlined, 'Tableau'),
-      (Icons.inventory_2_outlined, 'Backlog'),
-      (Icons.history, 'Historique'),
-      (Icons.shopping_basket_outlined, 'Courses'),
+    // Quatre destinations ; « Prévu » regroupe Semaine, Tableau et Un jour
+    // (les vues internes 0..5 restent inchangées, seule la porte d'entrée change).
+    const destinations = [
+      (FoyerSign.sun, 'Aujourd’hui'),
+      (FoyerSign.bag, 'Courses'),
+      (FoyerSign.cal, 'Prévu'),
+      (FoyerSign.book, 'Journal'),
     ];
+    final destination = switch (tab) {
+      0 => 0,
+      5 => 1,
+      4 => 3,
+      _ => 2,
+    };
+    void openDestination(int d) => setState(() {
+      searching = false;
+      query = '';
+      tab = switch (d) {
+        0 => 0,
+        1 => 5,
+        3 => 4,
+        _ => lastPlanned,
+      };
+    });
+    final title = destinations[destination].$2;
     final members = maps(data!['members']);
     final me = Map<String, dynamic>.from(data!['me']);
     final meIndex = members.indexWhere((m) => m['id'] == me['id']);
@@ -1097,9 +1116,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       bottomNavigationBar: wide
           ? null
           : FloatingNav(
-              index: tab,
-              items: views,
-              onSelected: (i) => setState(() => tab = i),
+              index: destination,
+              items: destinations,
+              onSelected: openDestination,
             ),
       body: SafeArea(
         bottom: false,
@@ -1107,13 +1126,19 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           children: [
             if (wide)
               NavigationRail(
-                selectedIndex: tab,
-                onDestinationSelected: (i) => setState(() => tab = i),
+                selectedIndex: destination,
+                onDestinationSelected: openDestination,
                 labelType: NavigationRailLabelType.all,
                 destinations: [
-                  for (final (icon, label) in views)
+                  for (final (i, (sign, label)) in destinations.indexed)
                     NavigationRailDestination(
-                      icon: Icon(icon),
+                      icon: SignIcon(
+                        sign,
+                        size: 22,
+                        color: i == destination
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       label: Text(label),
                     ),
                 ],
@@ -1125,7 +1150,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ScreenHeader(
-                      title: views[tab].$2,
+                      title: title,
                       subtitle: subtitles[tab],
                       searching: searching,
                       // Courses a sa propre recherche d’ingrédients.
@@ -1254,6 +1279,28 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ],
                       ),
                     ),
+                    // Sélecteur de vue de « Prévu » : Semaine / Tableau / Un jour.
+                    if (destination == 2)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                        child: Row(
+                          children: [
+                            for (final (t, label) in [
+                              (1, 'Semaine'),
+                              (2, 'Tableau'),
+                              (3, 'Un jour'),
+                            ])
+                              FilterPill(
+                                label: label,
+                                selected: tab == t,
+                                onTap: () => setState(() {
+                                  tab = t;
+                                  lastPlanned = t;
+                                }),
+                              ),
+                          ],
+                        ),
+                      ),
                     if (tab != 5) ...[
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -1694,7 +1741,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             .where((s) => s['id'] == t['stageId'])
             .map((s) => s['name'].toString())
             .firstOrNull ??
-        {'backlog': 'Backlog'}[t['stageId']];
+        {'backlog': 'Un jour'}[t['stageId']];
     final firstTag = maps(data!['tags'])
         .where((tag) => strings(t['tagIds']).contains(tag['id']))
         .map((tag) => tag['name'].toString())
@@ -2502,7 +2549,7 @@ class _TicketPageState extends State<TicketPage> {
         ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
   String get stageName =>
       {
-        'backlog': 'Backlog',
+        'backlog': 'Un jour',
         'done': 'Terminé',
         'abandoned': 'Abandonné',
         for (final s in stages) s['id']: s['name'],
@@ -3054,7 +3101,7 @@ class _TicketPageState extends State<TicketPage> {
     final action = a['action'];
     if (action == 'stage') {
       final stages = {
-        'backlog': 'Backlog',
+        'backlog': 'Un jour',
         'done': 'Terminé',
         'abandoned': 'Abandonné',
         for (final s in maps(widget.data['stages'])) s['id']: s['name'],
@@ -3082,7 +3129,7 @@ class _TicketPageState extends State<TicketPage> {
   @override
   Widget build(BuildContext context) {
     final stageItems = [
-      {'id': 'backlog', 'name': 'Backlog'},
+      {'id': 'backlog', 'name': 'Un jour'},
       ...maps(widget.data['stages']),
       {'id': 'done', 'name': 'Terminé'},
       {'id': 'abandoned', 'name': 'Abandonné / décidé de ne pas faire'},

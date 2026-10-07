@@ -195,28 +195,19 @@ void main() {
     expect(find.text('Annuler'), findsNothing);
   });
 
-  test(
-    'Barre : marges réduites puis onglet actif sans nom quand la place manque',
-    () {
-      expect(navLayout(400, 6, 60).label, isTrue);
-      expect(navLayout(400, 6, 60).padding, 12);
-      // Grande police : on resserre d’abord.
-      final tight = navLayout(340, 6, 95);
-      expect((tight.padding, tight.label), (8, true));
-      // Encore trop large : l’onglet actif garde sa couleur mais perd son nom.
-      expect(navLayout(320, 6, 140).label, isFalse);
-    },
-  );
-
+  // Le bandeau à quatre destinations tient sur les petites largeurs, même en
+  // grande police : libellés tronqués proprement, jamais de débordement.
   for (final (width, scale) in [(320.0, 1.0), (360.0, 1.3), (412.0, 1.5)]) {
     testWidgets(
-      'Les 6 onglets tiennent à ${width.toInt()} px, police ×$scale',
+      'Les 4 destinations tiennent à ${width.toInt()} px, police ×$scale',
       (tester) async {
         tester.view.physicalSize = Size(width, 800);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
+        var picked = -1;
         await tester.pumpWidget(
           MaterialApp(
+            theme: buildAppTheme(const AppAppearance()),
             home: MediaQuery(
               data: MediaQueryData(
                 size: Size(width, 800),
@@ -226,24 +217,22 @@ void main() {
                 bottomNavigationBar: FloatingNav(
                   index: 2,
                   items: const [
-                    (Icons.wb_sunny_outlined, 'Aujourd’hui'),
-                    (Icons.date_range_outlined, 'Semaine'),
-                    (Icons.view_kanban_outlined, 'Tableau'),
-                    (Icons.inventory_2_outlined, 'Backlog'),
-                    (Icons.history, 'Historique'),
-                    (Icons.shopping_basket_outlined, 'Courses'),
+                    (FoyerSign.sun, 'Aujourd’hui'),
+                    (FoyerSign.bag, 'Courses'),
+                    (FoyerSign.cal, 'Prévu'),
+                    (FoyerSign.book, 'Journal'),
                   ],
-                  onSelected: (_) {},
+                  onSelected: (i) => picked = i,
                 ),
               ),
             ),
           ),
         );
         expect(tester.takeException(), isNull);
-        final basket = tester.getRect(
-          find.byIcon(Icons.shopping_basket_outlined),
-        );
-        expect(basket.right, lessThanOrEqualTo(width - 12));
+        final band = tester.getRect(find.byType(FloatingNav));
+        expect(band.right, lessThanOrEqualTo(width));
+        await tester.tap(find.bySemanticsLabel('Journal'));
+        expect(picked, 3);
       },
     );
   }
