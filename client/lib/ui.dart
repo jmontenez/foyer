@@ -646,10 +646,12 @@ class TaskTile extends StatelessWidget {
       if (task.comments > 0) plural(task.comments, 'commentaire'),
     ];
     if (t.rows) {
-      final ring = switch (task.badge) {
+      // Ligne calme : le signe du type (maison/étoile) vit en marge et porte
+      // l'état par sa couleur — l'urgence reste nommée dans le meta.
+      final mark = switch (task.badge) {
         TaskBadge.late || TaskBadge.urgent => c.error,
         TaskBadge.high => c.secondaryContainer,
-        null => c.outline,
+        null => c.outlineVariant,
       };
       return InkWell(
         onTap: onTap,
@@ -661,13 +663,10 @@ class TaskTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: ring, width: 2),
-                ),
+              SignIcon(
+                task.wish ? FoyerSign.star : FoyerSign.house,
+                size: 19,
+                color: mark,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -697,7 +696,7 @@ class TaskTile extends StatelessWidget {
     return Card(
       margin: EdgeInsets.only(bottom: t.compact ? 8 : 12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(t.radius),
+        customBorder: cutShape(t.cut),
         onTap: onTap,
         child: Padding(
           padding: EdgeInsets.all(t.compact ? 12 : 16),
@@ -872,11 +871,13 @@ class FilterPill extends StatelessWidget {
         button: true,
         child: Material(
           color: selected ? c.onSurface : Colors.transparent,
-          shape: StadiumBorder(
+          // Pastille « Découpes » : un petit coin coupé plutôt qu'une pilule.
+          shape: cutShape(
+            9,
             side: BorderSide(color: selected ? c.onSurface : c.outlineVariant),
           ),
           child: InkWell(
-            customBorder: const StadiumBorder(),
+            customBorder: cutShape(9),
             onTap: onTap,
             child: Container(
               constraints: const BoxConstraints(minHeight: 40),
@@ -1125,15 +1126,15 @@ class SummaryTiles extends StatelessWidget {
         excludeSemantics: true,
         child: Material(
           color: color ?? Theme.of(context).cardTheme.color,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(t.radius - 2),
+          shape: cutShape(
+            t.cut,
             side: BorderSide(
               color: selected ? c.error : (color ?? c.outlineVariant),
               width: selected ? 2 : 1,
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(t.radius - 2),
+            customBorder: cutShape(t.cut),
             onTap: onTap,
             child: Padding(
               padding: EdgeInsets.all(t.compact ? 10 : 14),
@@ -1250,8 +1251,8 @@ class DayStrip extends StatelessWidget {
                   color: same(day, selected)
                       ? c.primary
                       : Theme.of(context).cardTheme.color,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(t.radius - 4),
+                  shape: cutShape(
+                    10,
                     side: BorderSide(
                       color: same(day, today) && !same(day, selected)
                           ? c.primary
@@ -1259,7 +1260,7 @@ class DayStrip extends StatelessWidget {
                     ),
                   ),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(t.radius - 4),
+                    customBorder: cutShape(10),
                     onTap: () => onSelect(same(day, selected) ? null : day),
                     child: SizedBox(
                       height: 64,
