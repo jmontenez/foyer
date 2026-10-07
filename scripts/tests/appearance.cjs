@@ -47,8 +47,11 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   // Palette v2 de la refonte : onglet « Découpes », veillée appliquée telle quelle.
   await appearance();
   await colors();
-  await page.getByText('Découpes',{exact:true}).click();
-  await page.getByText('Braise, veillée',{exact:true}).click();
+  // Les onglets Flutter web sont exposés en rôle « tab » (aria-label), pas en nœud texte.
+  await page.getByRole('tab',{name:/Découpes/}).click();
+  // Tuile sombre : le sous-titre « Thème sombre » est fusionné dans le même nœud
+  // sémantique que le titre — correspondance en sous-chaîne, pas exacte.
+  await page.getByText('Braise, veillée').click();
   await page.waitForTimeout(400);
   await page.screenshot({path:'artifacts/browser/apparence-braise-veillee-mobile.png'});
   await page.getByRole('button',{name:'Enregistrer mes couleurs',exact:true}).click();
