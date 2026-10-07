@@ -8,6 +8,10 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// Canal de distribution : « beta » produit une app installable à côté de l'app principale
+// (applicationId suffixé, libellés distincts), signée avec la même clé. Voir docs/beta.md.
+val foyerBeta = System.getenv("FOYER_CHANNEL") == "beta"
+
 android {
     namespace = "fr.foyer.foyer"
     compileSdk = flutter.compileSdkVersion
@@ -30,6 +34,11 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Libellés dépendants du canal : nom d'app (manifeste) et titres des widgets
+        // (resValue plutôt que res/values pour rester pilotés par FOYER_CHANNEL).
+        manifestPlaceholders["appLabel"] = if (foyerBeta) "Foyer β" else "Foyer"
+        resValue("string", "widget_today_label", if (foyerBeta) "Foyer β · Aujourd’hui" else "Foyer · Aujourd’hui")
+        resValue("string", "widget_shopping_label", if (foyerBeta) "Foyer β · Courses" else "Foyer · Courses")
     }
 
     signingConfigs {
@@ -46,6 +55,13 @@ android {
         release {
             // Never silently sign a production build with a public debug key.
             signingConfig = signingConfigs.findByName("personal")
+            if (foyerBeta) {
+                // Package distinct pour installer la beta à côté de l'app principale.
+                // Les classes restent dans le namespace fr.foyer.foyer : les receivers
+                // relatifs du manifeste et les qualifiedAndroidName Dart restent valides.
+                applicationIdSuffix = ".beta"
+                versionNameSuffix = "-beta"
+            }
         }
     }
 }

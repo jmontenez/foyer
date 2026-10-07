@@ -6,7 +6,7 @@
     <!-- Android 14 : Foyer reste l’installateur attitré de ses propres mises à jour. -->
     <uses-permission android:name="android.permission.ENFORCE_UPDATE_OWNERSHIP" />
     <application
-        android:label="Foyer"
+        android:label="${appLabel}"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:name="${applicationName}"

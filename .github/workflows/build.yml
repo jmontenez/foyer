@@ -66,8 +66,8 @@ jobs:
             artifacts/ci/
             artifacts/browser/*.png
       - name: Publier le build web
-        # Builds publiés seulement pour main, les tags v* ou un lancement manuel.
-        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        # Builds publiés seulement pour main, redesign (canal beta), les tags v* ou un lancement manuel.
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/redesign' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: foyer-web-${{ github.run_number }}
@@ -78,12 +78,15 @@ jobs:
     name: APK Android
     # En parallèle de la validation : la release, elle, exige les deux.
     # Les branches ne construisent pas d’APK, sauf lancement manuel (Actions → Run workflow).
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    # La branche redesign construit l’APK du canal beta (« Foyer β », package .beta, API de validation).
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/redesign' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       FIREBASE_ANDROID_JSON: ${{ vars.FIREBASE_ANDROID_JSON }}
       FOYER_API_URL: ${{ vars.FOYER_API_URL }}
+      FOYER_BETA_API_URL: ${{ vars.FOYER_BETA_API_URL }}
+      FOYER_CHANNEL: ${{ github.ref == 'refs/heads/redesign' && 'beta' || 'stable' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -125,21 +128,28 @@ jobs:
         run: rm -f "$RUNNER_TEMP/foyer-release.p12"
       - name: Préparer la distribution
         run: |
+          # Noms et package attendus selon le canal (beta = package .beta, asset distinct).
+          if [ "$FOYER_CHANNEL" = beta ]; then
+            apk=foyer-beta-arm64.apk expected=fr.foyer.foyer.beta
+          else
+            apk=foyer-arm64.apk expected=fr.foyer.foyer
+          fi
           mkdir -p artifacts/android
-          cp client/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk artifacts/android/foyer-arm64.apk
+          cp client/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "artifacts/android/$apk"
           signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-          "$signer" verify --print-certs artifacts/android/foyer-arm64.apk
+          "$signer" verify --print-certs "artifacts/android/$apk"
           cd artifacts/android
-          sha256sum foyer-arm64.apk > SHA256SUMS
+          sha256sum "$apk" > SHA256SUMS
           # Manifeste de mise à jour servi par l’API : versionCode réel lu dans l’APK
           # (--split-per-abi ajoute 1000 × ABI au numéro de build).
           aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)
           # Pas de `head` : sous pipefail, un SIGPIPE d’aapt2 ferait échouer l’étape.
-          "$aapt2" dump badging foyer-arm64.apk | python3 -c '
-          import hashlib, json, re, sys
+          "$aapt2" dump badging "$apk" | EXPECTED_PACKAGE="$expected" APK_NAME="$apk" python3 -c '
+          import hashlib, json, os, re, sys
           badging = sys.stdin.read().splitlines()[0]
-          assert "name=\x27fr.foyer.foyer\x27" in badging, badging
-          data = open("foyer-arm64.apk", "rb").read()
+          expected = "name=\x27" + os.environ["EXPECTED_PACKAGE"] + "\x27"
+          assert expected in badging, badging
+          data = open(os.environ["APK_NAME"], "rb").read()
           json.dump({
               "versionCode": int(re.search(r"versionCode=\x27(\d+)\x27", badging)[1]),
               "versionName": re.search(r"versionName=\x27([^\x27]+)\x27", badging)[1],
@@ -155,7 +165,9 @@ jobs:
           if-no-files-found: error
   release:
     name: Release privée sur tag
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    # redesign publie une prerelease beta-N : jamais déployée (le déploiement auto ne
+    # retient que les tags ci-N, cf. scripts/deploy/auto_update.py), téléchargée à la main.
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/redesign'
     needs: [validation, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -185,6 +197,8 @@ jobs:
         run: |
           if [[ "$SOURCE_REF" == refs/tags/v* ]]; then
             release_tag="$SOURCE_REF_NAME"
+          elif [[ "$SOURCE_REF" == refs/heads/redesign ]]; then
+            release_tag="beta-$GITHUB_RUN_NUMBER"
           else
             release_tag="ci-$GITHUB_RUN_NUMBER"
           fi

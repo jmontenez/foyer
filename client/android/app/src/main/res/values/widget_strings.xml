@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="widget_today_label">Foyer · Aujourd’hui</string>
+    <!-- Les libellés des widgets dépendent du canal : voir resValue dans build.gradle.kts. -->
     <string name="widget_today_description">Vos tâches du jour, d’un coup d’œil.</string>
-    <string name="widget_shopping_label">Foyer · Courses</string>
     <string name="widget_shopping_description">La liste de courses en cours, à cocher au magasin.</string>
 </resources>
