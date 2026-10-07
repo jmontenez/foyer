@@ -1624,10 +1624,16 @@ class _ShoppingViewState extends State<ShoppingView> {
               selected: mode == 'store',
               onTap: () => setState(() => mode = 'store'),
             ),
-            const Spacer(),
-            Text(
-              plural(items.length, 'article'),
-              style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+            const SizedBox(width: 8),
+            // Compteur flexible : il s'ellipse plutôt que de faire déborder la
+            // barre quand la place manque (métriques de police selon la plateforme).
+            Flexible(
+              child: Text(
+                plural(items.length, 'article'),
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+              ),
             ),
           ],
         ),
@@ -1660,10 +1666,14 @@ class _ShoppingViewState extends State<ShoppingView> {
                   letterSpacing: .8,
                 ),
               ),
-              const Spacer(),
-              Text(
-                '${items.where((i) => i['done'] != true).length} restants',
-                style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${items.where((i) => i['done'] != true).length} restants',
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+                ),
               ),
             ],
           ),
