@@ -44,14 +44,17 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.locator('flt-glass-pane').waitFor({state:'attached'});
   await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
 
-  // Accès rapide : le lait, avec sa quantité.
+  // Accès rapide : un toucher ajoute directement (quantité mémorisée) ;
+  // « Modifier » dans le retour visible rouvre la feuille.
   await page.getByRole('button',{name:'Courses',exact:true}).click();
   await page.getByText('Accès rapide',{exact:false}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-vide-mobile.png'});
   await chip('Lait').click();
+  await until(async () => (await draft()).some(i => i.text === 'Lait' && i.aisle === 'dairy'), 'Lait non ajouté directement');
+  await page.getByRole('button',{name:'Modifier',exact:true}).click();
   await page.getByRole('textbox',{name:'Quantité'}).fill('2 L');
-  await page.getByRole('button',{name:'Ajouter',exact:true}).click();
-  await until(async () => (await draft()).some(i => i.text === 'Lait' && i.qty === '2 L' && i.aisle === 'dairy'), 'Lait non ajouté');
+  await page.getByRole('button',{name:'Enregistrer',exact:true}).first().click();
+  await until(async () => (await draft()).some(i => i.text === 'Lait' && i.qty === '2 L' && i.aisle === 'dairy'), 'Quantité non enregistrée');
   // Déjà dans la liste : la puce le dit avant de la toucher.
   await chip('Déjà dans la liste Lait · 2 L').waitFor();
   if (!(await page.getByRole('checkbox',{name:'Déjà dans la liste Lait · 2 L',exact:true}).isChecked())) throw new Error('Puce non marquée');
