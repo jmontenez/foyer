@@ -1120,6 +1120,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     void openDestination(int d) => setState(() {
       searching = false;
       query = '';
+      // Changer de destination referme la fiche ouverte dans le volet.
+      detailOpen = false;
+      selectedTicketId = null;
       tab = switch (d) {
         0 => 0,
         1 => 5,
@@ -3366,14 +3369,15 @@ class _TicketPageState extends State<TicketPage> {
       {'id': 'done', 'name': 'Terminé'},
       {'id': 'abandoned', 'name': 'Abandonné / décidé de ne pas faire'},
     ];
-    final topActions = <Widget>[
-      if (existing && (t['priority'] == 'urgent' || t['priority'] == 'high'))
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: PriorityBadge(
+    // Priorité : badge dans l'AppBar (route plein écran) seulement ; dans le
+    // volet, la priorité est déjà au résumé, l'en-tête reste compact.
+    final priorityBadge =
+        existing && (t['priority'] == 'urgent' || t['priority'] == 'high')
+        ? PriorityBadge(
             t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
-          ),
-        ),
+          )
+        : null;
+    final topActions = <Widget>[
       if (existing)
         PopupMenuButton<String>(
           tooltip: 'Plus d’actions',
@@ -3402,8 +3406,14 @@ class _TicketPageState extends State<TicketPage> {
       Padding(
         padding: const EdgeInsets.only(right: 12),
         child: FilledButton(
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
           onPressed: saving ? null : () => save(),
-          child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
+          child: Text(
+            saving ? 'Enregistrement…' : 'Enregistrer',
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     ];
@@ -3871,7 +3881,14 @@ class _TicketPageState extends State<TicketPage> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(t['id'] == null ? 'Une nouvelle tâche' : ''),
-          actions: topActions,
+          actions: [
+            if (priorityBadge != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Center(child: priorityBadge),
+              ),
+            ...topActions,
+          ],
         ),
         body: body,
       ),
