@@ -76,6 +76,10 @@ call("GET", "/api/v1/images/nope", expected=401)
 call("GET", "/api/v1/app/android", expected=401)
 call("GET", "/api/v1/app/android.apk", expected=401)
 call("POST", "/auth/demo/0", origin="https://intrus.invalid", expected=403)
+# Client mobile : pas d'en-tête Origin — accepté à la connexion (comme /auth/google/mobile),
+# la protection CSRF reste exigée.
+call("POST", "/auth/demo/0", origin=None, csrf=False, expected=403)
+assert call("POST", "/auth/demo/0", origin=None)["token"]
 a = call("POST", "/auth/demo/0")["token"]
 b = call("POST", "/auth/demo/1")["token"]
 state = call("GET", "/api/v1/state", token=a)

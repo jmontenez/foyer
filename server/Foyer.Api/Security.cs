@@ -73,5 +73,14 @@ public static class Security
         if (!ctx.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.Ordinal) && origin.Length == 0)
             throw new RuleException("Origine navigateur requise.", 403);
     }
+    // Connexion (pas encore de Bearer) : la protection CSRF ne vise que les navigateurs
+    // (cookie + Origin). Un client mobile n'envoie pas d'Origin et reste accepté,
+    // comme sur /auth/google/mobile ; une origine étrangère reste refusée.
+    public static void CheckLogin(HttpContext ctx, Settings settings)
+    {
+        if (ctx.Request.Headers["X-Foyer-CSRF"] != "1") throw new RuleException("En-tête de protection requis.", 403);
+        var origin = ctx.Request.Headers.Origin.ToString();
+        if (origin.Length > 0 && origin != settings.Origin) throw new RuleException("Origine refusée.", 403);
+    }
     public static object PublicMember(Member m) => new { m.Id, m.Name, m.DigestTime, m.DigestEnabled, m.PaletteId, m.FontId, m.ListStyle, m.Density, m.Corners, m.CustomPrimary, m.CustomAccent, m.CustomDark };
 }
