@@ -2,6 +2,12 @@ name: Tests et builds Foyer
 on:
   push:
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Canal de l’APK (le canal beta vise l’instance de validation)
+        type: choice
+        options: [stable, beta]
+        default: stable
 permissions:
   contents: read
 concurrency:
@@ -86,7 +92,8 @@ jobs:
       FIREBASE_ANDROID_JSON: ${{ vars.FIREBASE_ANDROID_JSON }}
       FOYER_API_URL: ${{ vars.FOYER_API_URL }}
       FOYER_BETA_API_URL: ${{ vars.FOYER_BETA_API_URL }}
-      FOYER_CHANNEL: ${{ github.ref == 'refs/heads/redesign' && 'beta' || 'stable' }}
+      # beta : push sur redesign, ou lancement manuel avec channel=beta (test du canal sans release).
+      FOYER_CHANNEL: ${{ (github.ref == 'refs/heads/redesign' || inputs.channel == 'beta') && 'beta' || 'stable' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
