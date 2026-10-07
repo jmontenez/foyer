@@ -10,7 +10,11 @@ double contrast(Color x, Color y) {
 void main() {
   test('Toutes les palettes gardent des contrastes lisibles', () {
     expect(palettes.where((p) => !p.bold).length, 11);
-    expect(palettes.where((p) => p.bold).length, 9);
+    expect(palettes.where((p) => p.bold && !p.v2).length, 9);
+    // Refonte « Découpes » : six duos littéraux (3 papiers clairs, 3 veillées).
+    expect(palettes.where((p) => p.v2).length, 6);
+    expect(palettes.where((p) => p.v2 && p.dark).length, 3);
+    expect(palettes.where((p) => p.v2 && !p.bold).length, 0);
     expect(palettes.map((p) => p.id).toSet().length, palettes.length);
     for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));

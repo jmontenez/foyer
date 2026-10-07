@@ -8,6 +8,10 @@ class AppPalette {
   /// Marquée : couleurs appliquées telles quelles, sans les tons adoucis de Material 3.
   final bool bold;
   final bool dark;
+
+  /// Palette de la refonte « Découpes » (duos littéraux, fonds papier/veillée).
+  /// À la fin de la refonte, les palettes non-v2 seront retirées.
+  final bool v2;
   const AppPalette(
     this.id,
     this.name,
@@ -16,6 +20,7 @@ class AppPalette {
     this.background, {
     this.bold = false,
     this.dark = false,
+    this.v2 = false,
   });
 }
 
@@ -174,10 +179,73 @@ const palettes = [
     Color(0xFFFFF5FA),
     bold: true,
   ),
+  // Palettes v2 « Découpes » : des duos appliqués littéralement (bold), trois papiers
+  // clairs et trois encres « veillée » accordés à la main. Ids déclarés côté serveur.
+  AppPalette(
+    'd2-sauge',
+    'Sauge & ambre',
+    Color(0xFF386653),
+    Color(0xFFB58A44),
+    Color(0xFFF6F3EC),
+    bold: true,
+    v2: true,
+  ),
+  AppPalette(
+    'd2-encre',
+    'Encre & corail',
+    Color(0xFF2B4BB3),
+    Color(0xFFD96546),
+    Color(0xFFF4F6FB),
+    bold: true,
+    v2: true,
+  ),
+  AppPalette(
+    'd2-terre',
+    'Terre & sarcelle',
+    Color(0xFF9A4A22),
+    Color(0xFF2F6D5F),
+    Color(0xFFFAF4EE),
+    bold: true,
+    v2: true,
+  ),
+  AppPalette(
+    'd2-sauge-nuit',
+    'Sauge, veillée',
+    Color(0xFF8FC7A9),
+    Color(0xFFD9A95B),
+    Color(0xFF121815),
+    bold: true,
+    dark: true,
+    v2: true,
+  ),
+  AppPalette(
+    'd2-braise-nuit',
+    'Braise, veillée',
+    Color(0xFFFF8A3D),
+    Color(0xFFFFC247),
+    Color(0xFF19100B),
+    bold: true,
+    dark: true,
+    v2: true,
+  ),
+  AppPalette(
+    'd2-prune-nuit',
+    'Prune, veillée',
+    Color(0xFFC39BE8),
+    Color(0xFFF2D06B),
+    Color(0xFF171221),
+    bold: true,
+    dark: true,
+    v2: true,
+  ),
 ];
 
-/// Onglets du sélecteur : palettes douces d’origine, puis palettes marquées.
-const paletteTabs = [('Douces', false), ('Marquées', true)];
+/// Onglets du sélecteur : palettes de la refonte, puis douces et marquées d’origine.
+final paletteTabs = <(String, bool Function(AppPalette))>[
+  ('Découpes', (p) => p.v2),
+  ('Douces', (p) => !p.bold && !p.v2),
+  ('Marquées', (p) => p.bold && !p.v2),
+];
 
 /// Texte noir ou blanc, le plus lisible sur [background] (contraste ≥ 4,5 garanti).
 Color readableOn(Color background) {
@@ -397,11 +465,15 @@ final selectedAppearance = ValueNotifier<AppAppearance>(const AppAppearance());
 @immutable
 class FoyerTokens extends ThemeExtension<FoyerTokens> {
   final double radius;
+
+  /// Profondeur du coin coupé « Découpes » (voir [cutShape]).
+  final double cut;
   final bool compact;
   final bool rows;
   final String? displayFont;
   const FoyerTokens({
     required this.radius,
+    this.cut = 16,
     required this.compact,
     required this.rows,
     this.displayFont,
@@ -410,11 +482,13 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
   @override
   FoyerTokens copyWith({
     double? radius,
+    double? cut,
     bool? compact,
     bool? rows,
     String? displayFont,
   }) => FoyerTokens(
     radius: radius ?? this.radius,
+    cut: cut ?? this.cut,
     compact: compact ?? this.compact,
     rows: rows ?? this.rows,
     displayFont: displayFont ?? this.displayFont,
@@ -425,12 +499,28 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
       other == null || t < .5 ? this : other;
 }
 
+/// Signature « Découpes » : le coin supérieur droit franchement coupé (asymétrique),
+/// les autres à peine — comme une feuille de papier dont on a ciselé un coin.
+/// Jamais un arrondi : c'est ce qui rend l'identité reconnaissable sans couleur.
+OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) =>
+    BeveledRectangleBorder(
+      side: side,
+      borderRadius: BorderRadius.only(
+        topLeft: const Radius.circular(4),
+        topRight: Radius.elliptical(cut * 1.4, cut),
+        bottomRight: const Radius.circular(4),
+        bottomLeft: const Radius.circular(4),
+      ),
+    );
+
 ThemeData buildAppTheme(AppAppearance appearance) {
   final palette = paletteFor(appearance);
   final font = fontById(appearance.fontId);
   final sharp = appearance.corners == 'sharp';
   final radius = sharp ? 8.0 : 20.0;
   final fieldRadius = sharp ? 6.0 : 14.0;
+  // Coin coupé : plus discret quand les angles « marqués » sont choisis.
+  final cut = sharp ? 10.0 : 16.0;
   final brightness = palette.dark ? Brightness.dark : Brightness.light;
   final accent = ColorScheme.fromSeed(
     seedColor: palette.accent,
@@ -478,10 +568,7 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     cardTheme: CardThemeData(
       color: card,
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radius),
-        side: BorderSide(color: colors.outlineVariant),
-      ),
+      shape: cutShape(cut, side: BorderSide(color: colors.outlineVariant)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -498,9 +585,8 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        shape: sharp
-            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-            : const StadiumBorder(),
+        // Fin des pilules : les actions portent le coin coupé de la refonte.
+        shape: cutShape(cut),
       ),
     ),
   );
@@ -522,6 +608,7 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     extensions: [
       FoyerTokens(
         radius: radius,
+        cut: cut,
         compact: appearance.density == 'compact',
         rows: appearance.listStyle == 'rows',
         displayFont: display,
@@ -614,10 +701,10 @@ class _PalettePickerState extends State<PalettePicker> {
   Widget build(BuildContext context) => DefaultTabController(
     length: paletteTabs.length + 1,
     initialIndex: selectedAppearance.value.paletteId == customPaletteId
-        ? 2
-        : paletteById(selectedAppearance.value.paletteId).bold
-        ? 1
-        : 0,
+        ? paletteTabs.length
+        : paletteTabs.indexWhere(
+            (t) => t.$2(paletteById(selectedAppearance.value.paletteId)),
+          ),
     child: SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -643,12 +730,9 @@ class _PalettePickerState extends State<PalettePicker> {
             Expanded(
               child: TabBarView(
                 children: [
-                  for (final (_, bold) in paletteTabs)
+                  for (final (_, match) in paletteTabs)
                     ListView(
-                      children: palettes
-                          .where((p) => p.bold == bold)
-                          .map(_tile)
-                          .toList(),
+                      children: palettes.where(match).map(_tile).toList(),
                     ),
                   customTab(),
                 ],
