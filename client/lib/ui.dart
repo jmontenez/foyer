@@ -527,6 +527,9 @@ class CutTab extends StatelessWidget {
     return Semantics(
       selected: selected,
       button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -574,43 +577,50 @@ class CutChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: label,
+      selected: selected,
       onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
-        decoration: ShapeDecoration(
-          color: selected
-              ? c.primary.withValues(alpha: .13)
-              : Colors.transparent,
-          shape: cutShape(
-            cutSmall,
-            side: BorderSide(color: c.outlineVariant, width: 1.5),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (selected) ...[
-              Icon(Icons.check, size: 16, color: c.primary),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Manrope',
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
+          decoration: ShapeDecoration(
+            color: selected
+                ? c.primary.withValues(alpha: .13)
+                : Colors.transparent,
+            shape: cutShape(
+              cutSmall,
+              side: BorderSide(color: c.outlineVariant, width: 1.5),
             ),
-            if (trailing != null) ...[
-              const SizedBox(width: 7),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                Icon(Icons.check, size: 16, color: c.primary),
+                const SizedBox(width: 6),
+              ],
               Text(
-                trailing!,
-                style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                label,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(width: 7),
+                Text(
+                  trailing!,
+                  style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -636,6 +646,9 @@ class CutButton extends StatelessWidget {
     final fg = primary ? c.onPrimary : c.onSurface;
     return Semantics(
       button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
@@ -797,17 +810,25 @@ class LinkText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: label,
+      // onTap sur le Semantics : les actions sémantiques (tests, lecteur d'écran)
+      // déclenchent le callback — le GestureDetector seul n'y répond pas.
       onTap: onTap,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: onTap == null
-              ? c.onSurfaceVariant.withValues(alpha: .4)
-              : c.onSurfaceVariant,
-          decoration: TextDecoration.underline,
-          decorationColor: c.onSurfaceVariant,
-          fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: onTap == null
+                ? c.onSurfaceVariant.withValues(alpha: .4)
+                : c.onSurfaceVariant,
+            decoration: TextDecoration.underline,
+            decorationColor: c.onSurfaceVariant,
+            fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+          ),
         ),
       ),
     );

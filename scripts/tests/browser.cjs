@@ -46,10 +46,10 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/ticket-mobile.png',fullPage:true});
   // Actions rapides de la fiche : bloquer puis terminer, en choisissant qui l’a réalisé.
   const find = async () => (await page.evaluate(async()=> (await fetch('/api/v1/state')).json())).tickets.find(t => t.title === title);
-  await page.getByRole('button', {name:'À faire'}).click();
+  await page.getByRole('button', {name:'La passer à faire'}).click();
   await page.waitForTimeout(1200);
   if ((await find()).stageId !== 'todo') throw new Error('Tâche « Un jour » non passée à faire');
-  await page.getByRole('button', {name:'Bloqué'}).click();
+  await page.getByRole('button', {name:'La marquer bloquée'}).click();
   await page.waitForTimeout(1200);
   const waiting = await find();
   if (waiting.stageId !== 'waiting') throw new Error('Tâche non bloquée : ' + waiting.stageId);

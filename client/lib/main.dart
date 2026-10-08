@@ -3183,75 +3183,14 @@ class _TicketPageState extends State<TicketPage> {
     ];
   }
 
+  // Méta en liste de définition (sketch .meta-grid) : libellé à gauche, valeur
+  // à droite, un toucher pour modifier. Plus de tuiles encadrées 2×2.
   List<Widget> actions() {
     final c = Theme.of(context).colorScheme;
-    final tk = tokensOf(context);
-    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
-    Widget action(
-      IconData icon,
-      String label,
-      VoidCallback? onTap, {
-      bool primary = false,
-    }) => Expanded(
-      child: Material(
-        color: primary ? c.primary : Theme.of(context).cardTheme.color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          side: primary ? BorderSide.none : BorderSide(color: c.outlineVariant),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          onTap: saving ? null : onTap,
-          child: SizedBox(
-            height: 66,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: primary ? c.onPrimary : c.onSurface),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: primary ? c.onPrimary : c.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    Widget tile(String label, Widget value, VoidCallback onTap) => Expanded(
-      child: Material(
-        color: Theme.of(context).cardTheme.color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          side: BorderSide(color: c.outlineVariant),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: c.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 28,
-                  child: Align(alignment: Alignment.centerLeft, child: value),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
     final bold = TextStyle(
-      fontWeight: FontWeight.w700,
-      fontSize: 16,
+      fontFamily: tokensOf(context).displayFont,
+      fontWeight: FontWeight.w800,
+      fontSize: 15,
       color: c.onSurface,
     );
     final assignees = strings(t['assignees']);
@@ -3262,133 +3201,151 @@ class _TicketPageState extends State<TicketPage> {
     final selectedTags = tags
         .where((g) => strings(t['tagIds']).contains(g['id']))
         .toList();
-    return [
-      const SizedBox(height: 14),
-      if (!closed) ...[
-        Row(
-          children: [
-            action(Icons.check, 'C’est fait', finish, primary: true),
-            const SizedBox(width: 10),
-            action(Icons.event_repeat, 'Reporter', postpone),
-            const SizedBox(width: 10),
-            // Depuis le Backlog, l’action utile est de passer la tâche à faire.
-            if (t['stageId'] == 'backlog')
-              action(Icons.play_arrow_outlined, 'À faire', makeTodo)
-            else
-              action(
-                blocked
-                    ? Icons.play_arrow_outlined
-                    : Icons.pause_circle_outline,
-                blocked ? 'Débloquer' : 'Bloqué',
-                toggleBlocked,
+    Widget defRow(
+      String label,
+      Widget value,
+      VoidCallback onTap, {
+      bool last = false,
+    }) => GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: last
+            ? const BoxDecoration()
+            : BoxDecoration(
+                border: Border(bottom: BorderSide(color: c.outlineVariant)),
               ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 128,
+              child: Text(
+                label,
+                style: TextStyle(color: c.onSurfaceVariant, fontSize: 14),
+              ),
+            ),
+            Expanded(child: value),
           ],
         ),
-        const SizedBox(height: 10),
-      ],
+      ),
+    );
+    return [
+      const SizedBox(height: 10),
+      defRow(
+        'Qui s’en occupe',
+        assignees.isEmpty
+            ? Text('Personne', style: bold)
+            : Row(
+                children: [
+                  for (final id in assignees)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: MemberAvatar(
+                        name: name(id),
+                        index: members.indexWhere((m) => m['id'] == id),
+                        size: 22,
+                      ),
+                    ),
+                  Flexible(
+                    child: Text(
+                      assignees.map(name).join(' + '),
+                      style: bold,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+        () => editField(
+          'Qui s’en occupe ?',
+          (change) => chips('assignees', members, change),
+        ),
+      ),
+      defRow(
+        'Quand',
+        Text(
+          due != null
+              ? relativeDay(due, DateTime.now())
+              : start != null
+              ? 'Dès ${relativeDay(start, DateTime.now()).toLowerCase()}'
+              : 'Sans date',
+          style: bold,
+        ),
+        () => datePick('dueDate'),
+      ),
+      defRow(
+        'Étapes',
+        Text(check.isEmpty ? 'Aucune' : '$done / ${check.length}', style: bold),
+        addCheck,
+      ),
+      defRow(
+        selectedTags.length > 1 ? 'Tags' : 'Tag',
+        Text(
+          selectedTags.isEmpty
+              ? 'Aucun'
+              : selectedTags.map((g) => g['name']).join(', '),
+          style: bold,
+          overflow: TextOverflow.ellipsis,
+        ),
+        () => editField(
+          'Les tags',
+          (change) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              chips('tagIds', tags, change),
+              TextButton.icon(
+                onPressed: () async {
+                  await addTag();
+                  change(() {});
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Nouveau tag'),
+              ),
+            ],
+          ),
+        ),
+        last: true,
+      ),
+    ];
+  }
+
+  // Actions de clôture au bas de la fiche (sketch) : gros « C'est fait » puis
+  // « Reporter » / « On ne le fait pas » en liens, et À faire/Bloqué en secondaire.
+  List<Widget> closeActions() {
+    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
+    if (closed) return [];
+    return [
+      const SizedBox(height: 20),
+      CutButton(
+        label: saving ? 'Enregistrement…' : 'C’est fait',
+        icon: Icons.check,
+        onTap: saving ? null : finish,
+      ),
+      const SizedBox(height: 12),
       Row(
         children: [
-          tile(
-            'Qui',
-            assignees.isEmpty
-                ? Text('Personne', style: bold)
-                : Row(
-                    children: [
-                      for (final id in assignees)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: MemberAvatar(
-                            name: name(id),
-                            index: members.indexWhere((m) => m['id'] == id),
-                            size: 26,
-                          ),
-                        ),
-                      if (assignees.length == 1)
-                        Flexible(
-                          child: Text(
-                            name(assignees.first),
-                            style: bold,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                  ),
-            () => editField(
-              'Qui s’en occupe ?',
-              (change) => chips('assignees', members, change),
-            ),
+          LinkText(
+            label: 'Reporter',
+            strong: true,
+            onTap: saving ? null : postpone,
           ),
-          const SizedBox(width: 10),
-          tile(
-            'Quand',
-            Text(
-              due != null
-                  ? relativeDay(due, DateTime.now())
-                  : start != null
-                  ? 'Dès ${relativeDay(start, DateTime.now()).toLowerCase()}'
-                  : 'Sans date',
-              style: bold,
-            ),
-            () => datePick('dueDate'),
+          const Spacer(),
+          LinkText(
+            label: 'On ne le fait pas',
+            strong: true,
+            onTap: saving ? null : abandon,
           ),
         ],
       ),
       const SizedBox(height: 10),
-      Row(
-        children: [
-          tile(
-            'Étapes',
-            check.isEmpty
-                ? Text('Aucune', style: bold)
-                : Row(
-                    children: [
-                      Text('$done/${check.length}', style: bold),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: done / check.length,
-                            minHeight: 6,
-                            color: c.secondaryContainer,
-                            backgroundColor: c.outlineVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-            addCheck,
-          ),
-          const SizedBox(width: 10),
-          tile(
-            selectedTags.length > 1 ? 'Tags' : 'Tag',
-            Text(
-              selectedTags.isEmpty
-                  ? 'Aucun'
-                  : selectedTags.map((g) => g['name']).join(', '),
-              style: bold,
-              overflow: TextOverflow.ellipsis,
-            ),
-            () => editField(
-              'Les tags',
-              (change) => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  chips('tagIds', tags, change),
-                  TextButton.icon(
-                    onPressed: () async {
-                      await addTag();
-                      change(() {});
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nouveau tag'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      if (t['stageId'] == 'backlog')
+        LinkText(label: 'La passer à faire', onTap: saving ? null : makeTodo)
+      else
+        LinkText(
+          label: blocked ? 'La débloquer' : 'La marquer bloquée',
+          onTap: saving ? null : toggleBlocked,
+        ),
     ];
   }
 
@@ -3463,19 +3420,23 @@ class _TicketPageState extends State<TicketPage> {
               ),
           ],
         ),
-      Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-          ),
-          onPressed: saving ? null : () => save(),
-          child: Text(
-            saving ? 'Enregistrement…' : 'Enregistrer',
-            overflow: TextOverflow.ellipsis,
+      // En volet, « Enregistrer » n'apparaît que s'il y a des modifications
+      // (le sketch n'a pas de barre de sauvegarde) ; en route plein écran il
+      // reste toujours visible.
+      if (!widget.embedded || dirty)
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+            onPressed: saving ? null : () => save(),
+            child: Text(
+              saving ? 'Enregistrement…' : 'Enregistrer',
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
-      ),
     ];
     final body = Align(
       alignment: Alignment.topCenter,
@@ -3743,7 +3704,9 @@ class _TicketPageState extends State<TicketPage> {
                   label: const Text('Commenter'),
                 ),
               ),
-              const SizedBox(height: 8),
+              // Actions de clôture en bas (sketch) : C'est fait + liens.
+              ...closeActions(),
+              const SizedBox(height: 16),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
                 title: const Text('Tous les réglages'),
