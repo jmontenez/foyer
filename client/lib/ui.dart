@@ -505,6 +505,315 @@ class _SignPainter extends CustomPainter {
       old.sign != sign || old.color != color;
 }
 
+// ======================================================================
+// Kit « Découpes » : formes portées 1:1 depuis le CSS du sketch (étude 03).
+// Couleurs via le thème courant (le modèle couleur viendra plus tard).
+// ======================================================================
+
+/// Onglet biseauté (`.tabs .tab`) : bord encre 1.5 px, actif = plein principal.
+class CutTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const CutTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.fromLTRB(14, 8, 16, 9),
+          decoration: ShapeDecoration(
+            color: selected ? c.primary : Colors.transparent,
+            shape: cutShape(
+              cutSmall,
+              side: selected
+                  ? BorderSide.none
+                  : BorderSide(color: c.onSurface, width: 1.5),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: selected ? c.onPrimary : c.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Puce biseautée (`.habit.chip`) : bord fin, un toucher. Coche optionnelle à gauche.
+class CutChip extends StatelessWidget {
+  final String label;
+  final String? trailing;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  const CutChip({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.trailing,
+    this.selected = false,
+    this.onLongPress,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
+        decoration: ShapeDecoration(
+          color: selected
+              ? c.primary.withValues(alpha: .13)
+              : Colors.transparent,
+          shape: cutShape(
+            cutSmall,
+            side: BorderSide(color: c.outlineVariant, width: 1.5),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              Icon(Icons.check, size: 16, color: c.primary),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Manrope',
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 7),
+              Text(
+                trailing!,
+                style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton plat biseauté (`.cta` / `.cta.quiet`). `primary` = plein principal.
+class CutButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool primary;
+  const CutButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onTap,
+    this.primary = true,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final fg = primary ? c.onPrimary : c.onSurface;
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Opacity(
+          opacity: onTap == null ? .45 : 1,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
+            decoration: ShapeDecoration(
+              color: primary ? c.primary : Colors.transparent,
+              shape: cutShape(
+                cutSmall,
+                side: primary
+                    ? BorderSide.none
+                    : BorderSide(color: c.onSurface, width: 2),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: fg,
+                  ),
+                ),
+                if (icon != null) ...[
+                  const SizedBox(width: 8),
+                  Icon(icon, size: 18, color: fg),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Champ carré bordé encre + bouton d'envoi accolé (`.entry`).
+class EntryRow extends StatelessWidget {
+  final TextEditingController? controller;
+  final String hint;
+  final IconData submitIcon;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onSubmit;
+  const EntryRow({
+    super.key,
+    this.controller,
+    required this.hint,
+    this.submitIcon = Icons.add,
+    this.focusNode,
+    this.onSubmitted,
+    this.onChanged,
+    this.onSubmit,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.onSurface, width: 2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                hintText: hint,
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onSubmit ?? () => onSubmitted?.call(controller?.text ?? ''),
+            child: Container(
+              width: 50,
+              height: 46,
+              alignment: Alignment.center,
+              color: c.onSurface,
+              child: Icon(submitIcon, color: c.surface, size: 22),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Cartouche de date biseauté (`.stamp`) : « MER / 07 / OCT ».
+class DateStamp extends StatelessWidget {
+  final String top, big, bottom;
+  const DateStamp({
+    super.key,
+    required this.top,
+    required this.big,
+    required this.bottom,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final label = TextStyle(
+      fontFamily: 'Manrope',
+      fontWeight: FontWeight.w700,
+      fontSize: 11,
+      letterSpacing: .8,
+      height: 1.1,
+      color: c.onSurface,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(11, 7, 14, 8),
+      decoration: ShapeDecoration(
+        color: c.secondaryContainer.withValues(alpha: .35),
+        shape: cutShape(cutSmall),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(top.toUpperCase(), style: label),
+          Text(
+            big,
+            style: label.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          Text(bottom.toUpperCase(), style: label),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lien souligné discret (`.linkish`).
+class LinkText extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool strong;
+  const LinkText({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.strong = false,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: onTap == null
+              ? c.onSurfaceVariant.withValues(alpha: .4)
+              : c.onSurfaceVariant,
+          decoration: TextDecoration.underline,
+          decorationColor: c.onSurfaceVariant,
+          fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+        ),
+      ),
+    );
+  }
+}
+
 enum TaskBadge { late, urgent, high }
 
 class PriorityBadge extends StatelessWidget {
@@ -762,46 +1071,48 @@ class TaskTile extends StatelessWidget {
 }
 
 /// En-tête compact : date ou sous-titre, titre de la vue, recherche et profil.
+/// En-tête « carnet » : kicker (petites capitales) + grand titre à point, et à
+/// droite le cartouche de date + « Liste partagée ». Les utilitaires (recherche,
+/// notifications, profil) vivent dans le rail (ouvert) ou dans [trailing] (fermé).
 class ScreenHeader extends StatelessWidget {
   final String title, subtitle;
-  final Widget profile;
-  // Action supplémentaire entre la recherche et le profil (masquée si null).
-  final Widget? action;
-  // Sans recherche (null), le bouton est masqué.
-  final VoidCallback? onSearch;
-  final bool searching;
+  final Widget? stamp;
+  final String? live;
+  // Utilitaires (recherche, notifications, profil) : affichés ici en format
+  // fermé ; vides en ouvert (ils vivent dans le rail).
+  final List<Widget> utilities;
   const ScreenHeader({
     super.key,
     required this.title,
     required this.subtitle,
-    required this.profile,
-    this.action,
-    this.onSearch,
-    this.searching = false,
+    this.stamp,
+    this.live,
+    this.utilities = const [],
   });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, t.compact ? 12 : 18, 12, 10),
+      padding: EdgeInsets.fromLTRB(20, t.compact ? 12 : 18, 20, 10),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Étiquette en petites capitales espacées : la ligne de structure
-                // du « carnet » Découpes, au-dessus du grand titre.
                 Text(
                   subtitle.toUpperCase(),
                   style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.6,
                     color: c.onSurfaceVariant,
                   ),
                 ),
+                const SizedBox(height: 2),
                 // Le point est décoratif : lu « Aujourd’hui », pas « Aujourd’hui point ».
                 Semantics(
                   header: true,
@@ -820,7 +1131,7 @@ class ScreenHeader extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                       letterSpacing: -.5,
-                      height: 1.05,
+                      height: 1.02,
                       color: c.onSurface,
                     ),
                   ),
@@ -828,24 +1139,236 @@ class ScreenHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (onSearch != null)
-            IconButton.filled(
-              tooltip: searching ? 'Fermer la recherche' : 'Rechercher',
-              style: IconButton.styleFrom(
-                backgroundColor: Theme.of(context).cardTheme.color,
-                foregroundColor: c.onSurface,
-                side: BorderSide(color: c.outlineVariant),
-              ),
-              onPressed: onSearch,
-              icon: Icon(searching ? Icons.close : Icons.search),
+          if (stamp != null || utilities.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (utilities.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: utilities,
+                    ),
+                  ),
+                ?stamp,
+                if (stamp != null && live != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: c.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        live!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-          if (action != null) ...[const SizedBox(width: 6), action!],
-          const SizedBox(width: 6),
-          profile,
+          ],
         ],
       ),
     );
   }
+}
+
+/// Rail latéral « Découpes » (écran ouvert) : bande teintée, wordmark en haut,
+/// destinations signées avec tampon biseauté sur l'active, utilitaires puis
+/// avatars « À deux » en bas.
+class FoyerRail extends StatelessWidget {
+  final int index;
+  final List<(FoyerSign, String)> items;
+  final ValueChanged<int> onSelected;
+  final List<Map<String, dynamic>> members;
+  final int meIndex;
+  final VoidCallback onProfile;
+  final List<Widget> utilities;
+  const FoyerRail({
+    super.key,
+    required this.index,
+    required this.items,
+    required this.onSelected,
+    required this.members,
+    required this.meIndex,
+    required this.onProfile,
+    this.utilities = const [],
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final band = Color.alphaBlend(
+      c.secondaryContainer.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? .30 : .48,
+      ),
+      Theme.of(context).scaffoldBackgroundColor,
+    );
+    return Container(
+      width: 88,
+      color: band,
+      child: SafeArea(
+        right: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            // Wordmark « foyer✳ ».
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'foyer',
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    color: c.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                SignIcon(FoyerSign.star, size: 12, color: c.primary),
+              ],
+            ),
+            const SizedBox(height: 14),
+            for (final (i, (sign, label)) in items.indexed)
+              Semantics(
+                selected: i == index,
+                button: true,
+                label: label,
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => onSelected(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: 46,
+                          height: 34,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (i == index)
+                                CustomPaint(
+                                  size: const Size(44, 32),
+                                  painter: _StampBg(c.primary),
+                                ),
+                              SignIcon(
+                                sign,
+                                size: 20,
+                                color: i == index
+                                    ? c.onPrimary
+                                    : c.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
+                            fontSize: 11,
+                            fontWeight: i == index
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                            color: i == index
+                                ? c.onSurface
+                                : c.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            const Spacer(),
+            if (utilities.isNotEmpty) ...[
+              ...utilities.map(
+                (u) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: u,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+            // Avatars « À deux » (toucher = réglages).
+            Semantics(
+              button: true,
+              label: 'Réglages',
+              child: GestureDetector(
+                onTap: onProfile,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12, top: 2),
+                  child: Column(
+                    children: [
+                      for (final (i, m) in members.indexed)
+                        Padding(
+                          padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
+                          child: MemberAvatar(
+                            name: m['name'].toString(),
+                            index: i,
+                            size: 26,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'À deux.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tampon biseauté irrégulier derrière le signe actif (rail et bandeau).
+class _StampBg extends CustomPainter {
+  final Color color;
+  _StampBg(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * .48, 0)
+        ..lineTo(w, h * .14)
+        ..lineTo(w * .92, h * .78)
+        ..lineTo(w * .58, h)
+        ..lineTo(w * .08, h * .88)
+        ..lineTo(0, h * .26)
+        ..close(),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_StampBg old) => old.color != color;
 }
 
 /// Pastille de filtre (pleine quand active).

@@ -156,7 +156,7 @@ void main() {
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Atkinson');
     expect(
       (tokens.radius, tokens.cut, tokens.compact, tokens.rows),
-      (20.0, 16.0, false, false),
+      (20.0, 18.0, false, false),
     );
     expect(tokens.displayFont, 'Manrope');
     final compact = buildAppTheme(
@@ -167,7 +167,7 @@ void main() {
       ),
     );
     final t = compact.extension<FoyerTokens>()!;
-    expect((t.radius, t.cut, t.compact, t.rows), (8.0, 10.0, true, true));
+    expect((t.radius, t.cut, t.compact, t.rows), (8.0, 12.0, true, true));
     expect(compact.visualDensity, VisualDensity.compact);
     // Même typo quel que soit l'ancien réglage de police stocké.
     expect(

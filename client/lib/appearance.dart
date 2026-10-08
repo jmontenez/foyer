@@ -457,16 +457,19 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
 /// Signature « Découpes » : le coin supérieur droit franchement coupé (asymétrique),
 /// les autres à peine — comme une feuille de papier dont on a ciselé un coin.
 /// Jamais un arrondi : c'est ce qui rend l'identité reconnaissable sans couleur.
+/// [cut] = étendue VERTICALE du biseau (px) ; l'horizontale suit le ratio du
+/// sketch (26/18 = 13/9 ≈ 1.444). Gros éléments : cutBig (18). Petits : cutSmall (9).
 OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) =>
     BeveledRectangleBorder(
       side: side,
       borderRadius: BorderRadius.only(
-        topLeft: const Radius.circular(4),
-        topRight: Radius.elliptical(cut * 1.4, cut),
-        bottomRight: const Radius.circular(4),
-        bottomLeft: const Radius.circular(4),
+        topRight: Radius.elliptical(cut * 1.444, cut),
       ),
     );
+
+/// Biseaux du sketch : --cut (cartes/panneaux) et --cut-sm (chips/boutons/onglets).
+const cutBig = 18.0;
+const cutSmall = 9.0;
 
 ThemeData buildAppTheme(AppAppearance appearance) {
   final palette = paletteFor(appearance);
@@ -478,8 +481,8 @@ ThemeData buildAppTheme(AppAppearance appearance) {
   final sharp = appearance.corners == 'sharp';
   final radius = sharp ? 8.0 : 20.0;
   final fieldRadius = sharp ? 6.0 : 14.0;
-  // Coin coupé : plus discret quand les angles « marqués » sont choisis.
-  final cut = sharp ? 10.0 : 16.0;
+  // Coin coupé des cartes/panneaux (--cut du sketch) ; les boutons utilisent cutSmall.
+  final cut = sharp ? 12.0 : cutBig;
   final brightness = palette.dark ? Brightness.dark : Brightness.light;
   final accent = ColorScheme.fromSeed(
     seedColor: palette.accent,
@@ -543,9 +546,10 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        // Fin des pilules : les actions portent le coin coupé de la refonte.
-        shape: cutShape(cut),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        // Boutons plats au petit coin coupé (--cut-sm).
+        shape: cutShape(cutSmall),
       ),
     ),
   );

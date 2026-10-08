@@ -1138,6 +1138,75 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         .where((t) => t['id'] == tag)
         .firstOrNull;
     final rows = tokensOf(context).rows;
+    // Cartouche de date du sketch.
+    const wd = ['LUN.', 'MAR.', 'MER.', 'JEU.', 'VEN.', 'SAM.', 'DIM.'];
+    const mo = [
+      'JANV.',
+      'FÉVR.',
+      'MARS',
+      'AVR.',
+      'MAI',
+      'JUIN',
+      'JUIL.',
+      'AOÛT',
+      'SEPT.',
+      'OCT.',
+      'NOV.',
+      'DÉC.',
+    ];
+    final stamp = DateStamp(
+      top: wd[today.weekday - 1],
+      big: today.day.toString().padLeft(2, '0'),
+      bottom: mo[today.month - 1],
+    );
+    // Petit bouton utilitaire (recherche, cloche) au coin coupé.
+    Widget utilIcon(
+      IconData icon,
+      String tip,
+      VoidCallback onTap, {
+      int badge = 0,
+    }) {
+      final c = Theme.of(context).colorScheme;
+      Widget child = Icon(icon, size: 20, color: c.onSurface);
+      if (badge > 0) {
+        child = Badge.count(count: badge, child: child);
+      }
+      return Tooltip(
+        message: tip,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.all(9),
+            decoration: ShapeDecoration(
+              color: Theme.of(context).cardTheme.color,
+              shape: cutShape(
+                cutSmall,
+                side: BorderSide(color: c.outlineVariant),
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    final searchUtil = tab == 5
+        ? null
+        : utilIcon(
+            searching ? Icons.close : Icons.search,
+            searching ? 'Fermer la recherche' : 'Rechercher',
+            () => setState(() {
+              searching = !searching;
+              if (!searching) query = '';
+            }),
+          );
+    final notifUtil = utilIcon(
+      Icons.notifications_outlined,
+      'Notifications',
+      openNotifications,
+      badge: (data!['unreadNotifications'] ?? 0) as int,
+    );
     return Scaffold(
       floatingActionButton: tab == 5
           ? null
@@ -1159,35 +1228,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         child: Row(
           children: [
             if (wide)
-              NavigationRail(
-                selectedIndex: destination,
-                onDestinationSelected: openDestination,
-                labelType: NavigationRailLabelType.all,
-                // Bande teintée par l'accent du duo (le rail coloré du sketch) ;
-                // le signe actif reçoit un tampon au coin coupé dans le principal.
-                backgroundColor: Color.alphaBlend(
-                  Theme.of(context).colorScheme.secondaryContainer.withValues(
-                    alpha: Theme.of(context).brightness == Brightness.dark
-                        ? .30
-                        : .48,
-                  ),
-                  Theme.of(context).scaffoldBackgroundColor,
-                ),
-                indicatorColor: Theme.of(context).colorScheme.primary,
-                indicatorShape: cutShape(12),
-                destinations: [
-                  for (final (i, (sign, label)) in destinations.indexed)
-                    NavigationRailDestination(
-                      icon: SignIcon(
-                        sign,
-                        size: 22,
-                        color: i == destination
-                            ? Theme.of(context).colorScheme.onPrimary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      label: Text(label),
-                    ),
-                ],
+              FoyerRail(
+                index: destination,
+                items: destinations,
+                onSelected: openDestination,
+                members: members,
+                meIndex: meIndex < 0 ? 0 : meIndex,
+                onProfile: settingsDialog,
+                utilities: [?searchUtil, notifUtil],
               ),
             Expanded(
               child: Row(
@@ -1203,51 +1251,35 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ScreenHeader(
                             title: title,
                             subtitle: subtitles[tab],
-                            searching: searching,
-                            // Courses a sa propre recherche d’ingrédients.
-                            onSearch: tab == 5
-                                ? null
-                                : () => setState(() {
-                                    searching = !searching;
-                                    if (!searching) query = '';
-                                  }),
-                            action: IconButton.filled(
-                              tooltip: 'Notifications',
-                              style: IconButton.styleFrom(
-                                backgroundColor: Theme.of(context)
-                                    .cardTheme
-                                    .color,
-                                foregroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface,
-                                side: BorderSide(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outlineVariant,
-                                ),
-                              ),
-                              onPressed: openNotifications,
-                              icon: Badge.count(
-                                count:
-                                    (data!['unreadNotifications'] ?? 0) as int,
-                                isLabelVisible:
-                                    ((data!['unreadNotifications'] ?? 0)
-                                        as int) >
-                                    0,
-                                child: const Icon(Icons.notifications_outlined),
-                              ),
-                            ),
-                            profile: IconButton(
-                              tooltip: 'Réglages',
-                              onPressed: () => settingsDialog(),
-                              icon: ExcludeSemantics(
-                                child: MemberAvatar(
-                                  name: me['name'].toString(),
-                                  index: meIndex < 0 ? 0 : meIndex,
-                                  size: 36,
-                                ),
-                              ),
-                            ),
+                            stamp: stamp,
+                            live: 'Liste partagée',
+                            // En ouvert, les utilitaires sont dans le rail ;
+                            // en fermé, ils reviennent dans l'en-tête, avec le profil.
+                            utilities: wide
+                                ? const []
+                                : [
+                                    ?searchUtil,
+                                    notifUtil,
+                                    Semantics(
+                                      button: true,
+                                      label: 'Réglages',
+                                      child: GestureDetector(
+                                        onTap: settingsDialog,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 6,
+                                          ),
+                                          child: ExcludeSemantics(
+                                            child: MemberAvatar(
+                                              name: me['name'].toString(),
+                                              index: meIndex < 0 ? 0 : meIndex,
+                                              size: 36,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                           ),
                           if (searching && tab != 5)
                             Padding(
