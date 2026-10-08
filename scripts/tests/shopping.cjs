@@ -33,7 +33,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.locator('flt-glass-pane').waitFor({state:'attached'});
   await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
   await page.getByRole('button',{name:'Camille',exact:true}).click();
-  await page.getByRole('button',{name:'Une nouvelle tâche'}).waitFor();
+  await page.getByRole('button',{name:'Courses',exact:true}).first().waitFor();
   // Départ propre : les recettes précédentes ont pu laisser des courses ouvertes.
   for (const l of (await state()).shopping.lists.filter(l => l.id !== 'draft')) {
     const t = (await state()).tickets.find(x => x.id === l.id);
@@ -107,7 +107,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
 
   // Raccourci Courses : il propose la liste en cours ; « Non » garde le brouillon.
   await page.getByRole('button',{name:'Aujourd’hui',exact:true}).click();
-  await page.getByRole('button',{name:'Une nouvelle tâche'}).click();
+  await page.getByRole('button',{name:'Ajouter une tâche'}).click();
   await page.getByRole('button',{name:/^Faire les courses/}).click();
   await page.getByText('Une liste en cours (2 articles)',{exact:true}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-raccourci-mobile.png'});

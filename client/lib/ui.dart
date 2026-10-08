@@ -896,7 +896,13 @@ class TaskView {
 class TaskTile extends StatelessWidget {
   final TaskView task;
   final VoidCallback onTap;
-  const TaskTile({super.key, required this.task, required this.onTap});
+  final bool selected;
+  const TaskTile({
+    super.key,
+    required this.task,
+    required this.onTap,
+    this.selected = false,
+  });
 
   Widget people(double size) => task.people.isEmpty
       ? UnassignedAvatar(size: size)
@@ -945,125 +951,107 @@ class TaskTile extends StatelessWidget {
     final muted = TextStyle(fontSize: 13, color: c.onSurfaceVariant);
     final title = TextStyle(
       fontFamily: t.displayFont,
-      fontSize: t.rows ? 16 : 18,
-      fontWeight: FontWeight.w700,
-      height: 1.25,
+      fontSize: 16.5,
+      fontWeight: FontWeight.w800,
+      height: 1.2,
       color: c.onSurface,
     );
-    final extras = [
+    // Rangée plate « Découpes » : signe du type en marge (couleur = état),
+    // titre, puis ligne personne · méta. Filet 1 px ; sélection = teinte biseautée.
+    final late = task.badge == TaskBadge.late;
+    final mark = switch (task.badge) {
+      TaskBadge.late || TaskBadge.urgent => c.error,
+      TaskBadge.high => c.secondaryContainer,
+      null => c.secondaryContainer,
+    };
+    final person = task.people.isEmpty
+        ? 'Personne'
+        : task.people.map((p) => p.$1).join(' + ');
+    final metaExtras = [
+      task.meta,
       if (task.total > 0) '${task.done}/${task.total}',
       if (task.comments > 0) plural(task.comments, 'commentaire'),
-    ];
-    if (t.rows) {
-      // Ligne calme : le signe du type (maison/étoile) vit en marge et porte
-      // l'état par sa couleur — l'urgence reste nommée dans le meta.
-      final mark = switch (task.badge) {
-        TaskBadge.late || TaskBadge.urgent => c.error,
-        TaskBadge.high => c.secondaryContainer,
-        null => c.outlineVariant,
-      };
-      return InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 52),
-          padding: EdgeInsets.symmetric(vertical: t.compact ? 8 : 12),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.outlineVariant)),
-          ),
-          child: Row(
-            children: [
-              SignIcon(
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(
+          selected ? 10 : 2,
+          t.compact ? 10 : 13,
+          10,
+          t.compact ? 10 : 13,
+        ),
+        decoration: selected
+            ? ShapeDecoration(
+                color: c.primary.withValues(alpha: .13),
+                shape: cutShape(cutSmall),
+              )
+            : const BoxDecoration(),
+        foregroundDecoration: selected
+            ? null
+            : BoxDecoration(
+                border: Border(bottom: BorderSide(color: c.outlineVariant)),
+              ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: SignIcon(
                 task.wish ? FoyerSign.star : FoyerSign.house,
-                size: 19,
+                size: 18,
                 color: mark,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(task.title, style: title),
-                    Text(
-                      [
-                        if (task.wish) 'Envie',
-                        if (task.repeat) '↻',
-                        task.meta,
-                        ...extras,
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      style: muted,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              people(26),
-            ],
-          ),
-        ),
-      );
-    }
-    return Card(
-      margin: EdgeInsets.only(bottom: t.compact ? 8 : 12),
-      child: InkWell(
-        customBorder: cutShape(t.cut),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(t.compact ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (task.badge != null) ...[
-                    PriorityBadge(task.badge!),
-                    const SizedBox(width: 8),
-                  ],
-                  if (task.wish) ...[
-                    const WishBadge(),
-                    const SizedBox(width: 8),
-                  ],
-                  if (task.repeat) ...[
-                    Icon(Icons.repeat, size: 16, color: c.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Text(
-                      task.meta,
-                      style: muted,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  people(28),
-                ],
-              ),
-              SizedBox(height: t.compact ? 6 : 9),
-              Text(task.title, style: title),
-              if (task.total > 0 || task.comments > 0) ...[
-                SizedBox(height: t.compact ? 6 : 10),
-                Row(
-                  children: [
-                    if (task.total > 0) ...[
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: task.done / task.total,
-                            minHeight: 6,
-                            color: c.secondaryContainer,
-                            backgroundColor: c.outlineVariant,
+                  Text(task.title, style: title),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      if (task.people.isEmpty)
+                        const UnassignedAvatar(size: 18)
+                      else
+                        MemberAvatar(
+                          name: task.people.first.$1,
+                          index: task.people.first.$2,
+                          size: 18,
+                        ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: person),
+                              if (task.wish) const TextSpan(text: ' · Envie'),
+                              if (task.repeat) const TextSpan(text: ' · ↻'),
+                              if (metaExtras.isNotEmpty)
+                                TextSpan(
+                                  text: ' · $metaExtras',
+                                  style: late
+                                      ? TextStyle(
+                                          color: c.error,
+                                          fontWeight: FontWeight.w700,
+                                        )
+                                      : null,
+                                ),
+                            ],
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                    ] else
-                      const Spacer(),
-                    Text(extras.join(' · '), style: muted),
-                  ],
-                ),
-              ],
-            ],
-          ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

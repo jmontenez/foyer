@@ -65,14 +65,19 @@ void main() {
     ),
   );
 
-  testWidgets('Tâche en carte : badge, progression, commentaire au singulier', (
+  testWidgets('Rangée plate : titre, ligne personne · méta, sans carte', (
     tester,
   ) async {
     await pump(tester, const AppAppearance());
-    expect(find.byType(Card), findsOneWidget);
-    expect(find.text('URGENT'), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.text('2/3 · 1 commentaire'), findsOneWidget);
+    // Plus de carte ni de barre de progression : rangée plate du sketch.
+    expect(find.byType(Card), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Réparer la fuite'), findsOneWidget);
+    // Ligne du dessous : responsable puis méta et compteurs.
+    expect(
+      find.textContaining('Aujourd’hui · En cours · 2/3 · 1 commentaire'),
+      findsOneWidget,
+    );
     expect(
       find.bySemanticsLabel(
         'Réparer la fuite, urgent, Aujourd’hui · En cours, Camille, 2 sur 3 étapes, 1 commentaire',
@@ -81,17 +86,21 @@ void main() {
     );
   });
 
-  testWidgets('Tâche en ligne selon le jeton d’affichage', (tester) async {
-    await pump(
-      tester,
-      const AppAppearance(listStyle: 'rows', density: 'compact'),
+  testWidgets('Rangée plate : sélection teintée biseautée', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: TaskTile(
+            onTap: () {},
+            selected: true,
+            task: const TaskView(title: 'Préparer le week-end', meta: 'Samedi'),
+          ),
+        ),
+      ),
     );
     expect(find.byType(Card), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(
-      find.text('Aujourd’hui · En cours · 2/3 · 1 commentaire'),
-      findsOneWidget,
-    );
+    expect(find.text('Préparer le week-end'), findsOneWidget);
   });
 
   testWidgets('Glisser une carte : déplacement au-delà du seuil seulement', (
@@ -142,7 +151,7 @@ void main() {
     expect(chosen, 'doing');
   });
 
-  testWidgets('Envie signalée sur la carte et lue par le lecteur d’écran', (
+  testWidgets('Envie signalée sur la rangée et lue par le lecteur d’écran', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -160,7 +169,8 @@ void main() {
         ),
       ),
     );
-    expect(find.text('ENVIE'), findsOneWidget);
+    // « Envie » est inline dans la ligne personne · méta (plus de badge encadré).
+    expect(find.textContaining('Envie'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
         'Week-end à la mer, envie, Un jour, sans responsable',

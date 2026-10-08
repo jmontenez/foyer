@@ -141,7 +141,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   bool searching = false;
   DateTime? historyFrom, historyTo;
   // Filtres propres aux vues : retards (Aujourd’hui), jour (Semaine), type (Backlog), période (Historique).
-  bool lateOnly = false;
   String? boardStage;
   DateTime? weekDay;
   String backlogKind = 'all', period = '30';
@@ -1137,7 +1136,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     final selectedTag = maps(data!['tags'])
         .where((t) => t['id'] == tag)
         .firstOrNull;
-    final rows = tokensOf(context).rows;
     // Cartouche de date du sketch.
     const wd = ['LUN.', 'MAR.', 'MER.', 'JEU.', 'VEN.', 'SAM.', 'DIM.'];
     const mo = [
@@ -1208,14 +1206,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       badge: (data!['unreadNotifications'] ?? 0) as int,
     );
     return Scaffold(
-      floatingActionButton: tab == 5
-          ? null
-          : FloatingActionButton(
-              tooltip: 'Une nouvelle tâche',
-              shape: cutShape(tokensOf(context).cut + 4),
-              onPressed: quickCreate,
-              child: const Icon(Icons.add, size: 28),
-            ),
+      // Pas de FAB : « Ajouter une tâche » vit en bas de liste (sketch).
       bottomNavigationBar: wide
           ? null
           : FloatingNav(
@@ -1420,17 +1411,72 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                 : RefreshIndicator(
                                     onRefresh: refresh,
                                     child: ListView(
-                                      padding: EdgeInsets.fromLTRB(
+                                      padding: const EdgeInsets.fromLTRB(
                                         0,
-                                        rows ? 0 : 4,
+                                        4,
                                         0,
                                         100,
                                       ),
-                                      children: listFor(
-                                        tickets,
-                                        members,
-                                        today,
-                                      ),
+                                      children: [
+                                        ...listFor(tickets, members, today),
+                                        // Ajout d'une tâche en bas de liste (sketch).
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            20,
+                                            14,
+                                            20,
+                                            4,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                'Une chose en tête ?',
+                                                style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
+                                              ),
+                                              const Spacer(),
+                                              Semantics(
+                                                button: true,
+                                                label: 'Ajouter une tâche',
+                                                child: GestureDetector(
+                                                  onTap: quickCreate,
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        'Ajouter une tâche',
+                                                        style: TextStyle(
+                                                          fontFamily: 'Manrope',
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .onSurface,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Icon(
+                                                        Icons.add,
+                                                        size: 20,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurface,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                           ),
@@ -1612,34 +1658,15 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             for (final t in items) padded(ticketCard(t)),
           ];
     final top = <Widget>[];
-    var shown = tickets;
     switch (tab) {
       case 0:
-        final late = tickets.where(isLate).toList();
-        top.add(
-          SummaryTiles(
-            total: tickets.length,
-            late: late.length,
-            lateOnly: lateOnly,
-            onLate: () => setState(() => lateOnly = !lateOnly),
-            people: [
-              for (final (i, m) in members.indexed)
-                (
-                  m['name'].toString(),
-                  i,
-                  tickets
-                      .where((t) => strings(t['assignees']).contains(m['id']))
-                      .length,
-                ),
-            ],
-          ),
-        );
-        shown = lateOnly ? late : tickets;
+        // Les retards se lisent dans leur section (couleur d'état sur la rangée) ;
+        // pas de tuiles de synthèse (fidélité au sketch « La journée »).
         final body = [
-          ...section('En retard', shown.where(isLate).toList(), c.error),
-          ...section('Aujourd’hui', shown.where((t) => !isLate(t)).toList()),
+          ...section('En retard', tickets.where(isLate).toList(), c.error),
+          ...section('Aujourd’hui', tickets.where((t) => !isLate(t)).toList()),
         ];
-        return [...top, if (body.isEmpty) empty() else ...body];
+        return [if (body.isEmpty) empty() else ...body];
       case 1:
         final days = weekOf(today);
         final all = maps(data!['tickets'])
@@ -1884,6 +1911,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         : null;
     final check = maps(t['checklist']);
     return TaskTile(
+      selected: detailOpen && selectedTicketId == t['id']?.toString(),
       onTap: () => openTicket(t),
       task: TaskView(
         title: t['title'].toString(),
