@@ -84,22 +84,45 @@ class MemberAvatar extends StatelessWidget {
     final (bg, fg) = memberColors(Theme.of(context).colorScheme, index);
     return Tooltip(
       message: name,
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-        child: Text(
-          name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-          style: TextStyle(
-            color: fg,
-            fontSize: size * .45,
-            fontWeight: FontWeight.w700,
+      child: ClipPath(
+        clipper: _AvaClip(),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          color: bg,
+          child: Text(
+            name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+            style: TextStyle(
+              color: fg,
+              fontSize: size * .45,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Pastille d’avatar « coupée au ciseau » (sketch .ava) — pentagone irrégulier
+/// de la famille Découpes, à la place du cercle Material.
+class _AvaClip extends CustomClipper<Path> {
+  @override
+  Path getClip(Size s) {
+    final w = s.width, h = s.height;
+    return Path()
+      ..moveTo(w * .50, 0)
+      ..lineTo(w * .96, h * .18)
+      ..lineTo(w, h * .62)
+      ..lineTo(w * .72, h)
+      ..lineTo(w * .14, h * .92)
+      ..lineTo(0, h * .38)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_AvaClip old) => false;
 }
 
 /// Emplacement vide en pointillés : tâche sans responsable.
