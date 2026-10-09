@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foyer/api.dart';
 import 'package:foyer/shopping.dart';
+import 'package:foyer/ui.dart';
 
 class FakeApi extends Api {
   final Object Function(String method, String path, Object? body) respond;
@@ -133,15 +134,13 @@ void main() {
           ),
         ),
       );
-      // Accès rapide : la puce du lait est cochée et porte la quantité.
-      final milk = tester.widget<FilterChip>(
-        find.widgetWithText(FilterChip, 'Lait · 2 L'),
+      // Accès rapide : la puce du lait est sélectionnée et porte la quantité.
+      final milk = tester.widget<CutChip>(
+        find.widgetWithText(CutChip, 'Lait · 2 L'),
       );
       expect(milk.selected, isTrue);
       expect(
-        tester
-            .widget<FilterChip>(find.widgetWithText(FilterChip, 'Pommes'))
-            .selected,
+        tester.widget<CutChip>(find.widgetWithText(CutChip, 'Pommes')).selected,
         isFalse,
       );
       expect(find.text('CRÈMERIE & ŒUFS'), findsOneWidget);

@@ -1326,26 +1326,15 @@ class _ShoppingViewState extends State<ShoppingView> {
 
     Widget suggestion(Map<String, dynamic> ingredient) {
       final there = inList[ingredientKey(ingredient['name'])];
-      return GestureDetector(
+      // Puce « Découpes ». Habituel absent de la liste : un toucher l'ajoute
+      // avec sa quantité mémorisée ; déjà présent : la feuille s'ouvre.
+      return CutChip(
+        label: there == null ? ingredient['name'].toString() : itemLabel(there),
+        selected: there != null,
         onLongPress: () => editSuggestion(ingredient),
-        child: FilterChip(
-          selected: there != null,
-          showCheckmark: true,
-          label: Text(
-            there == null ? ingredient['name'].toString() : itemLabel(there),
-          ),
-          tooltip: there == null ? null : 'Déjà dans la liste',
-          // Habituel absent de la liste : un toucher l'ajoute directement avec
-          // sa quantité mémorisée ; « Modifier » (retour visible) rouvre la
-          // feuille. Déjà présent : la feuille s'ouvre pour modifier.
-          onSelected: (_) => there == null
-              ? directAdd(list, ingredient)
-              : pick(
-                  list,
-                  ingredient['name'].toString(),
-                  ingredient: ingredient,
-                ),
-        ),
+        onTap: () => there == null
+            ? directAdd(list, ingredient)
+            : pick(list, ingredient['name'].toString(), ingredient: ingredient),
       );
     }
 
@@ -1382,54 +1371,64 @@ class _ShoppingViewState extends State<ShoppingView> {
           child: Icon(Icons.delete_outline, color: c.onErrorContainer),
         ),
         onDismissed: (_) => remove(list, item),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          // Case « coupée au ciseau » (CutCheck) : elle porte son propre retour
-          // haptique ; le toucher sur le reste de la ligne coche aussi.
-          leading: CutCheck(
-            value: item['done'] == true,
-            onChanged: (_) => toggle(list, item),
-            semanticLabel: item['text'].toString(),
+        // Rangée plate « Découpes » : tick ciseau + (vignette) + nom + chip qty,
+        // filet 1 px. Le toucher sur le nom coche ; la case porte son haptique.
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.outlineVariant)),
           ),
-          onTap: () {
-            HapticFeedback.selectionClick();
-            toggle(list, item);
-          },
-          title: Text(
-            item['text'].toString(),
-            style: item['done'] == true
-                ? TextStyle(
-                    decoration: TextDecoration.lineThrough,
-                    color: c.onSurfaceVariant,
-                  )
-                : null,
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              if (photoId != null)
+              CutCheck(
+                value: item['done'] == true,
+                onChanged: (_) => toggle(list, item),
+                semanticLabel: item['text'].toString(),
+              ),
+              if (photoId != null) ...[
                 IngredientPhoto(api: widget.api, id: photoId),
-              // Chip de quantité « Découpes » : un toucher ouvre la feuille.
-              Material(
-                color: Colors.transparent,
-                shape: cutShape(8, side: BorderSide(color: c.outlineVariant)),
-                child: InkWell(
-                  customBorder: cutShape(8),
-                  onTap: () => pick(list, item['text'].toString()),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    toggle(list, item);
+                  },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(
-                      (item['qty'] ?? '').toString().isEmpty
-                          ? 'Qté'
-                          : item['qty'].toString(),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: tokensOf(context).displayFont,
-                      ),
+                      item['text'].toString(),
+                      style: item['done'] == true
+                          ? TextStyle(
+                              decoration: TextDecoration.lineThrough,
+                              color: c.onSurfaceVariant,
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              // Chip de quantité « Découpes » : un toucher ouvre la feuille.
+              GestureDetector(
+                onTap: () => pick(list, item['text'].toString()),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: ShapeDecoration(
+                    color: c.primary.withValues(alpha: .13),
+                    shape: cutShape(cutSmall),
+                  ),
+                  child: Text(
+                    (item['qty'] ?? '').toString().isEmpty
+                        ? 'Qté'
+                        : item['qty'].toString(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: tokensOf(context).displayFont,
                     ),
                   ),
                 ),
@@ -1614,12 +1613,12 @@ class _ShoppingViewState extends State<ShoppingView> {
         padding: const EdgeInsets.only(top: 4, bottom: 6),
         child: Row(
           children: [
-            FilterPill(
+            CutTab(
               label: 'Préparer',
               selected: mode == 'prep',
               onTap: () => setState(() => mode = 'prep'),
             ),
-            FilterPill(
+            CutTab(
               label: 'En magasin',
               selected: mode == 'store',
               onTap: () => setState(() => mode = 'store'),

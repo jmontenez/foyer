@@ -1233,7 +1233,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(
-                    flex: 3,
+                    // Liste maître un peu plus étroite que la fiche : le volet de
+                    // droite (détail) a besoin de largeur (méta + notes + étapes).
+                    flex: detailOpen ? 5 : 1,
                     child: Padding(
                       padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
                       child: Column(
@@ -1491,7 +1493,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       color: Theme.of(context).colorScheme.outlineVariant,
                     ),
                     Expanded(
-                      flex: 2,
+                      flex: 6,
                       child: TicketPage(
                         key: detailKey,
                         data: data!,
