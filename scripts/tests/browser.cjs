@@ -81,7 +81,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.waitForTimeout(1500);
   if ((await tickets()).length !== before) throw new Error('Lancement non annulé');
   // Répétition : activer la suggestion de la lessive depuis Réglages → Raccourcis.
-  await page.getByRole('button', {name:'Réglages', exact:true}).click();
+  await page.getByRole('button', {name:'Réglages', exact:true}).first().click();
   await page.getByText('Raccourcis', {exact:false}).first().click();
   await page.getByRole('button', {name:/^Faire une lessive/}).first().click();
   // La section « Répéter » est en bas de l’éditeur : on fait défiler jusqu’à elle.

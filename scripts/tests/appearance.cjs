@@ -9,7 +9,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
     await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
   }
   async function appearance() {
-    await page.getByRole('button',{name:'Réglages',exact:true}).click();
+    await page.getByRole('button',{name:'Réglages',exact:true}).first().click();
     await page.getByText('Apparence',{exact:false}).first().click();
     await page.getByRole('button',{name:'Enregistrer',exact:true}).waitFor();
   }

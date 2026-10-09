@@ -1462,90 +1462,148 @@ class FloatingNav extends StatelessWidget {
   final int index;
   final List<(FoyerSign, String)> items;
   final ValueChanged<int> onSelected;
+  final List<Map<String, dynamic>> members;
+  final VoidCallback? onProfile;
   const FloatingNav({
     super.key,
     required this.index,
     required this.items,
     required this.onSelected,
+    this.members = const [],
+    this.onProfile,
   });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
-    return Material(
-      color: Theme.of(context).cardTheme.color,
-      elevation: 6,
-      shadowColor: Colors.black26,
-      shape: cutShape(t.cut + 6, side: BorderSide(color: c.outlineVariant)),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 66,
-          child: Row(
-            children: [
-              for (final (i, (sign, label)) in items.indexed)
-                Expanded(
-                  child: Semantics(
-                    selected: i == index,
-                    button: true,
-                    label: label,
-                    excludeSemantics: true,
-                    child: Tooltip(
-                      message: label,
-                      child: InkWell(
-                        onTap: () => onSelected(i),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 46,
-                              height: 32,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (i == index)
-                                    CustomPaint(
-                                      size: const Size(44, 32),
-                                      painter: _StampPainter(c.primary),
+    // Bandeau « papier déchiré » : bord supérieur irrégulier (sketch .navband).
+    return ClipPath(
+      clipper: _TornTop(),
+      child: Material(
+        color: Theme.of(context).cardTheme.color,
+        elevation: 6,
+        shadowColor: Colors.black26,
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 72,
+            child: Row(
+              children: [
+                const SizedBox(width: 4),
+                for (final (i, (sign, label)) in items.indexed)
+                  Expanded(
+                    child: Semantics(
+                      selected: i == index,
+                      button: true,
+                      label: label,
+                      excludeSemantics: true,
+                      child: Tooltip(
+                        message: label,
+                        child: InkWell(
+                          onTap: () => onSelected(i),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 46,
+                                height: 32,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    if (i == index)
+                                      CustomPaint(
+                                        size: const Size(44, 32),
+                                        painter: _StampPainter(c.primary),
+                                      ),
+                                    SignIcon(
+                                      sign,
+                                      size: 19,
+                                      color: i == index
+                                          ? c.onPrimary
+                                          : c.onSurfaceVariant,
                                     ),
-                                  SignIcon(
-                                    sign,
-                                    size: 19,
-                                    color: i == index
-                                        ? c.onPrimary
-                                        : c.onSurfaceVariant,
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontFamily: t.displayFont,
-                                fontWeight: i == index
-                                    ? FontWeight.w800
-                                    : FontWeight.w700,
-                                color: i == index
-                                    ? c.onSurface
-                                    : c.onSurfaceVariant,
+                              const SizedBox(height: 2),
+                              Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: t.displayFont,
+                                  fontWeight: i == index
+                                      ? FontWeight.w800
+                                      : FontWeight.w700,
+                                  color: i == index
+                                      ? c.onSurface
+                                      : c.onSurfaceVariant,
+                                ),
                               ),
-                            ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // Avatars « À deux » à droite (toucher = réglages).
+                if (members.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Semantics(
+                    button: true,
+                    label: 'Réglages',
+                    child: GestureDetector(
+                      onTap: onProfile,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 6, right: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final (i, m) in members.indexed)
+                              Padding(
+                                padding: EdgeInsets.only(left: i == 0 ? 0 : 3),
+                                child: MemberAvatar(
+                                  name: m['name'].toString(),
+                                  index: i,
+                                  size: 24,
+                                ),
+                              ),
                           ],
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Bord supérieur « papier déchiré » du bandeau de navigation (sketch .navband).
+class _TornTop extends CustomClipper<Path> {
+  @override
+  Path getClip(Size s) {
+    final w = s.width, h = s.height;
+    return Path()
+      ..moveTo(0, 14)
+      ..lineTo(w * .035, 4)
+      ..lineTo(w * .30, 9)
+      ..lineTo(w * .52, 0)
+      ..lineTo(w * .76, 8)
+      ..lineTo(w, 3)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_TornTop old) => false;
 }
 
 /// Tampon irrégulier derrière le signe actif — même famille que les découpes.

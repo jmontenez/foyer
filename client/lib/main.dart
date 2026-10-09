@@ -1213,6 +1213,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               index: destination,
               items: destinations,
               onSelected: openDestination,
+              members: members,
+              onProfile: settingsDialog,
             ),
       body: SafeArea(
         bottom: false,
@@ -1431,14 +1433,23 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                           ),
                                           child: Row(
                                             children: [
-                                              Text(
-                                                'Une chose en tête ?',
-                                                style: TextStyle(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
+                                              // Flexible + ellipsis : en colonne
+                                              // étroite (fiche ouverte au volet),
+                                              // le préfixe se réduit au lieu de
+                                              // faire déborder le bouton.
+                                              Flexible(
+                                                child: Text(
+                                                  'Une chose en tête ?',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
                                                 ),
                                               ),
+                                              const SizedBox(width: 12),
                                               const Spacer(),
                                               Semantics(
                                                 button: true,
