@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Couleurs des widgets : repli clair ; Material You à partir d’Android 12 (values-v31). -->
+<!-- Couleurs de repli des widgets (modèle « Découpes » : neutres chauds fixes + duo Sauge).
+     Avant 1re ouverture de l’app ; ensuite la palette exportée prend le relais. Material You
+     sur Android 12+ reste géré dans values-v31. -->
 <resources>
-    <color name="widget_bg">#FFFBF7</color>
-    <color name="widget_row">#F3EDE6</color>
-    <color name="widget_text">#1F1B16</color>
-    <color name="widget_muted">#6B645C</color>
-    <color name="widget_accent">#B86545</color>
+    <color name="widget_bg">#F6EFE3</color>       <!-- papier -->
+    <color name="widget_row">#FFFDF6</color>      <!-- panneau -->
+    <color name="widget_text">#342650</color>     <!-- encre -->
+    <color name="widget_muted">#6E6386</color>    <!-- atténué -->
+    <color name="widget_accent">#386653</color>   <!-- duo principal (Sauge) -->
     <color name="widget_late">#B3261E</color>
     <color name="widget_on_accent">#FFFFFF</color>
 </resources>

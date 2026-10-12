@@ -44,8 +44,8 @@ public static class Demo
     public static Household Seed(Settings settings, DateOnly today, DateTimeOffset now)
     {
         var h = new Household();
-        var camille = new Member { Subject = "demo-0", Email = settings.AllowedEmails[0], Name = "Camille", PaletteId = "ember-night", FontId = "grotesk" };
-        var alex = new Member { Subject = "demo-1", Email = settings.AllowedEmails[1], Name = "Alex", PaletteId = "sage", FontId = "serif" };
+        var camille = new Member { Subject = "demo-0", Email = settings.AllowedEmails[0], Name = "Camille", PaletteId = "sauge-nuit", FontId = "grotesk" };
+        var alex = new Member { Subject = "demo-1", Email = settings.AllowedEmails[1], Name = "Alex", PaletteId = "prune", FontId = "serif" };
         h.Members = [camille, alex];
         string C = camille.Id, A = alex.Id;
         var n = 0;

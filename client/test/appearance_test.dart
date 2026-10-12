@@ -11,12 +11,9 @@ double contrast(Color x, Color y) {
 
 void main() {
   test('Toutes les palettes gardent des contrastes lisibles', () {
-    expect(palettes.where((p) => !p.bold).length, 11);
-    expect(palettes.where((p) => p.bold && !p.v2).length, 9);
-    // Refonte « Découpes » : six duos littéraux (3 papiers clairs, 3 veillées).
-    expect(palettes.where((p) => p.v2).length, 6);
-    expect(palettes.where((p) => p.v2 && p.dark).length, 3);
-    expect(palettes.where((p) => p.v2 && !p.bold).length, 0);
+    // Modèle « Découpes » : trois duos, chacun en clair et en veillée.
+    expect(palettes.length, 6);
+    expect(palettes.where((p) => p.dark).length, 3);
     expect(palettes.map((p) => p.id).toSet().length, palettes.length);
     for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));
@@ -35,26 +32,32 @@ void main() {
         );
       }
     }
-    expect(paletteById('ancienne-valeur').id, 'sage');
+    expect(paletteById('ancienne-valeur').id, 'sauge');
   });
 
-  test('Palettes marquées : couleurs exactes et thème sombre effectif', () {
-    for (final palette in palettes.where((p) => p.bold)) {
+  test('Duo appliqué littéralement, neutres fixes, veillée effective', () {
+    for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));
-      expect(theme.colorScheme.primary, palette.primary, reason: palette.id);
-      expect(
-        theme.colorScheme.secondaryContainer,
-        palette.accent,
-        reason: palette.id,
-      );
+      final c = theme.colorScheme;
+      // --p et --a posés tels quels (jamais adoucis par Material).
+      expect(c.primary, palette.primary, reason: palette.id);
+      expect(c.secondary, palette.accent, reason: palette.id);
       expect(
         theme.brightness,
         palette.dark ? Brightness.dark : Brightness.light,
         reason: palette.id,
       );
-      expect(theme.scaffoldBackgroundColor, palette.background);
+      // Les neutres ne dépendent que du mode, pas du duo (papier fixe).
+      expect(theme.scaffoldBackgroundColor, paperFor(palette.dark));
     }
-    expect(paletteById('ember-night').dark, isTrue);
+    // Même mode ⇒ mêmes neutres quel que soit le duo.
+    expect(
+      buildAppTheme(const AppAppearance(paletteId: 'sauge'))
+          .scaffoldBackgroundColor,
+      buildAppTheme(const AppAppearance(paletteId: 'prune'))
+          .scaffoldBackgroundColor,
+    );
+    expect(paletteById('sauge-nuit').dark, isTrue);
   });
 
   test('Texte lisible choisi automatiquement', () {
@@ -85,8 +88,8 @@ void main() {
       );
       // Ce qu’on règle au curseur est ce qu’on voit, en clair comme en sombre.
       expect(c.primary, colorFromHex(p), reason: p);
-      expect(c.secondaryContainer, colorFromHex(acc), reason: acc);
-      expect(theme.scaffoldBackgroundColor, paletteFor(appearance).background);
+      expect(c.secondary, colorFromHex(acc), reason: acc);
+      expect(theme.scaffoldBackgroundColor, paperFor(dark));
       for (final pair in [
         (c.primary, c.onPrimary),
         (c.secondaryContainer, c.onSecondaryContainer),
@@ -124,12 +127,8 @@ void main() {
     expect((a.customPrimary, a.customAccent), ('#386653', '#FF0000'));
     expect(a.customDark, isTrue);
     final palette = paletteFor(a);
-    // `bold` : les couleurs du duo sont appliquées telles quelles, jamais adoucies.
-    expect(
-      (palette.name, palette.dark, palette.bold),
-      ('Sur mesure', true, true),
-    );
-    expect(paletteFor(const AppAppearance()).id, 'sage');
+    expect((palette.name, palette.dark), ('Sur mesure', true));
+    expect(paletteFor(const AppAppearance()).id, 'sauge');
   });
 
   test('Jetons : valeurs inconnues ou absentes ramenées au réglage neutre', () {
@@ -141,7 +140,8 @@ void main() {
       'density': 'compact',
       'corners': 'sharp',
     });
-    expect(a.paletteId, 'ember-night');
+    // Ancienne palette sombre ramenée vers la veillée Sauge.
+    expect(a.paletteId, 'sauge-nuit');
     expect(a.fontId, 'system');
     expect((a.listStyle, a.density, a.corners), ('rows', 'compact', 'sharp'));
     expect(a.toJson()['fontId'], 'system');
