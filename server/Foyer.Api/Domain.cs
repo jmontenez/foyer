@@ -230,7 +230,9 @@ public static class Appearance
         "ember-night", "lime-charcoal", "ruby-onyx", "electric-violet", "abyss-cyan", "tomato-teal", "royal-sun", "fuchsia-lemon", "ink-coral", "custom",
         // Palettes v2 de la refonte « Découpes » (ids ajoutés en amont pour que la beta puisse
         // enregistrer l'apparence ; les anciennes palettes seront retirées à la fin de la refonte).
-        "d2-sauge", "d2-encre", "d2-terre", "d2-sauge-nuit", "d2-braise-nuit", "d2-prune-nuit"];
+        "d2-sauge", "d2-encre", "d2-terre", "d2-sauge-nuit", "d2-braise-nuit", "d2-prune-nuit",
+        // Ids renommés (préfixe d2- retiré) envoyés par le client redesign depuis le modèle couleur final.
+        "sauge", "encre", "prune", "sauge-nuit", "encre-nuit", "prune-nuit"];
     public static readonly HashSet<string> FontIds = ["system", "grotesk", "serif", "manrope"];
     public static readonly HashSet<string> ListStyles = ["cards", "rows"];
     public static readonly HashSet<string> Densities = ["comfortable", "compact"];

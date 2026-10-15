@@ -42,6 +42,13 @@ public class AppearanceTests
     [InlineData("d2-sauge-nuit")]
     [InlineData("d2-braise-nuit")]
     [InlineData("d2-prune-nuit")]
+    // Ids renommés (préfixe d2- retiré) du modèle couleur final.
+    [InlineData("sauge")]
+    [InlineData("encre")]
+    [InlineData("prune")]
+    [InlineData("sauge-nuit")]
+    [InlineData("encre-nuit")]
+    [InlineData("prune-nuit")]
     public void RedesignPalettesAreAccepted(string id)
     {
         var member = new Member();
