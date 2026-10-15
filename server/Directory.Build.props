@@ -1,0 +1,32 @@
+<Project>
+  <!--
+    Exceptions d'audit NuGet — risque accepté et documenté (CISO).
+
+    SixLabors.ImageSharp reste en 3.1.12 : les CINQ advisories ci-dessous n'ont de
+    correctif qu'en 4.1.2+, or la v4 impose une licence commerciale PAYANTE au build
+    (SixLabors.ImageSharp.targets échoue sans clé) — hors budget pour ce projet perso.
+    Toute la ligne 3.x est affectée (plage <= 4.1.1) : aucun fix gratuit n'existe.
+
+    Analyse d'exposition — usage réel : Image.Identify + Image.Load (DecoderOptions,
+    MaxFrames=1) + Mutate(AutoOrient + Resize) + SaveAsJpeg. Uploads d'images
+    DÉSACTIVÉS sur la démo/beta ; garde-fou 40 Mpx avant décodage.
+
+      - GHSA-j3p4-wp97-rph4 (high)   : HistogramEqualization — jamais appelé → non atteignable.
+      - GHSA-j9gm-c75j-xc9q (high)   : encodeur TIFF CCITT T4 — jamais d'encodage TIFF → non atteignable.
+      - GHSA-jjfr-hcj7-qf5w (high)   : encodeur TIFF CCITT T6 — idem → non atteignable.
+      - GHSA-gwg2-r3hj-4w44 (medium) : allocation au décodage d'un profil ICC — atteignable
+            uniquement via upload prod (images OFF démo/beta).
+      - GHSA-wmxv-xphr-5c9g (medium) : boucle au décodage d'un BigTIFF — idem, upload prod.
+
+    Les trois « high » sont des chemins non exécutés ; les deux atteignables sont « medium »
+    et prod-only. À LEVER dès qu'une 3.x corrective (sans clé) paraît, qu'une licence v4 est
+    acquise, ou qu'on migre de bibliothèque. L'audit reste actif pour tout le reste.
+  -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
+  </ItemGroup>
+</Project>
