@@ -26,7 +26,7 @@ La CI compile le web et teste le serveur, mais **aucune image Docker serveur pr�
 
 ### Domaine déjà préparé
 
-`jmops.fr` reste enregistré et renouvelé chez IONOS. Cloudflare gère le DNS ; la délégation vers `elisa.ns.cloudflare.com` et `watson.ns.cloudflare.com` a été vérifiée auprès du registre `.fr` le 2026-09-24. Ne pas modifier `pourclemence.fr`.
+`jmops.fr` reste enregistré et renouvelé chez IONOS. Cloudflare gère le DNS ; la délégation vers `elisa.ns.cloudflare.com` et `watson.ns.cloudflare.com` a été vérifiée auprès du registre `.fr` le 2026-09-24.
 
 Origine retenue pour le web **et** l’API Android : **https://foyer.jmops.fr**. Aucun client Tailscale n’est nécessaire aux utilisateurs avec ce mode d’accès. Ne pas ajouter d’enregistrement A vers l’IP de la box et ne pas ouvrir de port entrant sur celle-ci. Le sous-domaine sera associé au tunnel à l’étape 6.
 
