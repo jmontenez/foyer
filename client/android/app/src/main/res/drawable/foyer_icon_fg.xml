@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Avant-plan de l'icône adaptive : astérisque « foyer✳ » crème + cœur ambre, dans la zone sûre (centre). -->
+    <group android:pivotX="54" android:pivotY="54" android:rotation="0">
+        <path android:fillColor="#F7F5F0" android:pathData="M26,50L82,50A4,4,0,0,1,82,58L26,58A4,4,0,0,1,26,50Z"/>
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="45">
+        <path android:fillColor="#F7F5F0" android:pathData="M26,50L82,50A4,4,0,0,1,82,58L26,58A4,4,0,0,1,26,50Z"/>
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="90">
+        <path android:fillColor="#F7F5F0" android:pathData="M26,50L82,50A4,4,0,0,1,82,58L26,58A4,4,0,0,1,26,50Z"/>
+    </group>
+    <group android:pivotX="54" android:pivotY="54" android:rotation="135">
+        <path android:fillColor="#F7F5F0" android:pathData="M26,50L82,50A4,4,0,0,1,82,58L26,58A4,4,0,0,1,26,50Z"/>
+    </group>
+    <path android:fillColor="#B58A44" android:pathData="M48,54a6,6,0,1,0,12,0a6,6,0,1,0,-12,0Z"/>
+</vector>
