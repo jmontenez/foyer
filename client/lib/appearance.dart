@@ -291,12 +291,28 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
       other == null || t < .5 ? this : other;
 }
 
-/// Signature « Découpes » : le coin supérieur droit franchement coupé (asymétrique),
-/// les autres à peine — comme une feuille de papier dont on a ciselé un coin.
-/// Jamais un arrondi : c'est ce qui rend l'identité reconnaissable sans couleur.
-/// [cut] = étendue VERTICALE du biseau (px) ; l'horizontale suit le ratio du
-/// sketch (26/18 = 13/9 ≈ 1.444). Gros éléments : cutBig (18). Petits : cutSmall (9).
-OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) =>
+/// Signature « Découpes » des petits éléments (boutons, onglets, puces) : un coin
+/// ARRONDI ASYMÉTRIQUE — haut-gauche et bas-droite franchement arrondis, les deux
+/// autres resserrés — comme le papier découpé aux ciseaux du Découpes original
+/// (border-radius asymétrique, pas un biseau droit). [cut] = base ; gros rayon ≈
+/// cut×1.7, petit rayon ≈ cut×0.5 (ratio ≈ 0.3, cf. maquette 16/5 validée).
+OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) {
+  final big = Radius.circular(cut * 1.7);
+  final small = Radius.circular(cut * 0.5);
+  return RoundedRectangleBorder(
+    side: side,
+    borderRadius: BorderRadius.only(
+      topLeft: big,
+      bottomRight: big,
+      topRight: small,
+      bottomLeft: small,
+    ),
+  );
+}
+
+/// Biseau droit du sketch (--cut) : conservé pour les cartes/panneaux.
+/// [cut] = étendue verticale ; l'horizontale suit le ratio 1.444 du sketch.
+OutlinedBorder bevelShape(double cut, {BorderSide side = BorderSide.none}) =>
     BeveledRectangleBorder(
       side: side,
       borderRadius: BorderRadius.only(
@@ -379,7 +395,7 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     cardTheme: CardThemeData(
       color: card,
       elevation: 0,
-      shape: cutShape(cut, side: BorderSide(color: colors.outlineVariant)),
+      shape: bevelShape(cut, side: BorderSide(color: colors.outlineVariant)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,

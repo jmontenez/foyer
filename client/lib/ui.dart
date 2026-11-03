@@ -1826,7 +1826,7 @@ class SummaryTiles extends StatelessWidget {
         excludeSemantics: true,
         child: Material(
           color: color ?? Theme.of(context).cardTheme.color,
-          shape: cutShape(
+          shape: bevelShape(
             t.cut,
             side: BorderSide(
               color: selected ? c.error : (color ?? c.outlineVariant),
@@ -1834,7 +1834,7 @@ class SummaryTiles extends StatelessWidget {
             ),
           ),
           child: InkWell(
-            customBorder: cutShape(t.cut),
+            customBorder: bevelShape(t.cut),
             onTap: onTap,
             child: Padding(
               padding: EdgeInsets.all(t.compact ? 10 : 14),
