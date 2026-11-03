@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foyer/appearance.dart';
+import 'package:foyer/ui.dart';
 
 double contrast(Color x, Color y) {
   final a = x.computeLuminance(), b = y.computeLuminance();
@@ -9,8 +11,9 @@ double contrast(Color x, Color y) {
 
 void main() {
   test('Toutes les palettes gardent des contrastes lisibles', () {
-    expect(palettes.where((p) => !p.bold).length, 11);
-    expect(palettes.where((p) => p.bold).length, 9);
+    // Modèle « Découpes » : trois duos, chacun en clair et en veillée.
+    expect(palettes.length, 6);
+    expect(palettes.where((p) => p.dark).length, 3);
     expect(palettes.map((p) => p.id).toSet().length, palettes.length);
     for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));
@@ -29,26 +32,32 @@ void main() {
         );
       }
     }
-    expect(paletteById('ancienne-valeur').id, 'sage');
+    expect(paletteById('ancienne-valeur').id, 'sauge');
   });
 
-  test('Palettes marquées : couleurs exactes et thème sombre effectif', () {
-    for (final palette in palettes.where((p) => p.bold)) {
+  test('Duo appliqué littéralement, neutres fixes, veillée effective', () {
+    for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));
-      expect(theme.colorScheme.primary, palette.primary, reason: palette.id);
-      expect(
-        theme.colorScheme.secondaryContainer,
-        palette.accent,
-        reason: palette.id,
-      );
+      final c = theme.colorScheme;
+      // --p et --a posés tels quels (jamais adoucis par Material).
+      expect(c.primary, palette.primary, reason: palette.id);
+      expect(c.secondary, palette.accent, reason: palette.id);
       expect(
         theme.brightness,
         palette.dark ? Brightness.dark : Brightness.light,
         reason: palette.id,
       );
-      expect(theme.scaffoldBackgroundColor, palette.background);
+      // Les neutres ne dépendent que du mode, pas du duo (papier fixe).
+      expect(theme.scaffoldBackgroundColor, paperFor(palette.dark));
     }
-    expect(paletteById('ember-night').dark, isTrue);
+    // Même mode ⇒ mêmes neutres quel que soit le duo.
+    expect(
+      buildAppTheme(const AppAppearance(paletteId: 'sauge'))
+          .scaffoldBackgroundColor,
+      buildAppTheme(const AppAppearance(paletteId: 'prune'))
+          .scaffoldBackgroundColor,
+    );
+    expect(paletteById('sauge-nuit').dark, isTrue);
   });
 
   test('Texte lisible choisi automatiquement', () {
@@ -79,8 +88,8 @@ void main() {
       );
       // Ce qu’on règle au curseur est ce qu’on voit, en clair comme en sombre.
       expect(c.primary, colorFromHex(p), reason: p);
-      expect(c.secondaryContainer, colorFromHex(acc), reason: acc);
-      expect(theme.scaffoldBackgroundColor, paletteFor(appearance).background);
+      expect(c.secondary, colorFromHex(acc), reason: acc);
+      expect(theme.scaffoldBackgroundColor, paperFor(dark));
       for (final pair in [
         (c.primary, c.onPrimary),
         (c.secondaryContainer, c.onSecondaryContainer),
@@ -118,12 +127,8 @@ void main() {
     expect((a.customPrimary, a.customAccent), ('#386653', '#FF0000'));
     expect(a.customDark, isTrue);
     final palette = paletteFor(a);
-    // `bold` : les couleurs du duo sont appliquées telles quelles, jamais adoucies.
-    expect(
-      (palette.name, palette.dark, palette.bold),
-      ('Sur mesure', true, true),
-    );
-    expect(paletteFor(const AppAppearance()).id, 'sage');
+    expect((palette.name, palette.dark), ('Sur mesure', true));
+    expect(paletteFor(const AppAppearance()).id, 'sauge');
   });
 
   test('Jetons : valeurs inconnues ou absentes ramenées au réglage neutre', () {
@@ -135,28 +140,42 @@ void main() {
       'density': 'compact',
       'corners': 'sharp',
     });
-    expect(a.paletteId, 'ember-night');
+    // Ancienne palette sombre ramenée vers la veillée Sauge.
+    expect(a.paletteId, 'sauge-nuit');
     expect(a.fontId, 'system');
     expect((a.listStyle, a.density, a.corners), ('rows', 'compact', 'sharp'));
     expect(a.toJson()['fontId'], 'system');
   });
 
-  test('Thème : polices, angles et densité appliqués', () {
-    final braise = buildAppTheme(stylePresets.first.appearance);
-    final tokens = braise.extension<FoyerTokens>()!;
-    expect(braise.brightness, Brightness.dark);
-    expect(braise.textTheme.headlineLarge?.fontFamily, 'SpaceGrotesk');
-    expect(braise.textTheme.bodyMedium?.fontFamily, 'DMSans');
-    expect((tokens.radius, tokens.compact, tokens.rows), (20.0, false, false));
-    final liste = buildAppTheme(
-      stylePresets.last.appearance.copyWith(corners: 'sharp'),
-    );
-    final t = liste.extension<FoyerTokens>()!;
-    expect((t.radius, t.compact, t.rows), (8.0, true, true));
-    expect(liste.visualDensity, VisualDensity.compact);
+  test('Thème : typo Découpes fixe, coin coupé, angles et densité', () {
+    final theme = buildAppTheme(const AppAppearance());
+    final tokens = theme.extension<FoyerTokens>()!;
+    // Axes réduits : la police n'est plus un réglage — titres Manrope, texte Atkinson.
+    expect(theme.textTheme.headlineLarge?.fontFamily, 'Manrope');
+    expect(theme.textTheme.titleLarge?.fontFamily, 'Manrope');
+    expect(theme.textTheme.bodyMedium?.fontFamily, 'Atkinson');
     expect(
-      buildAppTheme(const AppAppearance()).textTheme.headlineLarge?.fontFamily,
-      isNot('SpaceGrotesk'),
+      (tokens.radius, tokens.cut, tokens.compact, tokens.rows),
+      (20.0, 18.0, false, false),
+    );
+    expect(tokens.displayFont, 'Manrope');
+    final compact = buildAppTheme(
+      const AppAppearance(
+        corners: 'sharp',
+        density: 'compact',
+        listStyle: 'rows',
+      ),
+    );
+    final t = compact.extension<FoyerTokens>()!;
+    expect((t.radius, t.cut, t.compact, t.rows), (8.0, 12.0, true, true));
+    expect(compact.visualDensity, VisualDensity.compact);
+    // Même typo quel que soit l'ancien réglage de police stocké.
+    expect(
+      buildAppTheme(const AppAppearance(fontId: 'serif'))
+          .textTheme
+          .headlineLarge
+          ?.fontFamily,
+      'Manrope',
     );
   });
 
@@ -259,15 +278,39 @@ void main() {
     expect(result, saved.copyWith(customDark: true));
   });
 
-  test('Styles prêts à l’emploi distincts et reconnus', () {
-    expect(stylePresets.map((p) => p.appearance).toSet().length, 3);
-    for (final p in stylePresets) {
-      expect(presetOf(p.appearance), p);
-      expect(palettes.any((x) => x.id == p.appearance.paletteId), isTrue);
-    }
-    expect(
-      presetOf(stylePresets.first.appearance.copyWith(corners: 'sharp')),
-      isNull,
+  testWidgets('CutCheck : coche au toucher, retour haptique, sémantique', (
+    tester,
+  ) async {
+    var value = false;
+    final haptics = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => CutCheck(
+              value: value,
+              semanticLabel: 'Tomates',
+              onChanged: (v) => setState(() => value = v),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.bySemanticsLabel('Tomates'));
+    await tester.pumpAndSettle();
+    expect(value, isTrue);
+    expect(haptics, isNotEmpty);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
     );
   });
 }

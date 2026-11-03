@@ -95,16 +95,16 @@ call("POST", "/api/v1/devices", {"token": device_token, "appVersion": -1}, token
 assert all("email" not in m and "subject" not in m for m in state["members"])
 original_palette = state["me"]["paletteId"]
 other_palette = call("GET", "/api/v1/state", token=b)["me"]["paletteId"]
-updated = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
-assert updated["paletteId"] == "sky-orange"
+updated = call("PUT", "/api/v1/appearance", {"paletteId": "encre"}, a)
+assert updated["paletteId"] == "encre"
 assert updated["digestTime"] == state["me"]["digestTime"]
 assert updated["digestEnabled"] == state["me"]["digestEnabled"]
 call("PUT", "/api/v1/appearance", {"paletteId": "unknown"}, a, expected=400)
 # Jetons de design : validés ensemble, conservés quand ils sont omis.
-tokens = call("PUT", "/api/v1/appearance", {"paletteId": "ember-night", "fontId": "grotesk", "listStyle": "rows", "density": "compact", "corners": "sharp"}, a)
+tokens = call("PUT", "/api/v1/appearance", {"paletteId": "prune-nuit", "fontId": "grotesk", "listStyle": "rows", "density": "compact", "corners": "sharp"}, a)
 assert (tokens["fontId"], tokens["listStyle"], tokens["density"], tokens["corners"]) == ("grotesk", "rows", "compact", "sharp"), tokens
 call("PUT", "/api/v1/appearance", {"fontId": "comic-sans"}, a, expected=400)
-kept = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
+kept = call("PUT", "/api/v1/appearance", {"paletteId": "encre"}, a)
 assert (kept["fontId"], kept["density"]) == ("grotesk", "compact"), kept
 # Palette sur mesure : duo validé, mémorisé même en repassant sur une palette prédéfinie.
 custom = call(
@@ -116,8 +116,8 @@ custom = call(
 assert (custom["paletteId"], custom["customPrimary"], custom["customAccent"], custom["customDark"]) == ("custom", "#1F4FE0", "#FACC15", True), custom
 call("PUT", "/api/v1/appearance", {"paletteId": "custom", "customPrimary": "1F4FE0"}, a, expected=400)
 call("PUT", "/api/v1/appearance", {"paletteId": "custom", "customAccent": "#XX4FE0"}, a, expected=400)
-back = call("PUT", "/api/v1/appearance", {"paletteId": "sky-orange"}, a)
-assert (back["paletteId"], back["customPrimary"], back["customDark"]) == ("sky-orange", "#1F4FE0", True), back
+back = call("PUT", "/api/v1/appearance", {"paletteId": "encre"}, a)
+assert (back["paletteId"], back["customPrimary"], back["customDark"]) == ("encre", "#1F4FE0", True), back
 call("PUT", "/api/v1/appearance", {"fontId": "system", "listStyle": "cards", "density": "comfortable", "corners": "soft"}, a)
 assert call("GET", "/api/v1/state", token=b)["me"]["paletteId"] == other_palette
 # Raccourcis : exemples pré-chargés, lancement, gestion, lien depuis une création étoffée.
@@ -199,7 +199,7 @@ assert second["shopping"] and [x["text"] for x in second["checklist"]] == ["Sucr
 second_session = call("POST", "/auth/demo/0")["token"]
 assert (
     call("GET", "/api/v1/state", token=second_session)["me"]["paletteId"]
-    == "sky-orange"
+    == "encre"
 )
 call("POST", "/api/v1/logout", token=second_session, expected=204)
 call("PUT", "/api/v1/appearance", {"paletteId": original_palette}, a)

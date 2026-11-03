@@ -130,11 +130,17 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   bool loading = true, signing = false;
   String? error;
   int tab = 0;
+  // Dernière vue ouverte dans « Prévu » (Semaine 1, Tableau 2, Un jour 3).
+  int lastPlanned = 1;
+  // Deux volets (écran ouvert) : fiche affichée à droite plutôt qu'en route
+  // plein écran. `selectedTicketId` = null pour une nouvelle tâche dans le volet.
+  bool detailOpen = false;
+  String? selectedTicketId;
+  GlobalKey<_TicketPageState> detailKey = GlobalKey<_TicketPageState>();
   String person = 'all', query = '', tag = 'all';
   bool searching = false;
   DateTime? historyFrom, historyTo;
   // Filtres propres aux vues : retards (Aujourd’hui), jour (Semaine), type (Backlog), période (Historique).
-  bool lateOnly = false;
   String? boardStage;
   DateTime? weekDay;
   String backlogKind = 'all', period = '30';
@@ -480,12 +486,35 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> openTicket([Map<String, dynamic>? ticket]) async {
     if (data == null) return;
+    // Écran ouvert : la fiche s'affiche dans le volet de droite (pas de route
+    // plein écran). On confirme d'abord l'abandon d'une saisie en cours.
+    if (MediaQuery.sizeOf(context).width >= 640) {
+      final leave =
+          await (detailKey.currentState?.confirmLeave() ?? Future.value(true));
+      if (!leave || !mounted) return;
+      setState(() {
+        detailOpen = true;
+        selectedTicketId = ticket?['id']?.toString();
+        detailKey = GlobalKey<_TicketPageState>();
+      });
+      return;
+    }
     final result = await Navigator.of(context).push(
       MaterialPageRoute<String>(
         builder: (_) => TicketPage(data: data!, ticket: ticket),
       ),
     );
     // « Ouvrir la liste de courses » depuis une tâche Courses.
+    if (result == 'shopping' && mounted) setState(() => tab = 5);
+    await refresh();
+  }
+
+  // Fermeture du volet de fiche : rafraîchit la liste et suit « Courses ».
+  Future<void> closeDetail([String? result]) async {
+    setState(() {
+      detailOpen = false;
+      selectedTicketId = null;
+    });
     if (result == 'shopping' && mounted) setState(() => tab = 5);
     await refresh();
   }
@@ -1058,7 +1087,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
       );
     }
-    final wide = MediaQuery.sizeOf(context).width > 900;
+    // Seuil mesuré sur les pliants (Fold 5 ouvert 690, Magic V5 724) : au-delà,
+    // le menu passe sur le côté (rail) plutôt qu'en bas. Fermés (~350), ils gardent
+    // le bandeau bas.
+    final wide = MediaQuery.sizeOf(context).width >= 640;
     final today =
         DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
     final subtitles = [
@@ -1070,226 +1102,424 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Ce qu’il faut rapporter',
     ];
     final tickets = visible();
-    const views = [
-      (Icons.wb_sunny_outlined, 'Aujourd’hui'),
-      (Icons.date_range_outlined, 'Semaine'),
-      (Icons.view_kanban_outlined, 'Tableau'),
-      (Icons.inventory_2_outlined, 'Backlog'),
-      (Icons.history, 'Historique'),
-      (Icons.shopping_basket_outlined, 'Courses'),
+    // Quatre destinations ; « Prévu » regroupe Semaine, Tableau et Un jour
+    // (les vues internes 0..5 restent inchangées, seule la porte d'entrée change).
+    const destinations = [
+      (FoyerSign.sun, 'Aujourd’hui'),
+      (FoyerSign.bag, 'Courses'),
+      (FoyerSign.cal, 'Prévu'),
+      (FoyerSign.book, 'Journal'),
     ];
+    final destination = switch (tab) {
+      0 => 0,
+      5 => 1,
+      4 => 3,
+      _ => 2,
+    };
+    void openDestination(int d) => setState(() {
+      searching = false;
+      query = '';
+      // Changer de destination referme la fiche ouverte dans le volet.
+      detailOpen = false;
+      selectedTicketId = null;
+      tab = switch (d) {
+        0 => 0,
+        1 => 5,
+        3 => 4,
+        _ => lastPlanned,
+      };
+    });
+    final title = destinations[destination].$2;
     final members = maps(data!['members']);
     final me = Map<String, dynamic>.from(data!['me']);
     final meIndex = members.indexWhere((m) => m['id'] == me['id']);
     final selectedTag = maps(data!['tags'])
         .where((t) => t['id'] == tag)
         .firstOrNull;
-    final rows = tokensOf(context).rows;
-    return Scaffold(
-      floatingActionButton: tab == 5
-          ? null
-          : FloatingActionButton(
-              tooltip: 'Une nouvelle tâche',
-              shape: const CircleBorder(),
-              onPressed: quickCreate,
-              child: const Icon(Icons.add, size: 28),
+    // Cartouche de date du sketch.
+    const wd = ['LUN.', 'MAR.', 'MER.', 'JEU.', 'VEN.', 'SAM.', 'DIM.'];
+    const mo = [
+      'JANV.',
+      'FÉVR.',
+      'MARS',
+      'AVR.',
+      'MAI',
+      'JUIN',
+      'JUIL.',
+      'AOÛT',
+      'SEPT.',
+      'OCT.',
+      'NOV.',
+      'DÉC.',
+    ];
+    final stamp = DateStamp(
+      top: wd[today.weekday - 1],
+      big: today.day.toString().padLeft(2, '0'),
+      bottom: mo[today.month - 1],
+    );
+    // Petit bouton utilitaire (recherche, cloche) au coin coupé.
+    Widget utilIcon(
+      IconData icon,
+      String tip,
+      VoidCallback onTap, {
+      int badge = 0,
+    }) {
+      final c = Theme.of(context).colorScheme;
+      Widget child = Icon(icon, size: 20, color: c.onSurface);
+      if (badge > 0) {
+        child = Badge.count(count: badge, child: child);
+      }
+      return Tooltip(
+        message: tip,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.all(9),
+            decoration: ShapeDecoration(
+              color: Theme.of(context).cardTheme.color,
+              shape: cutShape(
+                cutSmall,
+                side: BorderSide(color: c.outlineVariant),
+              ),
             ),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    final searchUtil = tab == 5
+        ? null
+        : utilIcon(
+            searching ? Icons.close : Icons.search,
+            searching ? 'Fermer la recherche' : 'Rechercher',
+            () => setState(() {
+              searching = !searching;
+              if (!searching) query = '';
+            }),
+          );
+    final notifUtil = utilIcon(
+      Icons.notifications_outlined,
+      'Notifications',
+      openNotifications,
+      badge: (data!['unreadNotifications'] ?? 0) as int,
+    );
+    return Scaffold(
+      // Pas de FAB : « Ajouter une tâche » vit en bas de liste (sketch).
       bottomNavigationBar: wide
           ? null
           : FloatingNav(
-              index: tab,
-              items: views,
-              onSelected: (i) => setState(() => tab = i),
+              index: destination,
+              items: destinations,
+              onSelected: openDestination,
+              members: members,
+              onProfile: settingsDialog,
             ),
       body: SafeArea(
         bottom: false,
         child: Row(
           children: [
             if (wide)
-              NavigationRail(
-                selectedIndex: tab,
-                onDestinationSelected: (i) => setState(() => tab = i),
-                labelType: NavigationRailLabelType.all,
-                destinations: [
-                  for (final (icon, label) in views)
-                    NavigationRailDestination(
-                      icon: Icon(icon),
-                      label: Text(label),
-                    ),
-                ],
+              FoyerRail(
+                index: destination,
+                items: destinations,
+                onSelected: openDestination,
+                members: members,
+                meIndex: meIndex < 0 ? 0 : meIndex,
+                onProfile: settingsDialog,
+                utilities: [?searchUtil, notifUtil],
               ),
             Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ScreenHeader(
-                      title: views[tab].$2,
-                      subtitle: subtitles[tab],
-                      searching: searching,
-                      // Courses a sa propre recherche d’ingrédients.
-                      onSearch: tab == 5
-                          ? null
-                          : () => setState(() {
-                              searching = !searching;
-                              if (!searching) query = '';
-                            }),
-                      action: IconButton.filled(
-                        tooltip: 'Notifications',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(context).cardTheme.color,
-                          foregroundColor: Theme.of(context)
-                              .colorScheme
-                              .onSurface,
-                          side: BorderSide(
-                            color: Theme.of(context).colorScheme.outlineVariant,
-                          ),
-                        ),
-                        onPressed: openNotifications,
-                        icon: Badge.count(
-                          count: (data!['unreadNotifications'] ?? 0) as int,
-                          isLabelVisible:
-                              ((data!['unreadNotifications'] ?? 0) as int) > 0,
-                          child: const Icon(Icons.notifications_outlined),
-                        ),
-                      ),
-                      profile: IconButton(
-                        tooltip: 'Réglages',
-                        onPressed: () => settingsDialog(),
-                        icon: ExcludeSemantics(
-                          child: MemberAvatar(
-                            name: me['name'].toString(),
-                            index: meIndex < 0 ? 0 : meIndex,
-                            size: 36,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (searching && tab != 5)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                        child: TextField(
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            hintText: 'Rechercher dans cette vue…',
-                            prefixIcon: Icon(Icons.search),
-                            isDense: true,
-                          ),
-                          onChanged: (v) => setState(() => query = v),
-                        ),
-                      ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    // Liste maître un peu plus étroite que la fiche : le volet de
+                    // droite (détail) a besoin de largeur (méta + notes + étapes).
+                    flex: detailOpen ? 5 : 1,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (error != null)
-                            MaterialBanner(
-                              content: Text(error!),
-                              actions: [
-                                TextButton(
-                                  onPressed: refresh,
-                                  child: const Text('Réessayer'),
-                                ),
-                              ],
-                            ),
-                          if (update != null && !updateDismissed)
-                            MaterialBanner(
-                              leading: const Icon(Icons.system_update_outlined),
-                              content: Text(
-                                'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      setState(() => updateDismissed = true),
-                                  child: const Text('Plus tard'),
-                                ),
-                                FilledButton(
-                                  onPressed: installingUpdate
-                                      ? null
-                                      : installUpdate,
-                                  child: Text(
-                                    installingUpdate
-                                        ? 'Téléchargement…'
-                                        : 'Installer',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          if (data!['demo'] == true)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.science_outlined,
-                                    size: 18,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Démonstration : données fictives, remises à zéro chaque nuit.',
-                                      style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
+                          ScreenHeader(
+                            title: title,
+                            subtitle: subtitles[tab],
+                            stamp: stamp,
+                            live: 'Liste partagée',
+                            // En ouvert, les utilitaires sont dans le rail ;
+                            // en fermé, ils reviennent dans l'en-tête, avec le profil.
+                            utilities: wide
+                                ? const []
+                                : [
+                                    ?searchUtil,
+                                    notifUtil,
+                                    Semantics(
+                                      button: true,
+                                      label: 'Réglages',
+                                      child: GestureDetector(
+                                        onTap: settingsDialog,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 6,
+                                          ),
+                                          child: ExcludeSemantics(
+                                            child: MemberAvatar(
+                                              name: me['name'].toString(),
+                                              index: meIndex < 0 ? 0 : meIndex,
+                                              size: 36,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
+                                  ],
+                          ),
+                          if (searching && tab != 5)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                              child: TextField(
+                                autofocus: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'Rechercher dans cette vue…',
+                                  prefixIcon: Icon(Icons.search),
+                                  isDense: true,
+                                ),
+                                onChanged: (v) => setState(() => query = v),
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (error != null)
+                                  MaterialBanner(
+                                    content: Text(error!),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: refresh,
+                                        child: const Text('Réessayer'),
+                                      ),
+                                    ],
                                   ),
+                                if (update != null && !updateDismissed)
+                                  MaterialBanner(
+                                    leading: const Icon(
+                                      Icons.system_update_outlined,
+                                    ),
+                                    content: Text(
+                                      'Mise à jour de Foyer disponible (build ${update!.versionCode}).',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => setState(
+                                          () => updateDismissed = true,
+                                        ),
+                                        child: const Text('Plus tard'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: installingUpdate
+                                            ? null
+                                            : installUpdate,
+                                        child: Text(
+                                          installingUpdate
+                                              ? 'Téléchargement…'
+                                              : 'Installer',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                if (data!['demo'] == true)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.science_outlined,
+                                          size: 18,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Démonstration : données fictives, remises à zéro chaque nuit.',
+                                            style: TextStyle(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (data!['maintenance'] == true)
+                                  const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Text(
+                                      'Maintenance en cours : modifications temporairement suspendues.',
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Sélecteur de vue de « Prévu » : Semaine / Tableau / Un jour.
+                          if (destination == 2)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                              child: Row(
+                                children: [
+                                  for (final (t, label) in [
+                                    (1, 'Semaine'),
+                                    (2, 'Tableau'),
+                                    (3, 'Un jour'),
+                                  ])
+                                    FilterPill(
+                                      label: label,
+                                      selected: tab == t,
+                                      onTap: () => setState(() {
+                                        tab = t;
+                                        lastPlanned = t;
+                                      }),
+                                    ),
                                 ],
                               ),
                             ),
-                          if (data!['maintenance'] == true)
-                            const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Text(
-                                'Maintenance en cours : modifications temporairement suspendues.',
+                          if (tab != 5) ...[
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              child: Row(
+                                children: filterPills(members, me, selectedTag),
                               ),
                             ),
+                            const SizedBox(height: 12),
+                          ],
+                          Expanded(
+                            child: tab == 5
+                                ? ShoppingView(
+                                    focusSearch: shoppingSearch,
+                                    data: data!,
+                                    api: api,
+                                    onChanged: refresh,
+                                    onOpenTicket: openTicket,
+                                  )
+                                : tab == 2
+                                ? board(tickets)
+                                : RefreshIndicator(
+                                    onRefresh: refresh,
+                                    child: ListView(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        0,
+                                        4,
+                                        0,
+                                        100,
+                                      ),
+                                      children: [
+                                        ...listFor(tickets, members, today),
+                                        // Ajout d'une tâche en bas de liste (sketch).
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            20,
+                                            14,
+                                            20,
+                                            4,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              // Flexible + ellipsis : en colonne
+                                              // étroite (fiche ouverte au volet),
+                                              // le préfixe se réduit au lieu de
+                                              // faire déborder le bouton.
+                                              Flexible(
+                                                child: Text(
+                                                  'Une chose en tête ?',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              const Spacer(),
+                                              Semantics(
+                                                button: true,
+                                                label: 'Ajouter une tâche',
+                                                child: GestureDetector(
+                                                  onTap: quickCreate,
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        'Ajouter une tâche',
+                                                        style: TextStyle(
+                                                          fontFamily: 'Manrope',
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .onSurface,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Icon(
+                                                        Icons.add,
+                                                        size: 20,
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .onSurface,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
                         ],
                       ),
                     ),
-                    if (tab != 5) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: filterPills(members, me, selectedTag),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                  ),
+                  if (wide && detailOpen) ...[
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                     Expanded(
-                      child: tab == 5
-                          ? ShoppingView(
-                              focusSearch: shoppingSearch,
-                              data: data!,
-                              api: api,
-                              onChanged: refresh,
-                              onOpenTicket: openTicket,
-                            )
-                          : tab == 2
-                          ? board(tickets)
-                          : RefreshIndicator(
-                              onRefresh: refresh,
-                              child: ListView(
-                                padding: EdgeInsets.fromLTRB(
-                                  0,
-                                  rows ? 0 : 4,
-                                  0,
-                                  100,
-                                ),
-                                children: listFor(tickets, members, today),
+                      flex: 6,
+                      child: TicketPage(
+                        key: detailKey,
+                        data: data!,
+                        embedded: true,
+                        ticket: selectedTicketId == null
+                            ? null
+                            : maps(data!['tickets']).firstWhere(
+                                (x) => x['id'] == selectedTicketId,
+                                orElse: () => <String, dynamic>{},
                               ),
-                            ),
+                        onClose: closeDetail,
+                      ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
           ],
@@ -1441,34 +1671,15 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             for (final t in items) padded(ticketCard(t)),
           ];
     final top = <Widget>[];
-    var shown = tickets;
     switch (tab) {
       case 0:
-        final late = tickets.where(isLate).toList();
-        top.add(
-          SummaryTiles(
-            total: tickets.length,
-            late: late.length,
-            lateOnly: lateOnly,
-            onLate: () => setState(() => lateOnly = !lateOnly),
-            people: [
-              for (final (i, m) in members.indexed)
-                (
-                  m['name'].toString(),
-                  i,
-                  tickets
-                      .where((t) => strings(t['assignees']).contains(m['id']))
-                      .length,
-                ),
-            ],
-          ),
-        );
-        shown = lateOnly ? late : tickets;
+        // Les retards se lisent dans leur section (couleur d'état sur la rangée) ;
+        // pas de tuiles de synthèse (fidélité au sketch « La journée »).
         final body = [
-          ...section('En retard', shown.where(isLate).toList(), c.error),
-          ...section('Aujourd’hui', shown.where((t) => !isLate(t)).toList()),
+          ...section('En retard', tickets.where(isLate).toList(), c.error),
+          ...section('Aujourd’hui', tickets.where((t) => !isLate(t)).toList()),
         ];
-        return [...top, if (body.isEmpty) empty() else ...body];
+        return [if (body.isEmpty) empty() else ...body];
       case 1:
         final days = weekOf(today);
         final all = maps(data!['tickets'])
@@ -1533,25 +1744,27 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     }
   }
 
-  Widget empty() => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.spa_outlined,
-          size: 52,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        SizedBox(height: 16),
-        Text(
-          'De la place pour la suite.',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        SizedBox(height: 8),
-        Text('Aucune tâche ne correspond à cette vue.'),
-      ],
-    ),
-  );
+  Widget empty() {
+    // Message adulte et direct, propre à la vue ouverte.
+    final (title, message) = switch (tab) {
+      0 => (
+        'De la place pour la suite.',
+        'Rien à faire maintenant. Profitez-en.',
+      ),
+      1 => ('Semaine dégagée.', 'Aucune tâche datée d’ici dimanche.'),
+      3 => ('Rien en attente.', 'Les idées sans date se posent ici.'),
+      4 => (
+        'Le journal est vide.',
+        'Ce qu’on termine ou qu’on décide de ne pas faire s’y retrouvera.',
+      ),
+      _ => (
+        'De la place pour la suite.',
+        'Aucune tâche ne correspond à cette vue.',
+      ),
+    };
+    return EmptyState(title: title, message: message);
+  }
+
   // Déplacer une carte d’étape : même enregistrement que la fiche, avec contrôle de version.
   Future<void> moveTicket(Map<String, dynamic> t, String stageId) async {
     try {
@@ -1694,7 +1907,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             .where((s) => s['id'] == t['stageId'])
             .map((s) => s['name'].toString())
             .firstOrNull ??
-        {'backlog': 'Backlog'}[t['stageId']];
+        {'backlog': 'Un jour'}[t['stageId']];
     final firstTag = maps(data!['tags'])
         .where((tag) => strings(t['tagIds']).contains(tag['id']))
         .map((tag) => tag['name'].toString())
@@ -1711,6 +1924,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         : null;
     final check = maps(t['checklist']);
     return TaskTile(
+      selected: detailOpen && selectedTicketId == t['id']?.toString(),
       onTap: () => openTicket(t),
       task: TaskView(
         title: t['title'].toString(),
@@ -1835,8 +2049,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     leading: const Icon(Icons.palette_outlined),
                     title: const Text('Apparence'),
                     subtitle: Text(
-                      presetOf(AppAppearance.fromMember(me))?.name ??
-                          paletteFor(AppAppearance.fromMember(me)).name,
+                      paletteFor(AppAppearance.fromMember(me)).name,
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
@@ -2161,7 +2374,17 @@ class NotificationsPage extends StatelessWidget {
 class TicketPage extends StatefulWidget {
   final Map<String, dynamic> data;
   final Map<String, dynamic>? ticket;
-  const TicketPage({super.key, required this.data, this.ticket});
+  // Mode panneau (écran ouvert) : la fiche vit dans un volet, sans route ni
+  // AppBar ; sa fermeture passe par onClose au lieu de Navigator.pop.
+  final bool embedded;
+  final void Function(String? result)? onClose;
+  const TicketPage({
+    super.key,
+    required this.data,
+    this.ticket,
+    this.embedded = false,
+    this.onClose,
+  });
   @override
   State<TicketPage> createState() => _TicketPageState();
 }
@@ -2221,6 +2444,41 @@ class _TicketPageState extends State<TicketPage> {
           .map((m) => m['name'].toString())
           .firstOrNull ??
       (id == 'system' ? 'Automatisation' : id);
+  // Fermeture : route vers le parent en mode panneau, sinon dépile la route.
+  void dismiss([String? result]) {
+    if (widget.embedded) {
+      widget.onClose?.call(result);
+    } else {
+      Navigator.pop(context, result);
+    }
+  }
+
+  // Confirme l'abandon des modifications non enregistrées (partagé entre le
+  // bouton Retour de la route et le changement de fiche dans le volet).
+  Future<bool> confirmLeave() async {
+    if (!dirty) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Quitter sans enregistrer ?'),
+        content: const Text(
+          'Les modifications de ce ticket ne sont pas encore enregistrées.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Continuer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Quitter'),
+          ),
+        ],
+      ),
+    );
+    return leave == true;
+  }
+
   Future<void> save({bool close = true}) async {
     if (saving) return;
     if (title.text.trim().isEmpty) {
@@ -2260,7 +2518,7 @@ class _TicketPageState extends State<TicketPage> {
         });
         if (close) {
           await WidgetsBinding.instance.endOfFrame;
-          if (mounted) Navigator.pop(context);
+          if (mounted) dismiss();
         }
       }
     } catch (e) {
@@ -2503,7 +2761,7 @@ class _TicketPageState extends State<TicketPage> {
         ..sort((a, b) => (a['order'] as int).compareTo(b['order'] as int));
   String get stageName =>
       {
-        'backlog': 'Backlog',
+        'backlog': 'Un jour',
         'done': 'Terminé',
         'abandoned': 'Abandonné',
         for (final s in stages) s['id']: s['name'],
@@ -2555,7 +2813,7 @@ class _TicketPageState extends State<TicketPage> {
         child: TextButton.icon(
           onPressed: () async {
             if (dirty) await save(close: false);
-            if (mounted && !dirty) Navigator.pop(context, 'shopping');
+            if (mounted && !dirty) dismiss('shopping');
           },
           icon: const Icon(Icons.shopping_basket_outlined),
           label: const Text('Ouvrir la liste de courses'),
@@ -2566,7 +2824,105 @@ class _TicketPageState extends State<TicketPage> {
   bool get closedTicket =>
       t['stageId'] == 'done' || t['stageId'] == 'abandoned';
 
+  // Checklist (étapes ou liste de courses) : case ciselée, retrait, ajout.
+  // Partagé entre la création et l'édition d'une fiche (une seule source).
+  List<Widget> checklistBlock() => [
+    ...checklistHeading(),
+    ...checklistItems().map(
+      (item) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: CutCheck(
+          value: item['done'] == true,
+          semanticLabel: itemLabel(item),
+          onChanged: (v) => setState(() {
+            t['checklist'] = maps(t['checklist'])
+                .map((c) => c['id'] == item['id'] ? {...c, 'done': v} : c)
+                .toList();
+            dirty = true;
+          }),
+        ),
+        onTap: () => setState(() {
+          HapticFeedback.selectionClick();
+          t['checklist'] = maps(t['checklist'])
+              .map(
+                (c) => c['id'] == item['id']
+                    ? {...c, 'done': c['done'] != true}
+                    : c,
+              )
+              .toList();
+          dirty = true;
+        }),
+        title: Text(itemLabel(item)),
+        trailing: IconButton(
+          tooltip: 'Retirer',
+          icon: const Icon(Icons.close),
+          onPressed: () => setState(() {
+            t['checklist'] = maps(t['checklist'])
+              ..removeWhere((c) => c['id'] == item['id']);
+            dirty = true;
+          }),
+        ),
+      ),
+    ),
+    TextButton.icon(
+      onPressed: addCheck,
+      icon: const Icon(Icons.add),
+      label: const Text('Ajouter une étape'),
+    ),
+  ];
+
+  // Galerie d'images de la fiche (masquée en démo), partagée création/édition.
+  List<Widget> imagesBlock() => [
+    if (widget.data['demo'] != true) heading('Images'),
+    if (widget.data['demo'] != true)
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: maps(t['images']).map((image) {
+          final key = image['id'].toString();
+          return FutureBuilder<Uint8List>(
+            future: imageCache.putIfAbsent(key, () => api.imageBytes(key)),
+            builder: (c, s) => s.hasData
+                ? InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (c) => Dialog(
+                        child: InteractiveViewer(child: Image.memory(s.data!)),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        s.data!,
+                        width: 120,
+                        height: 100,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                : SizedBox(
+                    width: 120,
+                    height: 100,
+                    child: Center(
+                      child: s.hasError
+                          ? const Icon(Icons.broken_image)
+                          : const CircularProgressIndicator(),
+                    ),
+                  ),
+          );
+        }).toList(),
+      ),
+    if (widget.data['demo'] != true)
+      TextButton.icon(
+        onPressed: saving ? null : upload,
+        icon: const Icon(Icons.add_photo_alternate_outlined),
+        label: const Text('Ajouter une image'),
+      ),
+  ];
+
   Future<void> finish() async {
+    // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
+    HapticFeedback.mediumImpact();
     final me = widget.data['me']?['id']?.toString();
     final performers = await askPerformers(context, members, {
       ...strings(t['assignees']),
@@ -2778,7 +3134,7 @@ class _TicketPageState extends State<TicketPage> {
     try {
       await api.call('POST', '/api/v1/tickets/${t['id']}/skip');
       message('Passée cette fois : la suivante est prévue.');
-      if (mounted) Navigator.pop(context);
+      if (mounted) dismiss();
     } catch (e) {
       message(e);
     }
@@ -2840,75 +3196,14 @@ class _TicketPageState extends State<TicketPage> {
     ];
   }
 
+  // Méta en liste de définition (sketch .meta-grid) : libellé à gauche, valeur
+  // à droite, un toucher pour modifier. Plus de tuiles encadrées 2×2.
   List<Widget> actions() {
     final c = Theme.of(context).colorScheme;
-    final tk = tokensOf(context);
-    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
-    Widget action(
-      IconData icon,
-      String label,
-      VoidCallback? onTap, {
-      bool primary = false,
-    }) => Expanded(
-      child: Material(
-        color: primary ? c.primary : Theme.of(context).cardTheme.color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          side: primary ? BorderSide.none : BorderSide(color: c.outlineVariant),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          onTap: saving ? null : onTap,
-          child: SizedBox(
-            height: 66,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: primary ? c.onPrimary : c.onSurface),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: primary ? c.onPrimary : c.onSurface,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    Widget tile(String label, Widget value, VoidCallback onTap) => Expanded(
-      child: Material(
-        color: Theme.of(context).cardTheme.color,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          side: BorderSide(color: c.outlineVariant),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(tk.radius - 2),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: TextStyle(color: c.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 28,
-                  child: Align(alignment: Alignment.centerLeft, child: value),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
     final bold = TextStyle(
-      fontWeight: FontWeight.w700,
-      fontSize: 16,
+      fontFamily: tokensOf(context).displayFont,
+      fontWeight: FontWeight.w800,
+      fontSize: 15,
       color: c.onSurface,
     );
     final assignees = strings(t['assignees']);
@@ -2919,133 +3214,151 @@ class _TicketPageState extends State<TicketPage> {
     final selectedTags = tags
         .where((g) => strings(t['tagIds']).contains(g['id']))
         .toList();
-    return [
-      const SizedBox(height: 14),
-      if (!closed) ...[
-        Row(
-          children: [
-            action(Icons.check, 'C’est fait', finish, primary: true),
-            const SizedBox(width: 10),
-            action(Icons.event_repeat, 'Reporter', postpone),
-            const SizedBox(width: 10),
-            // Depuis le Backlog, l’action utile est de passer la tâche à faire.
-            if (t['stageId'] == 'backlog')
-              action(Icons.play_arrow_outlined, 'À faire', makeTodo)
-            else
-              action(
-                blocked
-                    ? Icons.play_arrow_outlined
-                    : Icons.pause_circle_outline,
-                blocked ? 'Débloquer' : 'Bloqué',
-                toggleBlocked,
+    Widget defRow(
+      String label,
+      Widget value,
+      VoidCallback onTap, {
+      bool last = false,
+    }) => GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: last
+            ? const BoxDecoration()
+            : BoxDecoration(
+                border: Border(bottom: BorderSide(color: c.outlineVariant)),
               ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 128,
+              child: Text(
+                label,
+                style: TextStyle(color: c.onSurfaceVariant, fontSize: 14),
+              ),
+            ),
+            Expanded(child: value),
           ],
         ),
-        const SizedBox(height: 10),
-      ],
+      ),
+    );
+    return [
+      const SizedBox(height: 10),
+      defRow(
+        'Qui s’en occupe',
+        assignees.isEmpty
+            ? Text('Personne', style: bold)
+            : Row(
+                children: [
+                  for (final id in assignees)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: MemberAvatar(
+                        name: name(id),
+                        index: members.indexWhere((m) => m['id'] == id),
+                        size: 22,
+                      ),
+                    ),
+                  Flexible(
+                    child: Text(
+                      assignees.map(name).join(' + '),
+                      style: bold,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+        () => editField(
+          'Qui s’en occupe ?',
+          (change) => chips('assignees', members, change),
+        ),
+      ),
+      defRow(
+        'Quand',
+        Text(
+          due != null
+              ? relativeDay(due, DateTime.now())
+              : start != null
+              ? 'Dès ${relativeDay(start, DateTime.now()).toLowerCase()}'
+              : 'Sans date',
+          style: bold,
+        ),
+        () => datePick('dueDate'),
+      ),
+      defRow(
+        'Étapes',
+        Text(check.isEmpty ? 'Aucune' : '$done / ${check.length}', style: bold),
+        addCheck,
+      ),
+      defRow(
+        selectedTags.length > 1 ? 'Tags' : 'Tag',
+        Text(
+          selectedTags.isEmpty
+              ? 'Aucun'
+              : selectedTags.map((g) => g['name']).join(', '),
+          style: bold,
+          overflow: TextOverflow.ellipsis,
+        ),
+        () => editField(
+          'Les tags',
+          (change) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              chips('tagIds', tags, change),
+              TextButton.icon(
+                onPressed: () async {
+                  await addTag();
+                  change(() {});
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Nouveau tag'),
+              ),
+            ],
+          ),
+        ),
+        last: true,
+      ),
+    ];
+  }
+
+  // Actions de clôture au bas de la fiche (sketch) : gros « C'est fait » puis
+  // « Reporter » / « On ne le fait pas » en liens, et À faire/Bloqué en secondaire.
+  List<Widget> closeActions() {
+    final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
+    if (closed) return [];
+    return [
+      const SizedBox(height: 20),
+      CutButton(
+        label: saving ? 'Enregistrement…' : 'C’est fait',
+        icon: Icons.check,
+        onTap: saving ? null : finish,
+      ),
+      const SizedBox(height: 12),
       Row(
         children: [
-          tile(
-            'Qui',
-            assignees.isEmpty
-                ? Text('Personne', style: bold)
-                : Row(
-                    children: [
-                      for (final id in assignees)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: MemberAvatar(
-                            name: name(id),
-                            index: members.indexWhere((m) => m['id'] == id),
-                            size: 26,
-                          ),
-                        ),
-                      if (assignees.length == 1)
-                        Flexible(
-                          child: Text(
-                            name(assignees.first),
-                            style: bold,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                  ),
-            () => editField(
-              'Qui s’en occupe ?',
-              (change) => chips('assignees', members, change),
-            ),
+          LinkText(
+            label: 'Reporter',
+            strong: true,
+            onTap: saving ? null : postpone,
           ),
-          const SizedBox(width: 10),
-          tile(
-            'Quand',
-            Text(
-              due != null
-                  ? relativeDay(due, DateTime.now())
-                  : start != null
-                  ? 'Dès ${relativeDay(start, DateTime.now()).toLowerCase()}'
-                  : 'Sans date',
-              style: bold,
-            ),
-            () => datePick('dueDate'),
+          const Spacer(),
+          LinkText(
+            label: 'On ne le fait pas',
+            strong: true,
+            onTap: saving ? null : abandon,
           ),
         ],
       ),
       const SizedBox(height: 10),
-      Row(
-        children: [
-          tile(
-            'Étapes',
-            check.isEmpty
-                ? Text('Aucune', style: bold)
-                : Row(
-                    children: [
-                      Text('$done/${check.length}', style: bold),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: done / check.length,
-                            minHeight: 6,
-                            color: c.secondaryContainer,
-                            backgroundColor: c.outlineVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-            addCheck,
-          ),
-          const SizedBox(width: 10),
-          tile(
-            selectedTags.length > 1 ? 'Tags' : 'Tag',
-            Text(
-              selectedTags.isEmpty
-                  ? 'Aucun'
-                  : selectedTags.map((g) => g['name']).join(', '),
-              style: bold,
-              overflow: TextOverflow.ellipsis,
-            ),
-            () => editField(
-              'Les tags',
-              (change) => Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  chips('tagIds', tags, change),
-                  TextButton.icon(
-                    onPressed: () async {
-                      await addTag();
-                      change(() {});
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nouveau tag'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      if (t['stageId'] == 'backlog')
+        LinkText(label: 'La passer à faire', onTap: saving ? null : makeTodo)
+      else
+        LinkText(
+          label: blocked ? 'La débloquer' : 'La marquer bloquée',
+          onTap: saving ? null : toggleBlocked,
+        ),
     ];
   }
 
@@ -3053,7 +3366,7 @@ class _TicketPageState extends State<TicketPage> {
     final action = a['action'];
     if (action == 'stage') {
       final stages = {
-        'backlog': 'Backlog',
+        'backlog': 'Un jour',
         'done': 'Terminé',
         'abandoned': 'Abandonné',
         for (final s in maps(widget.data['stages'])) s['id']: s['name'],
@@ -3081,697 +3394,539 @@ class _TicketPageState extends State<TicketPage> {
   @override
   Widget build(BuildContext context) {
     final stageItems = [
-      {'id': 'backlog', 'name': 'Backlog'},
+      {'id': 'backlog', 'name': 'Un jour'},
       ...maps(widget.data['stages']),
       {'id': 'done', 'name': 'Terminé'},
       {'id': 'abandoned', 'name': 'Abandonné / décidé de ne pas faire'},
     ];
+    // Priorité : badge dans l'AppBar (route plein écran) seulement ; dans le
+    // volet, la priorité est déjà au résumé, l'en-tête reste compact.
+    final priorityBadge =
+        existing && (t['priority'] == 'urgent' || t['priority'] == 'high')
+        ? PriorityBadge(
+            t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
+          )
+        : null;
+    final topActions = <Widget>[
+      if (existing)
+        PopupMenuButton<String>(
+          tooltip: 'Plus d’actions',
+          onSelected: (v) => v == 'abandon' ? abandon() : saveAsShortcut(),
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'shortcut',
+              child: ListTile(
+                leading: Icon(Icons.bolt_outlined),
+                title: Text('Enregistrer comme raccourci'),
+              ),
+            ),
+            if (t['stageId'] != 'done' && t['stageId'] != 'abandoned')
+              const PopupMenuItem(
+                value: 'abandon',
+                child: ListTile(
+                  leading: Icon(Icons.do_not_disturb_on_outlined),
+                  title: Text('Abandonner'),
+                  subtitle: Text(
+                    'Décidé de ne pas faire, gardé dans l’historique',
+                  ),
+                ),
+              ),
+          ],
+        ),
+      // En volet, « Enregistrer » n'apparaît que s'il y a des modifications
+      // (le sketch n'a pas de barre de sauvegarde) ; en route plein écran il
+      // reste toujours visible.
+      if (!widget.embedded || dirty)
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+            ),
+            onPressed: saving ? null : () => save(),
+            child: Text(
+              saving ? 'Enregistrement…' : 'Enregistrer',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+    ];
+    final body = Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 60),
+          children: [
+            if (!existing) ...[
+              TextField(
+                controller: title,
+                maxLength: 160,
+                // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                autofocus: t['id'] == null,
+                style: TextStyle(
+                  fontFamily: tokensOf(context).displayFont,
+                  fontSize: existing ? 28 : 24,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Qu’est-ce qu’on a en tête ?',
+                  counterText: '',
+                  border: existing ? InputBorder.none : null,
+                  enabledBorder: existing ? InputBorder.none : null,
+                  filled: existing ? false : null,
+                  contentPadding: existing ? EdgeInsets.zero : null,
+                ),
+              ),
+              if (!details)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => details = true),
+                    icon: const Icon(Icons.tune),
+                    label: const Text(
+                      'Ajouter des détails, une date, un responsable…',
+                    ),
+                  ),
+                ),
+              if (details) ...[
+                heading(existing ? 'Notes' : 'L’essentiel'),
+                TextField(
+                  controller: description,
+                  minLines: 3,
+                  maxLines: 8,
+                  maxLength: 12000,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes et contexte',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: t['stageId'],
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Avancement'),
+                  items: stageItems
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s['id'].toString(),
+                          child: Text(
+                            s['name'].toString(),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    t['stageId'] = v;
+                    dirty = true;
+                  }),
+                ),
+                if (t['stageId'] == 'done') ...[
+                  heading('Qui l’a réalisé ?'),
+                  const Text('Choix explicite, indépendant des responsables.'),
+                  memberChoices('performers'),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: t['kind'],
+                        decoration: const InputDecoration(labelText: 'Type'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'obligation',
+                            child: Text('Obligation'),
+                          ),
+                          DropdownMenuItem(value: 'wish', child: Text('Envie')),
+                        ],
+                        onChanged: (v) => setState(() {
+                          t['kind'] = v;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: t['priority'],
+                        decoration: const InputDecoration(
+                          labelText: 'Priorité',
+                        ),
+                        items: ['low', 'normal', 'high', 'urgent']
+                            .map(
+                              (p) => DropdownMenuItem(
+                                value: p,
+                                child: Text(priorityName(p)),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(() {
+                          t['priority'] = v;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                heading('Qui s’en occupe ?'),
+                memberChoices('assignees'),
+                heading('Quand ?'),
+                ...['startDate', 'dueDate'].map(
+                  (key) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today_outlined),
+                    title: Text(
+                      key == 'startDate' ? 'À faire à partir du' : 'Échéance',
+                    ),
+                    subtitle: Text(
+                      t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                    ),
+                    onTap: () => datePick(key),
+                    trailing: t[key] == null
+                        ? null
+                        : IconButton(
+                            onPressed: () => setState(() {
+                              t[key] = null;
+                              dirty = true;
+                            }),
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+                ),
+                heading('Les tags'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    ...tags.map(
+                      (tag) => FilterChip(
+                        avatar: Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: Color(
+                            int.parse(
+                              tag['color'].toString().replaceFirst('#', 'FF'),
+                              radix: 16,
+                            ),
+                          ),
+                        ),
+                        label: Text(tag['name']),
+                        selected: strings(t['tagIds']).contains(tag['id']),
+                        onSelected: (v) => setState(() {
+                          final list = strings(t['tagIds']);
+                          v ? list.add(tag['id']) : list.remove(tag['id']);
+                          t['tagIds'] = list;
+                          dirty = true;
+                        }),
+                      ),
+                    ),
+                    ActionChip(
+                      avatar: const Icon(Icons.add, size: 18),
+                      label: const Text('Nouveau tag'),
+                      onPressed: addTag,
+                    ),
+                  ],
+                ),
+                ...checklistBlock(),
+                ...imagesBlock(),
+              ],
+            ] else ...[
+              ...summary(),
+              TextField(
+                controller: title,
+                maxLength: 160,
+                // Titre sur plusieurs lignes, sans retour à la ligne saisi.
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.done,
+                textCapitalization: TextCapitalization.sentences,
+                autofocus: t['id'] == null,
+                style: TextStyle(
+                  fontFamily: tokensOf(context).displayFont,
+                  fontSize: existing ? 28 : 24,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Qu’est-ce qu’on a en tête ?',
+                  counterText: '',
+                  border: existing ? InputBorder.none : null,
+                  enabledBorder: existing ? InputBorder.none : null,
+                  filled: existing ? false : null,
+                  contentPadding: existing ? EdgeInsets.zero : null,
+                ),
+              ),
+              ...actions(),
+              heading(existing ? 'Notes' : 'L’essentiel'),
+              TextField(
+                controller: description,
+                minLines: 3,
+                maxLines: 8,
+                maxLength: 12000,
+                decoration: const InputDecoration(
+                  labelText: 'Notes et contexte',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...checklistBlock(),
+              ...imagesBlock(),
+              heading('On en parle'),
+              ...maps(t['comments']).map(
+                (c) => Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${name(c['authorId'])} · ${timeLabel(c['at'])}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SelectableText(c['text']),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              TextField(
+                controller: comment,
+                minLines: 1,
+                maxLines: 5,
+                maxLength: 6000,
+                decoration: const InputDecoration(
+                  hintText: 'Une avancée, une question, une décision…',
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonalIcon(
+                  onPressed: saving ? null : postComment,
+                  icon: const Icon(Icons.send_outlined),
+                  label: const Text('Commenter'),
+                ),
+              ),
+              // Actions de clôture en bas (sketch) : C'est fait + liens.
+              ...closeActions(),
+              const SizedBox(height: 16),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Tous les réglages'),
+                subtitle: const Text(
+                  'Avancement, type, priorité, responsables, dates, tags',
+                ),
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: t['stageId'],
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Avancement'),
+                    items: stageItems
+                        .map(
+                          (s) => DropdownMenuItem(
+                            value: s['id'].toString(),
+                            child: Text(
+                              s['name'].toString(),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      t['stageId'] = v;
+                      dirty = true;
+                    }),
+                  ),
+                  if (t['stageId'] == 'done') ...[
+                    heading('Qui l’a réalisé ?'),
+                    const Text(
+                      'Choix explicite, indépendant des responsables.',
+                    ),
+                    memberChoices('performers'),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: t['kind'],
+                          decoration: const InputDecoration(labelText: 'Type'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'obligation',
+                              child: Text('Obligation'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'wish',
+                              child: Text('Envie'),
+                            ),
+                          ],
+                          onChanged: (v) => setState(() {
+                            t['kind'] = v;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: t['priority'],
+                          decoration: const InputDecoration(
+                            labelText: 'Priorité',
+                          ),
+                          items: ['low', 'normal', 'high', 'urgent']
+                              .map(
+                                (p) => DropdownMenuItem(
+                                  value: p,
+                                  child: Text(priorityName(p)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() {
+                            t['priority'] = v;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                  heading('Qui s’en occupe ?'),
+                  memberChoices('assignees'),
+                  heading('Quand ?'),
+                  ...['startDate', 'dueDate'].map(
+                    (key) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today_outlined),
+                      title: Text(
+                        key == 'startDate' ? 'À faire à partir du' : 'Échéance',
+                      ),
+                      subtitle: Text(
+                        t[key] == null ? 'Sans date' : dateLabel(t[key]),
+                      ),
+                      onTap: () => datePick(key),
+                      trailing: t[key] == null
+                          ? null
+                          : IconButton(
+                              onPressed: () => setState(() {
+                                t[key] = null;
+                                dirty = true;
+                              }),
+                              icon: const Icon(Icons.close),
+                            ),
+                    ),
+                  ),
+                  heading('Les tags'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ...tags.map(
+                        (tag) => FilterChip(
+                          avatar: Icon(
+                            Icons.circle,
+                            size: 12,
+                            color: Color(
+                              int.parse(
+                                tag['color'].toString().replaceFirst('#', 'FF'),
+                                radix: 16,
+                              ),
+                            ),
+                          ),
+                          label: Text(tag['name']),
+                          selected: strings(t['tagIds']).contains(tag['id']),
+                          onSelected: (v) => setState(() {
+                            final list = strings(t['tagIds']);
+                            v ? list.add(tag['id']) : list.remove(tag['id']);
+                            t['tagIds'] = list;
+                            dirty = true;
+                          }),
+                        ),
+                      ),
+                      ActionChip(
+                        avatar: const Icon(Icons.add, size: 18),
+                        label: const Text('Nouveau tag'),
+                        onPressed: addTag,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              heading('Le fil de cette tâche'),
+              ...maps(t['history']).reversed.map(
+                (a) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: const Icon(Icons.history, size: 18),
+                  title: Text(activityDetail(a)),
+                  subtitle: Text(
+                    '${name(a['actorId'])} · ${timeLabel(a['at'])}',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (widget.embedded) {
+      // Volet (écran ouvert) : en-tête propre au panneau (fermer + actions),
+      // puis le corps. Pas de route à dépiler, pas d'AppBar.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Fermer',
+                  icon: const Icon(Icons.close),
+                  onPressed: () async {
+                    if (await confirmLeave()) dismiss();
+                  },
+                ),
+                const Spacer(),
+                ...topActions,
+              ],
+            ),
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return PopScope(
       canPop: !dirty,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final leave = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Quitter sans enregistrer ?'),
-            content: const Text(
-              'Les modifications de ce ticket ne sont pas encore enregistrées.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(c, false),
-                child: const Text('Continuer'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(c, true),
-                child: const Text('Quitter'),
-              ),
-            ],
-          ),
-        );
-        if (leave == true && context.mounted) {
+        if (await confirmLeave() && mounted) {
           setState(() => dirty = false);
           await WidgetsBinding.instance.endOfFrame;
-          if (context.mounted) Navigator.pop(context);
+          if (mounted) dismiss();
         }
       },
       child: Scaffold(
         appBar: AppBar(
           title: Text(t['id'] == null ? 'Une nouvelle tâche' : ''),
           actions: [
-            if (existing &&
-                (t['priority'] == 'urgent' || t['priority'] == 'high'))
+            if (priorityBadge != null)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: PriorityBadge(
-                  t['priority'] == 'urgent' ? TaskBadge.urgent : TaskBadge.high,
-                ),
+                child: Center(child: priorityBadge),
               ),
-            if (existing)
-              PopupMenuButton<String>(
-                tooltip: 'Plus d’actions',
-                onSelected: (v) =>
-                    v == 'abandon' ? abandon() : saveAsShortcut(),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'shortcut',
-                    child: ListTile(
-                      leading: Icon(Icons.bolt_outlined),
-                      title: Text('Enregistrer comme raccourci'),
-                    ),
-                  ),
-                  if (t['stageId'] != 'done' && t['stageId'] != 'abandoned')
-                    const PopupMenuItem(
-                      value: 'abandon',
-                      child: ListTile(
-                        leading: Icon(Icons.do_not_disturb_on_outlined),
-                        title: Text('Abandonner'),
-                        subtitle: Text(
-                          'Décidé de ne pas faire, gardé dans l’historique',
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: FilledButton(
-                onPressed: saving ? null : () => save(),
-                child: Text(saving ? 'Enregistrement…' : 'Enregistrer'),
-              ),
-            ),
+            ...topActions,
           ],
         ),
-        body: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 60),
-              children: [
-                if (!existing) ...[
-                  TextField(
-                    controller: title,
-                    maxLength: 160,
-                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    autofocus: t['id'] == null,
-                    style: TextStyle(
-                      fontFamily: tokensOf(context).displayFont,
-                      fontSize: existing ? 28 : 24,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Qu’est-ce qu’on a en tête ?',
-                      counterText: '',
-                      border: existing ? InputBorder.none : null,
-                      enabledBorder: existing ? InputBorder.none : null,
-                      filled: existing ? false : null,
-                      contentPadding: existing ? EdgeInsets.zero : null,
-                    ),
-                  ),
-                  if (!details)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: TextButton.icon(
-                        onPressed: () => setState(() => details = true),
-                        icon: const Icon(Icons.tune),
-                        label: const Text(
-                          'Ajouter des détails, une date, un responsable…',
-                        ),
-                      ),
-                    ),
-                  if (details) ...[
-                    heading(existing ? 'Notes' : 'L’essentiel'),
-                    TextField(
-                      controller: description,
-                      minLines: 3,
-                      maxLines: 8,
-                      maxLength: 12000,
-                      decoration: const InputDecoration(
-                        labelText: 'Notes et contexte',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: t['stageId'],
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Avancement',
-                      ),
-                      items: stageItems
-                          .map(
-                            (s) => DropdownMenuItem(
-                              value: s['id'].toString(),
-                              child: Text(
-                                s['name'].toString(),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        t['stageId'] = v;
-                        dirty = true;
-                      }),
-                    ),
-                    if (t['stageId'] == 'done') ...[
-                      heading('Qui l’a réalisé ?'),
-                      const Text(
-                        'Choix explicite, indépendant des responsables.',
-                      ),
-                      memberChoices('performers'),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: t['kind'],
-                            decoration: const InputDecoration(
-                              labelText: 'Type',
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'obligation',
-                                child: Text('Obligation'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'wish',
-                                child: Text('Envie'),
-                              ),
-                            ],
-                            onChanged: (v) => setState(() {
-                              t['kind'] = v;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: t['priority'],
-                            decoration: const InputDecoration(
-                              labelText: 'Priorité',
-                            ),
-                            items: ['low', 'normal', 'high', 'urgent']
-                                .map(
-                                  (p) => DropdownMenuItem(
-                                    value: p,
-                                    child: Text(priorityName(p)),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              t['priority'] = v;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                      ],
-                    ),
-                    heading('Qui s’en occupe ?'),
-                    memberChoices('assignees'),
-                    heading('Quand ?'),
-                    ...['startDate', 'dueDate'].map(
-                      (key) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.calendar_today_outlined),
-                        title: Text(
-                          key == 'startDate'
-                              ? 'À faire à partir du'
-                              : 'Échéance',
-                        ),
-                        subtitle: Text(
-                          t[key] == null ? 'Sans date' : dateLabel(t[key]),
-                        ),
-                        onTap: () => datePick(key),
-                        trailing: t[key] == null
-                            ? null
-                            : IconButton(
-                                onPressed: () => setState(() {
-                                  t[key] = null;
-                                  dirty = true;
-                                }),
-                                icon: const Icon(Icons.close),
-                              ),
-                      ),
-                    ),
-                    heading('Les tags'),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        ...tags.map(
-                          (tag) => FilterChip(
-                            avatar: Icon(
-                              Icons.circle,
-                              size: 12,
-                              color: Color(
-                                int.parse(
-                                  tag['color'].toString().replaceFirst(
-                                    '#',
-                                    'FF',
-                                  ),
-                                  radix: 16,
-                                ),
-                              ),
-                            ),
-                            label: Text(tag['name']),
-                            selected: strings(t['tagIds']).contains(tag['id']),
-                            onSelected: (v) => setState(() {
-                              final list = strings(t['tagIds']);
-                              v ? list.add(tag['id']) : list.remove(tag['id']);
-                              t['tagIds'] = list;
-                              dirty = true;
-                            }),
-                          ),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 18),
-                          label: const Text('Nouveau tag'),
-                          onPressed: addTag,
-                        ),
-                      ],
-                    ),
-                    ...checklistHeading(),
-                    ...checklistItems().map(
-                      (item) => CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        value: item['done'],
-                        title: Text(itemLabel(item)),
-                        secondary: IconButton(
-                          tooltip: 'Retirer',
-                          icon: const Icon(Icons.close),
-                          onPressed: () => setState(() {
-                            t['checklist'] = maps(t['checklist'])
-                              ..removeWhere((c) => c['id'] == item['id']);
-                            dirty = true;
-                          }),
-                        ),
-                        onChanged: (v) => setState(() {
-                          t['checklist'] = maps(t['checklist'])
-                              .map(
-                                (c) => c['id'] == item['id']
-                                    ? {...c, 'done': v}
-                                    : c,
-                              )
-                              .toList();
-                          dirty = true;
-                        }),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: addCheck,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ajouter une étape'),
-                    ),
-                    if (widget.data['demo'] != true) heading('Images'),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: maps(t['images']).map((image) {
-                        final key = image['id'].toString();
-                        return FutureBuilder<Uint8List>(
-                          future: imageCache.putIfAbsent(
-                            key,
-                            () => api.imageBytes(key),
-                          ),
-                          builder: (c, s) => s.hasData
-                              ? InkWell(
-                                  onTap: () => showDialog<void>(
-                                    context: context,
-                                    builder: (c) => Dialog(
-                                      child: InteractiveViewer(
-                                        child: Image.memory(s.data!),
-                                      ),
-                                    ),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.memory(
-                                      s.data!,
-                                      width: 120,
-                                      height: 100,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                )
-                              : SizedBox(
-                                  width: 120,
-                                  height: 100,
-                                  child: Center(
-                                    child: s.hasError
-                                        ? const Icon(Icons.broken_image)
-                                        : const CircularProgressIndicator(),
-                                  ),
-                                ),
-                        );
-                      }).toList(),
-                    ),
-                    if (widget.data['demo'] != true)
-                      TextButton.icon(
-                        onPressed: saving ? null : upload,
-                        icon: const Icon(Icons.add_photo_alternate_outlined),
-                        label: const Text('Ajouter une image'),
-                      ),
-                  ],
-                ] else ...[
-                  ...summary(),
-                  TextField(
-                    controller: title,
-                    maxLength: 160,
-                    // Titre sur plusieurs lignes, sans retour à la ligne saisi.
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.sentences,
-                    autofocus: t['id'] == null,
-                    style: TextStyle(
-                      fontFamily: tokensOf(context).displayFont,
-                      fontSize: existing ? 28 : 24,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Qu’est-ce qu’on a en tête ?',
-                      counterText: '',
-                      border: existing ? InputBorder.none : null,
-                      enabledBorder: existing ? InputBorder.none : null,
-                      filled: existing ? false : null,
-                      contentPadding: existing ? EdgeInsets.zero : null,
-                    ),
-                  ),
-                  ...actions(),
-                  heading(existing ? 'Notes' : 'L’essentiel'),
-                  TextField(
-                    controller: description,
-                    minLines: 3,
-                    maxLines: 8,
-                    maxLength: 12000,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes et contexte',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...checklistHeading(),
-                  ...checklistItems().map(
-                    (item) => CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      value: item['done'],
-                      title: Text(itemLabel(item)),
-                      secondary: IconButton(
-                        tooltip: 'Retirer',
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(() {
-                          t['checklist'] = maps(t['checklist'])
-                            ..removeWhere((c) => c['id'] == item['id']);
-                          dirty = true;
-                        }),
-                      ),
-                      onChanged: (v) => setState(() {
-                        t['checklist'] = maps(t['checklist'])
-                            .map(
-                              (c) =>
-                                  c['id'] == item['id'] ? {...c, 'done': v} : c,
-                            )
-                            .toList();
-                        dirty = true;
-                      }),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: addCheck,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Ajouter une étape'),
-                  ),
-                  if (widget.data['demo'] != true) heading('Images'),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: maps(t['images']).map((image) {
-                      final key = image['id'].toString();
-                      return FutureBuilder<Uint8List>(
-                        future: imageCache.putIfAbsent(
-                          key,
-                          () => api.imageBytes(key),
-                        ),
-                        builder: (c, s) => s.hasData
-                            ? InkWell(
-                                onTap: () => showDialog<void>(
-                                  context: context,
-                                  builder: (c) => Dialog(
-                                    child: InteractiveViewer(
-                                      child: Image.memory(s.data!),
-                                    ),
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.memory(
-                                    s.data!,
-                                    width: 120,
-                                    height: 100,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              )
-                            : SizedBox(
-                                width: 120,
-                                height: 100,
-                                child: Center(
-                                  child: s.hasError
-                                      ? const Icon(Icons.broken_image)
-                                      : const CircularProgressIndicator(),
-                                ),
-                              ),
-                      );
-                    }).toList(),
-                  ),
-                  if (widget.data['demo'] != true)
-                    TextButton.icon(
-                      onPressed: saving ? null : upload,
-                      icon: const Icon(Icons.add_photo_alternate_outlined),
-                      label: const Text('Ajouter une image'),
-                    ),
-                  heading('On en parle'),
-                  ...maps(t['comments']).map(
-                    (c) => Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${name(c['authorId'])} · ${timeLabel(c['at'])}',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SelectableText(c['text']),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  TextField(
-                    controller: comment,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: 6000,
-                    decoration: const InputDecoration(
-                      hintText: 'Une avancée, une question, une décision…',
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.tonalIcon(
-                      onPressed: saving ? null : postComment,
-                      icon: const Icon(Icons.send_outlined),
-                      label: const Text('Commenter'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text('Tous les réglages'),
-                    subtitle: const Text(
-                      'Avancement, type, priorité, responsables, dates, tags',
-                    ),
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: t['stageId'],
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Avancement',
-                        ),
-                        items: stageItems
-                            .map(
-                              (s) => DropdownMenuItem(
-                                value: s['id'].toString(),
-                                child: Text(
-                                  s['name'].toString(),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          t['stageId'] = v;
-                          dirty = true;
-                        }),
-                      ),
-                      if (t['stageId'] == 'done') ...[
-                        heading('Qui l’a réalisé ?'),
-                        const Text(
-                          'Choix explicite, indépendant des responsables.',
-                        ),
-                        memberChoices('performers'),
-                      ],
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: t['kind'],
-                              decoration: const InputDecoration(
-                                labelText: 'Type',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'obligation',
-                                  child: Text('Obligation'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'wish',
-                                  child: Text('Envie'),
-                                ),
-                              ],
-                              onChanged: (v) => setState(() {
-                                t['kind'] = v;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: t['priority'],
-                              decoration: const InputDecoration(
-                                labelText: 'Priorité',
-                              ),
-                              items: ['low', 'normal', 'high', 'urgent']
-                                  .map(
-                                    (p) => DropdownMenuItem(
-                                      value: p,
-                                      child: Text(priorityName(p)),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) => setState(() {
-                                t['priority'] = v;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-                      heading('Qui s’en occupe ?'),
-                      memberChoices('assignees'),
-                      heading('Quand ?'),
-                      ...['startDate', 'dueDate'].map(
-                        (key) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.calendar_today_outlined),
-                          title: Text(
-                            key == 'startDate'
-                                ? 'À faire à partir du'
-                                : 'Échéance',
-                          ),
-                          subtitle: Text(
-                            t[key] == null ? 'Sans date' : dateLabel(t[key]),
-                          ),
-                          onTap: () => datePick(key),
-                          trailing: t[key] == null
-                              ? null
-                              : IconButton(
-                                  onPressed: () => setState(() {
-                                    t[key] = null;
-                                    dirty = true;
-                                  }),
-                                  icon: const Icon(Icons.close),
-                                ),
-                        ),
-                      ),
-                      heading('Les tags'),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          ...tags.map(
-                            (tag) => FilterChip(
-                              avatar: Icon(
-                                Icons.circle,
-                                size: 12,
-                                color: Color(
-                                  int.parse(
-                                    tag['color'].toString().replaceFirst(
-                                      '#',
-                                      'FF',
-                                    ),
-                                    radix: 16,
-                                  ),
-                                ),
-                              ),
-                              label: Text(tag['name']),
-                              selected: strings(t['tagIds'])
-                                  .contains(tag['id']),
-                              onSelected: (v) => setState(() {
-                                final list = strings(t['tagIds']);
-                                v
-                                    ? list.add(tag['id'])
-                                    : list.remove(tag['id']);
-                                t['tagIds'] = list;
-                                dirty = true;
-                              }),
-                            ),
-                          ),
-                          ActionChip(
-                            avatar: const Icon(Icons.add, size: 18),
-                            label: const Text('Nouveau tag'),
-                            onPressed: addTag,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  heading('Le fil de cette tâche'),
-                  ...maps(t['history']).reversed.map(
-                    (a) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      leading: const Icon(Icons.history, size: 18),
-                      title: Text(activityDetail(a)),
-                      subtitle: Text(
-                        '${name(a['actorId'])} · ${timeLabel(a['at'])}',
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+        body: body,
       ),
     );
   }

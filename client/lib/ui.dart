@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 
 import 'appearance.dart';
 
@@ -83,22 +84,45 @@ class MemberAvatar extends StatelessWidget {
     final (bg, fg) = memberColors(Theme.of(context).colorScheme, index);
     return Tooltip(
       message: name,
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-        child: Text(
-          name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-          style: TextStyle(
-            color: fg,
-            fontSize: size * .45,
-            fontWeight: FontWeight.w700,
+      child: ClipPath(
+        clipper: _AvaClip(),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          color: bg,
+          child: Text(
+            name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+            style: TextStyle(
+              color: fg,
+              fontSize: size * .45,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// Pastille d’avatar « coupée au ciseau » (sketch .ava) — pentagone irrégulier
+/// de la famille Découpes, à la place du cercle Material.
+class _AvaClip extends CustomClipper<Path> {
+  @override
+  Path getClip(Size s) {
+    final w = s.width, h = s.height;
+    return Path()
+      ..moveTo(w * .50, 0)
+      ..lineTo(w * .96, h * .18)
+      ..lineTo(w, h * .62)
+      ..lineTo(w * .72, h)
+      ..lineTo(w * .14, h * .92)
+      ..lineTo(0, h * .38)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_AvaClip old) => false;
 }
 
 /// Emplacement vide en pointillés : tâche sans responsable.
@@ -132,6 +156,706 @@ class _DashedCircle extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedCircle old) => old.color != color;
+}
+
+/// Case « coupée au ciseau » : l’hexagone irrégulier de la famille Découpes.
+/// Enfoncement au toucher (emprunt « Objet ») et retour haptique léger.
+class CutCheck extends StatefulWidget {
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final double size;
+  final String? semanticLabel;
+  const CutCheck({
+    super.key,
+    required this.value,
+    this.onChanged,
+    this.size = 26,
+    this.semanticLabel,
+  });
+  @override
+  State<CutCheck> createState() => _CutCheckState();
+}
+
+class _CutCheckState extends State<CutCheck> {
+  bool pressed = false;
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final enabled = widget.onChanged != null;
+    return Semantics(
+      checked: widget.value,
+      enabled: enabled,
+      label: widget.semanticLabel,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => pressed = true) : null,
+        onTapCancel: () => setState(() => pressed = false),
+        onTap: enabled
+            ? () {
+                setState(() => pressed = false);
+                HapticFeedback.selectionClick();
+                widget.onChanged!(!widget.value);
+              }
+            : null,
+        // Marge interne : zone tactile confortable sans grossir le dessin.
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: AnimatedScale(
+            scale: pressed ? .86 : 1,
+            duration: Duration(
+              milliseconds: MediaQuery.disableAnimationsOf(context) ? 0 : 90,
+            ),
+            child: CustomPaint(
+              size: Size.square(widget.size),
+              painter: _CutCheckPainter(
+                value: widget.value,
+                border: enabled ? c.onSurface : c.outline,
+                fill: c.primary,
+                mark: c.onPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CutCheckPainter extends CustomPainter {
+  final bool value;
+  final Color border, fill, mark;
+  _CutCheckPainter({
+    required this.value,
+    required this.border,
+    required this.fill,
+    required this.mark,
+  });
+
+  // Le « rond coupé au ciseau » : volontairement irrégulier, jamais un cercle.
+  static Path shape(Size s) => Path()
+    ..moveTo(s.width * .50, 0)
+    ..lineTo(s.width * .96, s.height * .18)
+    ..lineTo(s.width, s.height * .62)
+    ..lineTo(s.width * .72, s.height)
+    ..lineTo(s.width * .14, s.height * .92)
+    ..lineTo(0, s.height * .38)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = shape(size);
+    if (value) {
+      canvas.drawPath(path, Paint()..color = fill);
+      final check = Path()
+        ..moveTo(size.width * .26, size.height * .52)
+        ..lineTo(size.width * .44, size.height * .70)
+        ..lineTo(size.width * .76, size.height * .32);
+      canvas.drawPath(
+        check,
+        Paint()
+          ..color = mark
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = size.width * .11
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    } else {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = border
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CutCheckPainter old) =>
+      old.value != value ||
+      old.border != border ||
+      old.fill != fill ||
+      old.mark != mark;
+}
+
+/// Famille de signes « Découpes » : formes pleines, asymétriques, une par usage.
+/// Elles vivent en marge (rayons, sections, états), jamais sous le texte.
+enum FoyerSign {
+  leaf,
+  drop,
+  jar,
+  epi,
+  flake,
+  fish,
+  cup,
+  bubbles,
+  star,
+  house,
+  bag,
+  sun,
+  cal,
+  book,
+}
+
+/// Signe d’un rayon de courses (ids du serveur, repli : cabas).
+FoyerSign aisleSign(String? id) => switch (id) {
+  'produce' => FoyerSign.leaf,
+  'bakery' => FoyerSign.epi,
+  'dairy' => FoyerSign.drop,
+  'meat' => FoyerSign.fish,
+  'savory' => FoyerSign.jar,
+  'sweet' => FoyerSign.star,
+  'drinks' => FoyerSign.cup,
+  'frozen' => FoyerSign.flake,
+  'hygiene' => FoyerSign.bubbles,
+  'cleaning' => FoyerSign.house,
+  _ => FoyerSign.bag,
+};
+
+class SignIcon extends StatelessWidget {
+  final FoyerSign sign;
+  final double size;
+  final Color? color;
+  const SignIcon(this.sign, {super.key, this.size = 18, this.color});
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _SignPainter(
+      sign,
+      color ?? Theme.of(context).colorScheme.secondaryContainer,
+    ),
+  );
+}
+
+class _SignPainter extends CustomPainter {
+  final FoyerSign sign;
+  final Color color;
+  _SignPainter(this.sign, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Dessins dans un repère 24×24, remis à l'échelle.
+    canvas.scale(size.width / 24, size.height / 24);
+    final fill = Paint()..color = color;
+    Path poly(List<(double, double)> pts) {
+      final p = Path()..moveTo(pts.first.$1, pts.first.$2);
+      for (final (x, y) in pts.skip(1)) {
+        p.lineTo(x, y);
+      }
+      return p..close();
+    }
+
+    switch (sign) {
+      case FoyerSign.leaf:
+        canvas.drawPath(
+          Path()
+            ..moveTo(4, 20)
+            ..cubicTo(3, 10, 9, 3, 20, 2)
+            ..cubicTo(21, 10, 18, 18, 10, 20)
+            ..cubicTo(8, 20.5, 5, 20.5, 4, 20)
+            ..close(),
+          fill,
+        );
+      case FoyerSign.drop:
+        canvas.drawPath(
+          Path()
+            ..moveTo(12, 2)
+            ..cubicTo(17, 8, 21, 12, 20, 17)
+            ..cubicTo(19.3, 21, 16, 23, 12, 23)
+            ..cubicTo(8, 23, 4.4, 21, 4, 17)
+            ..cubicTo(3, 12, 8, 8, 12, 2)
+            ..close(),
+          fill,
+        );
+      case FoyerSign.jar:
+        canvas.drawRRect(
+          RRect.fromLTRBR(7, 3, 17, 6.5, const Radius.circular(1.5)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(5.5, 8, 18.5, 22, const Radius.circular(4)),
+          fill,
+        );
+      case FoyerSign.epi:
+        canvas.drawPath(
+          poly([
+            (12, 2),
+            (17, 8),
+            (13, 8),
+            (13, 11),
+            (18, 11),
+            (22, 17),
+            (14, 17),
+            (14, 22),
+            (10, 22),
+            (10, 17),
+            (3, 17),
+            (7, 11),
+            (11, 11),
+            (11, 8),
+            (8, 8),
+          ]),
+          fill,
+        );
+      case FoyerSign.flake:
+        canvas.drawPath(
+          poly([
+            (12, 1),
+            (14, 7),
+            (20, 4),
+            (17, 10),
+            (23, 12),
+            (17, 14),
+            (20, 20),
+            (14, 17),
+            (12, 23),
+            (10, 17),
+            (4, 20),
+            (7, 14),
+            (1, 12),
+            (7, 10),
+            (4, 4),
+            (10, 7),
+          ]),
+          fill,
+        );
+      case FoyerSign.fish:
+        canvas.drawOval(
+          Rect.fromCenter(center: const Offset(10, 12), width: 15, height: 10),
+          fill,
+        );
+        canvas.drawPath(poly([(16, 12), (22.5, 6.5), (22.5, 17.5)]), fill);
+      case FoyerSign.cup:
+        canvas.drawPath(
+          poly([(6, 4), (18, 4), (16.5, 21.5), (7.5, 21.5)]),
+          fill,
+        );
+      case FoyerSign.bubbles:
+        canvas.drawCircle(const Offset(9, 9), 6, fill);
+        canvas.drawCircle(const Offset(17, 14), 4.2, fill);
+        canvas.drawCircle(const Offset(10.5, 19), 2.8, fill);
+      case FoyerSign.star:
+        canvas.drawPath(
+          poly([
+            (12, 2),
+            (14.6, 8.8),
+            (22, 9),
+            (16.6, 13.8),
+            (18.5, 21),
+            (12, 17.2),
+            (5.5, 21),
+            (7.4, 13.8),
+            (2, 9),
+            (9.4, 8.8),
+          ]),
+          fill,
+        );
+      case FoyerSign.house:
+        canvas.drawPath(
+          poly([
+            (3, 11),
+            (12, 3),
+            (21, 11),
+            (18, 11),
+            (18, 21),
+            (14, 21),
+            (14, 15),
+            (10, 15),
+            (10, 21),
+            (6, 21),
+            (6, 11),
+          ]),
+          fill,
+        );
+      case FoyerSign.bag:
+        canvas.drawPath(
+          poly([(5, 8), (19, 8), (17.5, 21.5), (6.5, 21.5)]),
+          fill,
+        );
+        canvas.drawPath(
+          Path()
+            ..moveTo(9, 8)
+            ..cubicTo(9, 3.5, 15, 3.5, 15, 8),
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+      case FoyerSign.sun:
+        canvas.drawCircle(const Offset(12, 12), 5.2, fill);
+        for (var i = 0; i < 8; i++) {
+          canvas.save();
+          canvas.translate(12, 12);
+          canvas.rotate(i * 0.7854 + (i.isEven ? 0 : .12)); // rayons inégaux
+          canvas.drawRRect(
+            RRect.fromLTRBR(-1.1, -11, 1.1, -7.2, const Radius.circular(1)),
+            fill,
+          );
+          canvas.restore();
+        }
+      case FoyerSign.cal:
+        canvas.drawRRect(
+          RRect.fromLTRBR(4, 5, 20, 21, const Radius.circular(2.5)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(7, 2, 9.2, 7, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(14.8, 2, 17, 7, const Radius.circular(1)),
+          fill,
+        );
+      case FoyerSign.book:
+        canvas.drawPath(
+          Path()
+            ..moveTo(12, 5)
+            ..cubicTo(9, 3.5, 6, 3.5, 4, 4.5)
+            ..lineTo(4, 19)
+            ..cubicTo(7, 18, 10, 18.5, 12, 20)
+            ..cubicTo(14, 18.5, 17, 18, 20, 19)
+            ..lineTo(20, 4.5)
+            ..cubicTo(18, 3.5, 15, 3.5, 12, 5)
+            ..close(),
+          fill,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SignPainter old) =>
+      old.sign != sign || old.color != color;
+}
+
+// ======================================================================
+// Kit « Découpes » : formes portées 1:1 depuis le CSS du sketch (étude 03).
+// Couleurs via le thème courant (le modèle couleur viendra plus tard).
+// ======================================================================
+
+/// Onglet biseauté (`.tabs .tab`) : bord encre 1.5 px, actif = plein principal.
+class CutTab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const CutTab({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.fromLTRB(14, 8, 16, 9),
+          decoration: ShapeDecoration(
+            color: selected ? c.primary : Colors.transparent,
+            shape: cutShape(
+              cutSmall,
+              side: selected
+                  ? BorderSide.none
+                  : BorderSide(color: c.onSurface, width: 1.5),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              color: selected ? c.onPrimary : c.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Puce biseautée (`.habit.chip`) : bord fin, un toucher. Coche optionnelle à gauche.
+class CutChip extends StatelessWidget {
+  final String label;
+  final String? trailing;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  const CutChip({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.trailing,
+    this.selected = false,
+    this.onLongPress,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: label,
+      selected: selected,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(11, 7, 11, 8),
+          decoration: ShapeDecoration(
+            color: selected
+                ? c.primary.withValues(alpha: .13)
+                : Colors.transparent,
+            shape: cutShape(
+              cutSmall,
+              side: BorderSide(color: c.outlineVariant, width: 1.5),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (selected) ...[
+                Icon(Icons.check, size: 16, color: c.primary),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: const TextStyle(
+                  fontFamily: 'Manrope',
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 7),
+                Text(
+                  trailing!,
+                  style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bouton plat biseauté (`.cta` / `.cta.quiet`). `primary` = plein principal.
+class CutButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool primary;
+  const CutButton({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onTap,
+    this.primary = true,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final fg = primary ? c.onPrimary : c.onSurface;
+    return Semantics(
+      button: true,
+      label: label,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Opacity(
+          opacity: onTap == null ? .45 : 1,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
+            decoration: ShapeDecoration(
+              color: primary ? c.primary : Colors.transparent,
+              shape: cutShape(
+                cutSmall,
+                side: primary
+                    ? BorderSide.none
+                    : BorderSide(color: c.onSurface, width: 2),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: fg,
+                  ),
+                ),
+                if (icon != null) ...[
+                  const SizedBox(width: 8),
+                  Icon(icon, size: 18, color: fg),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Champ carré bordé encre + bouton d'envoi accolé (`.entry`).
+class EntryRow extends StatelessWidget {
+  final TextEditingController? controller;
+  final String hint;
+  final IconData submitIcon;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onSubmit;
+  const EntryRow({
+    super.key,
+    this.controller,
+    required this.hint,
+    this.submitIcon = Icons.add,
+    this.focusNode,
+    this.onSubmitted,
+    this.onChanged,
+    this.onSubmit,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.onSurface, width: 2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                hintText: hint,
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onSubmit ?? () => onSubmitted?.call(controller?.text ?? ''),
+            child: Container(
+              width: 50,
+              height: 46,
+              alignment: Alignment.center,
+              color: c.onSurface,
+              child: Icon(submitIcon, color: c.surface, size: 22),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Cartouche de date biseauté (`.stamp`) : « MER / 07 / OCT ».
+class DateStamp extends StatelessWidget {
+  final String top, big, bottom;
+  const DateStamp({
+    super.key,
+    required this.top,
+    required this.big,
+    required this.bottom,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final label = TextStyle(
+      fontFamily: 'Manrope',
+      fontWeight: FontWeight.w700,
+      fontSize: 11,
+      letterSpacing: .8,
+      height: 1.1,
+      color: c.onSurface,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(11, 7, 14, 8),
+      decoration: ShapeDecoration(
+        color: c.secondaryContainer.withValues(alpha: .35),
+        shape: cutShape(cutSmall),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(top.toUpperCase(), style: label),
+          Text(
+            big,
+            style: label.copyWith(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          Text(bottom.toUpperCase(), style: label),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lien souligné discret (`.linkish`).
+class LinkText extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool strong;
+  const LinkText({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.strong = false,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: label,
+      // onTap sur le Semantics : les actions sémantiques (tests, lecteur d'écran)
+      // déclenchent le callback — le GestureDetector seul n'y répond pas.
+      onTap: onTap,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: onTap == null
+                ? c.onSurfaceVariant.withValues(alpha: .4)
+                : c.onSurfaceVariant,
+            decoration: TextDecoration.underline,
+            decorationColor: c.onSurfaceVariant,
+            fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 enum TaskBadge { late, urgent, high }
@@ -216,7 +940,13 @@ class TaskView {
 class TaskTile extends StatelessWidget {
   final TaskView task;
   final VoidCallback onTap;
-  const TaskTile({super.key, required this.task, required this.onTap});
+  final bool selected;
+  const TaskTile({
+    super.key,
+    required this.task,
+    required this.onTap,
+    this.selected = false,
+  });
 
   Widget people(double size) => task.people.isEmpty
       ? UnassignedAvatar(size: size)
@@ -265,126 +995,107 @@ class TaskTile extends StatelessWidget {
     final muted = TextStyle(fontSize: 13, color: c.onSurfaceVariant);
     final title = TextStyle(
       fontFamily: t.displayFont,
-      fontSize: t.rows ? 16 : 18,
-      fontWeight: FontWeight.w700,
-      height: 1.25,
+      fontSize: 16.5,
+      fontWeight: FontWeight.w800,
+      height: 1.2,
       color: c.onSurface,
     );
-    final extras = [
+    // Rangée plate « Découpes » : signe du type en marge (couleur = état),
+    // titre, puis ligne personne · méta. Filet 1 px ; sélection = teinte biseautée.
+    final late = task.badge == TaskBadge.late;
+    final mark = switch (task.badge) {
+      TaskBadge.late || TaskBadge.urgent => c.error,
+      TaskBadge.high => c.secondaryContainer,
+      null => c.secondaryContainer,
+    };
+    final person = task.people.isEmpty
+        ? 'Personne'
+        : task.people.map((p) => p.$1).join(' + ');
+    final metaExtras = [
+      task.meta,
       if (task.total > 0) '${task.done}/${task.total}',
       if (task.comments > 0) plural(task.comments, 'commentaire'),
-    ];
-    if (t.rows) {
-      final ring = switch (task.badge) {
-        TaskBadge.late || TaskBadge.urgent => c.error,
-        TaskBadge.high => c.secondaryContainer,
-        null => c.outline,
-      };
-      return InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 52),
-          padding: EdgeInsets.symmetric(vertical: t.compact ? 8 : 12),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.outlineVariant)),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: ring, width: 2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(task.title, style: title),
-                    Text(
-                      [
-                        if (task.wish) 'Envie',
-                        if (task.repeat) '↻',
-                        task.meta,
-                        ...extras,
-                      ].where((s) => s.isNotEmpty).join(' · '),
-                      style: muted,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              people(26),
-            ],
-          ),
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: EdgeInsets.fromLTRB(
+          selected ? 10 : 2,
+          t.compact ? 10 : 13,
+          10,
+          t.compact ? 10 : 13,
         ),
-      );
-    }
-    return Card(
-      margin: EdgeInsets.only(bottom: t.compact ? 8 : 12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(t.radius),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.all(t.compact ? 12 : 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (task.badge != null) ...[
-                    PriorityBadge(task.badge!),
-                    const SizedBox(width: 8),
-                  ],
-                  if (task.wish) ...[
-                    const WishBadge(),
-                    const SizedBox(width: 8),
-                  ],
-                  if (task.repeat) ...[
-                    Icon(Icons.repeat, size: 16, color: c.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Text(
-                      task.meta,
-                      style: muted,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  people(28),
-                ],
+        decoration: selected
+            ? ShapeDecoration(
+                color: c.primary.withValues(alpha: .13),
+                shape: cutShape(cutSmall),
+              )
+            : const BoxDecoration(),
+        foregroundDecoration: selected
+            ? null
+            : BoxDecoration(
+                border: Border(bottom: BorderSide(color: c.outlineVariant)),
               ),
-              SizedBox(height: t.compact ? 6 : 9),
-              Text(task.title, style: title),
-              if (task.total > 0 || task.comments > 0) ...[
-                SizedBox(height: t.compact ? 6 : 10),
-                Row(
-                  children: [
-                    if (task.total > 0) ...[
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: task.done / task.total,
-                            minHeight: 6,
-                            color: c.secondaryContainer,
-                            backgroundColor: c.outlineVariant,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: SignIcon(
+                task.wish ? FoyerSign.star : FoyerSign.house,
+                size: 18,
+                color: mark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(task.title, style: title),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      if (task.people.isEmpty)
+                        const UnassignedAvatar(size: 18)
+                      else
+                        MemberAvatar(
+                          name: task.people.first.$1,
+                          index: task.people.first.$2,
+                          size: 18,
+                        ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: person),
+                              if (task.wish) const TextSpan(text: ' · Envie'),
+                              if (task.repeat) const TextSpan(text: ' · ↻'),
+                              if (metaExtras.isNotEmpty)
+                                TextSpan(
+                                  text: ' · $metaExtras',
+                                  style: late
+                                      ? TextStyle(
+                                          color: c.error,
+                                          fontWeight: FontWeight.w700,
+                                        )
+                                      : null,
+                                ),
+                            ],
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: muted,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                    ] else
-                      const Spacer(),
-                    Text(extras.join(' · '), style: muted),
-                  ],
-                ),
-              ],
-            ],
-          ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -392,36 +1103,48 @@ class TaskTile extends StatelessWidget {
 }
 
 /// En-tête compact : date ou sous-titre, titre de la vue, recherche et profil.
+/// En-tête « carnet » : kicker (petites capitales) + grand titre à point, et à
+/// droite le cartouche de date + « Liste partagée ». Les utilitaires (recherche,
+/// notifications, profil) vivent dans le rail (ouvert) ou dans [trailing] (fermé).
 class ScreenHeader extends StatelessWidget {
   final String title, subtitle;
-  final Widget profile;
-  // Action supplémentaire entre la recherche et le profil (masquée si null).
-  final Widget? action;
-  // Sans recherche (null), le bouton est masqué.
-  final VoidCallback? onSearch;
-  final bool searching;
+  final Widget? stamp;
+  final String? live;
+  // Utilitaires (recherche, notifications, profil) : affichés ici en format
+  // fermé ; vides en ouvert (ils vivent dans le rail).
+  final List<Widget> utilities;
   const ScreenHeader({
     super.key,
     required this.title,
     required this.subtitle,
-    required this.profile,
-    this.action,
-    this.onSearch,
-    this.searching = false,
+    this.stamp,
+    this.live,
+    this.utilities = const [],
   });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, t.compact ? 12 : 18, 12, 10),
+      padding: EdgeInsets.fromLTRB(20, t.compact ? 12 : 18, 20, 10),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(subtitle, style: TextStyle(color: c.onSurfaceVariant)),
+                Text(
+                  subtitle.toUpperCase(),
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.6,
+                    color: c.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
                 // Le point est décoratif : lu « Aujourd’hui », pas « Aujourd’hui point ».
                 Semantics(
                   header: true,
@@ -433,13 +1156,14 @@ class ScreenHeader extends StatelessWidget {
                       children: [
                         TextSpan(
                           text: '.',
-                          style: TextStyle(color: c.primary),
+                          style: TextStyle(color: c.secondaryContainer),
                         ),
                       ],
                     ),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: -.5,
+                      height: 1.02,
                       color: c.onSurface,
                     ),
                   ),
@@ -447,24 +1171,236 @@ class ScreenHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (onSearch != null)
-            IconButton.filled(
-              tooltip: searching ? 'Fermer la recherche' : 'Rechercher',
-              style: IconButton.styleFrom(
-                backgroundColor: Theme.of(context).cardTheme.color,
-                foregroundColor: c.onSurface,
-                side: BorderSide(color: c.outlineVariant),
-              ),
-              onPressed: onSearch,
-              icon: Icon(searching ? Icons.close : Icons.search),
+          if (stamp != null || utilities.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (utilities.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: utilities,
+                    ),
+                  ),
+                ?stamp,
+                if (stamp != null && live != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: c.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        live!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-          if (action != null) ...[const SizedBox(width: 6), action!],
-          const SizedBox(width: 6),
-          profile,
+          ],
         ],
       ),
     );
   }
+}
+
+/// Rail latéral « Découpes » (écran ouvert) : bande teintée, wordmark en haut,
+/// destinations signées avec tampon biseauté sur l'active, utilitaires puis
+/// avatars « À deux » en bas.
+class FoyerRail extends StatelessWidget {
+  final int index;
+  final List<(FoyerSign, String)> items;
+  final ValueChanged<int> onSelected;
+  final List<Map<String, dynamic>> members;
+  final int meIndex;
+  final VoidCallback onProfile;
+  final List<Widget> utilities;
+  const FoyerRail({
+    super.key,
+    required this.index,
+    required this.items,
+    required this.onSelected,
+    required this.members,
+    required this.meIndex,
+    required this.onProfile,
+    this.utilities = const [],
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final band = Color.alphaBlend(
+      c.secondaryContainer.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? .30 : .48,
+      ),
+      Theme.of(context).scaffoldBackgroundColor,
+    );
+    return Container(
+      width: 88,
+      color: band,
+      child: SafeArea(
+        right: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            // Wordmark « foyer✳ ».
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'foyer',
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    color: c.onSurface,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                SignIcon(FoyerSign.star, size: 12, color: c.primary),
+              ],
+            ),
+            const SizedBox(height: 14),
+            for (final (i, (sign, label)) in items.indexed)
+              Semantics(
+                selected: i == index,
+                button: true,
+                label: label,
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: () => onSelected(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: 46,
+                          height: 34,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (i == index)
+                                CustomPaint(
+                                  size: const Size(44, 32),
+                                  painter: _StampBg(c.primary),
+                                ),
+                              SignIcon(
+                                sign,
+                                size: 20,
+                                color: i == index
+                                    ? c.onPrimary
+                                    : c.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
+                            fontSize: 11,
+                            fontWeight: i == index
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                            color: i == index
+                                ? c.onSurface
+                                : c.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            const Spacer(),
+            if (utilities.isNotEmpty) ...[
+              ...utilities.map(
+                (u) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: u,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+            // Avatars « À deux » (toucher = réglages).
+            Semantics(
+              button: true,
+              label: 'Réglages',
+              child: GestureDetector(
+                onTap: onProfile,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12, top: 2),
+                  child: Column(
+                    children: [
+                      for (final (i, m) in members.indexed)
+                        Padding(
+                          padding: EdgeInsets.only(top: i == 0 ? 0 : 4),
+                          child: MemberAvatar(
+                            name: m['name'].toString(),
+                            index: i,
+                            size: 26,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'À deux.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tampon biseauté irrégulier derrière le signe actif (rail et bandeau).
+class _StampBg extends CustomPainter {
+  final Color color;
+  _StampBg(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * .48, 0)
+        ..lineTo(w, h * .14)
+        ..lineTo(w * .92, h * .78)
+        ..lineTo(w * .58, h)
+        ..lineTo(w * .08, h * .88)
+        ..lineTo(0, h * .26)
+        ..close(),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_StampBg old) => old.color != color;
 }
 
 /// Pastille de filtre (pleine quand active).
@@ -490,11 +1426,13 @@ class FilterPill extends StatelessWidget {
         button: true,
         child: Material(
           color: selected ? c.onSurface : Colors.transparent,
-          shape: StadiumBorder(
+          // Pastille « Découpes » : un petit coin coupé plutôt qu'une pilule.
+          shape: cutShape(
+            9,
             side: BorderSide(color: selected ? c.onSurface : c.outlineVariant),
           ),
           child: InkWell(
-            customBorder: const StadiumBorder(),
+            customBorder: cutShape(9),
             onTap: onTap,
             child: Container(
               constraints: const BoxConstraints(minHeight: 40),
@@ -541,154 +1479,281 @@ class KeyboardBack extends StatelessWidget {
   );
 }
 
-/// Barre de navigation flottante : l’onglet actif affiche son nom.
+/// Bandeau de navigation « Découpes » : une bande de papier au coin coupé,
+/// quatre destinations signées ; l’active porte un tampon dans le principal.
 class FloatingNav extends StatelessWidget {
   final int index;
-  final List<(IconData, String)> items;
+  final List<(FoyerSign, String)> items;
   final ValueChanged<int> onSelected;
+  final List<Map<String, dynamic>> members;
+  final VoidCallback? onProfile;
   const FloatingNav({
     super.key,
     required this.index,
     required this.items,
     required this.onSelected,
+    this.members = const [],
+    this.onProfile,
   });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: Material(
-          color: Theme.of(context).cardTheme.color,
-          elevation: 2,
-          shadowColor: Colors.black26,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(t.radius + 4),
-            side: BorderSide(color: c.outlineVariant),
-          ),
+    // Bandeau « papier déchiré » : bord supérieur irrégulier (sketch .navband).
+    return ClipPath(
+      clipper: _TornTop(),
+      child: Material(
+        color: Theme.of(context).cardTheme.color,
+        elevation: 6,
+        shadowColor: Colors.black26,
+        child: SafeArea(
+          top: false,
           child: SizedBox(
-            height: 64,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final layout = navLayout(
-                    box.maxWidth,
-                    items.length,
-                    measureLabel(context, items[index].$2),
-                  );
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      for (final (i, (icon, label)) in items.indexed)
-                        Semantics(
-                          selected: i == index,
-                          button: true,
-                          label: label,
-                          excludeSemantics: true,
-                          child: Tooltip(
-                            message: label,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(16),
-                              onTap: () => onSelected(i),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                height: 46,
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: i == index
-                                      ? layout.selectedPadding
-                                      : layout.padding,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: i == index
-                                      ? c.primary
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+            height: 72,
+            child: Row(
+              children: [
+                const SizedBox(width: 4),
+                for (final (i, (sign, label)) in items.indexed)
+                  Expanded(
+                    child: Semantics(
+                      selected: i == index,
+                      button: true,
+                      label: label,
+                      excludeSemantics: true,
+                      child: Tooltip(
+                        message: label,
+                        child: InkWell(
+                          onTap: () => onSelected(i),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 46,
+                                height: 32,
+                                child: Stack(
+                                  alignment: Alignment.center,
                                   children: [
-                                    Icon(
-                                      icon,
-                                      size: 22,
+                                    if (i == index)
+                                      CustomPaint(
+                                        size: const Size(44, 32),
+                                        painter: _StampPainter(c.primary),
+                                      ),
+                                    SignIcon(
+                                      sign,
+                                      size: 19,
                                       color: i == index
                                           ? c.onPrimary
                                           : c.onSurfaceVariant,
                                     ),
-                                    if (i == index && layout.label) ...[
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        label,
-                                        style: TextStyle(
-                                          color: c.onPrimary,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
                                   ],
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 2),
+                              Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: t.displayFont,
+                                  fontWeight: i == index
+                                      ? FontWeight.w800
+                                      : FontWeight.w700,
+                                  color: i == index
+                                      ? c.onSurface
+                                      : c.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                    ],
-                  );
-                },
-              ),
+                      ),
+                    ),
+                  ),
+                // Avatars « À deux » à droite (toucher = réglages).
+                if (members.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  Semantics(
+                    button: true,
+                    label: 'Réglages',
+                    child: GestureDetector(
+                      onTap: onProfile,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 6, right: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final (i, m) in members.indexed)
+                              Padding(
+                                padding: EdgeInsets.only(left: i == 0 ? 0 : 3),
+                                child: MemberAvatar(
+                                  name: m['name'].toString(),
+                                  index: i,
+                                  size: 24,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  static double measureLabel(BuildContext context, String label) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: DefaultTextStyle.of(context).style
-            .copyWith(fontWeight: FontWeight.w700),
+/// Bord supérieur « papier déchiré » du bandeau de navigation (sketch .navband).
+class _TornTop extends CustomClipper<Path> {
+  @override
+  Path getClip(Size s) {
+    final w = s.width, h = s.height;
+    return Path()
+      ..moveTo(0, 14)
+      ..lineTo(w * .035, 4)
+      ..lineTo(w * .30, 9)
+      ..lineTo(w * .52, 0)
+      ..lineTo(w * .76, 8)
+      ..lineTo(w, 3)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_TornTop old) => false;
+}
+
+/// Tampon irrégulier derrière le signe actif — même famille que les découpes.
+class _StampPainter extends CustomPainter {
+  final Color color;
+  _StampPainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(w * .48, 0)
+        ..lineTo(w, h * .14)
+        ..lineTo(w * .92, h * .78)
+        ..lineTo(w * .58, h)
+        ..lineTo(w * .08, h * .88)
+        ..lineTo(0, h * .26)
+        ..close(),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_StampPainter old) => old.color != color;
+}
+
+/// État vide « Découpes » : une petite composition de signes superposés en
+/// marge, un titre adulte et direct, une phrase d’explication. Jamais de
+/// mascotte ni de félicitation ; les signes vivent au-dessus du texte, pas
+/// dessous.
+class EmptyState extends StatelessWidget {
+  final String title, message;
+  final List<FoyerSign> signs;
+  const EmptyState({
+    super.key,
+    required this.title,
+    required this.message,
+    this.signs = const [FoyerSign.star, FoyerSign.leaf, FoyerSign.house],
+  });
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = tokensOf(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(28, 40, 28, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 150,
+              height: 104,
+              child: CustomPaint(
+                painter: _ComposedSigns(signs, c.secondaryContainer, c.primary),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: t.displayFont,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: c.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
-      textDirection: TextDirection.ltr,
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    return painter.width;
+    );
   }
 }
 
-/// Place de la barre : marges réduites si besoin, puis onglet actif sans son nom
-/// (grande police ou petit écran) plutôt que de rogner le dernier onglet.
-({double padding, double selectedPadding, bool label}) navLayout(
-  double width,
-  int count,
-  double labelWidth,
-) {
-  const icon = 22.0, gap = 8.0;
-  for (final (padding, selected) in [(12.0, 14.0), (8.0, 10.0)]) {
-    final needed =
-        (count - 1) * (icon + 2 * padding) +
-        icon +
-        gap +
-        labelWidth +
-        2 * selected;
-    if (needed <= width) {
-      return (padding: padding, selectedPadding: selected, label: true);
+class _ComposedSigns extends CustomPainter {
+  final List<FoyerSign> signs;
+  final Color a, b;
+  _ComposedSigns(this.signs, this.a, this.b);
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Trois signes de tailles et teintes différentes, posés en biais —
+    // comme des découpes de papier éparpillées, pas une grille.
+    final spots = [
+      (Offset(size.width * .18, size.height * .30), 58.0, -.18, a),
+      (Offset(size.width * .60, size.height * .12), 44.0, .12, b),
+      (Offset(size.width * .66, size.height * .56), 50.0, .22, a),
+    ];
+    for (final (i, (center, s, angle, color)) in spots.indexed) {
+      if (i >= signs.length) break;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(angle);
+      canvas.translate(-s / 2, -s / 2);
+      final painter = _SignPainter(
+        signs[i],
+        color.withValues(alpha: i == 1 ? .9 : .5),
+      );
+      painter.paint(canvas, Size.square(s));
+      canvas.restore();
     }
   }
-  final padding = ((width / count) - icon) / 2;
-  final p = padding.clamp(4.0, 12.0);
-  return (padding: p, selectedPadding: p, label: false);
+
+  @override
+  bool shouldRepaint(_ComposedSigns old) =>
+      old.a != a || old.b != b || old.signs != signs;
 }
 
-/// Titre de section d’une liste (« EN RETARD 1 »).
+/// Titre de section d’une liste (« EN RETARD 1 »), avec un signe Découpes
+/// facultatif en marge (rayons de courses).
 class SectionLabel extends StatelessWidget {
   final String label;
   final int count;
   final Color? color;
-  const SectionLabel(this.label, this.count, {super.key, this.color});
+  final FoyerSign? sign;
+  const SectionLabel(
+    this.label,
+    this.count, {
+    super.key,
+    this.color,
+    this.sign,
+  });
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -698,6 +1763,10 @@ class SectionLabel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(0, 14, 0, 8),
         child: Row(
           children: [
+            if (sign != null) ...[
+              SignIcon(sign!, size: 17),
+              const SizedBox(width: 7),
+            ],
             Text(
               label.toUpperCase(),
               style: TextStyle(
@@ -757,15 +1826,15 @@ class SummaryTiles extends StatelessWidget {
         excludeSemantics: true,
         child: Material(
           color: color ?? Theme.of(context).cardTheme.color,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(t.radius - 2),
+          shape: cutShape(
+            t.cut,
             side: BorderSide(
               color: selected ? c.error : (color ?? c.outlineVariant),
               width: selected ? 2 : 1,
             ),
           ),
           child: InkWell(
-            borderRadius: BorderRadius.circular(t.radius - 2),
+            customBorder: cutShape(t.cut),
             onTap: onTap,
             child: Padding(
               padding: EdgeInsets.all(t.compact ? 10 : 14),
@@ -882,8 +1951,8 @@ class DayStrip extends StatelessWidget {
                   color: same(day, selected)
                       ? c.primary
                       : Theme.of(context).cardTheme.color,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(t.radius - 4),
+                  shape: cutShape(
+                    10,
                     side: BorderSide(
                       color: same(day, today) && !same(day, selected)
                           ? c.primary
@@ -891,7 +1960,7 @@ class DayStrip extends StatelessWidget {
                     ),
                   ),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(t.radius - 4),
+                    customBorder: cutShape(10),
                     onTap: () => onSelect(same(day, selected) ? null : day),
                     child: SizedBox(
                       height: 64,

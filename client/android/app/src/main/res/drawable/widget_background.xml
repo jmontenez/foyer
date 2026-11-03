@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/widget_bg" />
-    <corners android:radius="24dp" />
-</shape>
+<!-- Fond du widget : coin supérieur droit coupé (signature « Découpes »), jamais arrondi.
+     La teinte de repli (papier) est remplacée au runtime par la palette (Android 12+). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp"
+    android:viewportWidth="96" android:viewportHeight="96">
+    <path android:fillColor="@color/widget_bg"
+        android:pathData="M0,0 L79,0 L96,12 L96,96 L0,96 Z" />
+</vector>

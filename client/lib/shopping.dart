@@ -1,9 +1,9 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
+import 'appearance.dart';
 import 'ui.dart';
 
 List<Map<String, dynamic>> _maps(dynamic v) =>
@@ -871,7 +871,11 @@ class _IngredientsPageState extends State<IngredientsPage> {
           ),
           for (final a in widget.aisles)
             if (of(a['id']).isNotEmpty) ...[
-              SectionLabel(a['name'].toString(), of(a['id']).length),
+              SectionLabel(
+                a['name'].toString(),
+                of(a['id']).length,
+                sign: aisleSign(a['id']?.toString()),
+              ),
               for (final i in of(a['id']))
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -925,6 +929,10 @@ class _ShoppingViewState extends State<ShoppingView> {
   final focus = FocusNode();
   String? selectedId;
   bool busy = false;
+
+  // Présentation « Préparer » / « En magasin » : un état d'affichage local à
+  // l'appareil (jamais envoyé au serveur), retenu pour la session de l'app.
+  static String mode = 'prep';
 
   @override
   void initState() {
@@ -1076,6 +1084,45 @@ class _ShoppingViewState extends State<ShoppingView> {
     });
   }
 
+  // Ajout direct d'un habituel : quantité et rayon mémorisés, zéro feuille.
+  Future<void> directAdd(
+    Map<String, dynamic> list,
+    Map<String, dynamic> ingredient,
+  ) async {
+    final name = ingredient['name'].toString();
+    final qty = (ingredient['lastQty'] ?? '').toString();
+    HapticFeedback.selectionClick();
+    await run(
+      () => widget.api.call('POST', '/api/v1/shopping/items', {
+        'list': list['id'],
+        'name': name,
+        'qty': qty.isEmpty ? null : qty,
+        'aisle': ingredient['aisle'],
+      }),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          qty.isEmpty ? '« $name » ajouté.' : '« $name · $qty » ajouté.',
+        ),
+        duration: const Duration(seconds: 5),
+        persist: false,
+        action: SnackBarAction(
+          label: 'Modifier',
+          // La liste est relue au moment du toucher : celle capturée avant le
+          // rafraîchissement ne contient pas encore l'article ajouté.
+          onPressed: () => pick(
+            _maps(widget.data['shopping']['lists'])
+                .firstWhere((l) => l['id'] == list['id'], orElse: () => list),
+            name,
+            ingredient: ingredient,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> toggle(
     Map<String, dynamic> list,
     Map<String, dynamic> item,
@@ -1182,6 +1229,8 @@ class _ShoppingViewState extends State<ShoppingView> {
         .where((t) => t['id'] == list['id'])
         .firstOrNull;
     if (ticket == null) return;
+    // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
+    HapticFeedback.mediumImpact();
     final me = widget.data['me']?['id']?.toString();
     final assignees = (ticket['assignees'] as List? ?? []).cast<String>();
     final performers = await askPerformers(
@@ -1277,18 +1326,15 @@ class _ShoppingViewState extends State<ShoppingView> {
 
     Widget suggestion(Map<String, dynamic> ingredient) {
       final there = inList[ingredientKey(ingredient['name'])];
-      return GestureDetector(
+      // Puce « Découpes ». Habituel absent de la liste : un toucher l'ajoute
+      // avec sa quantité mémorisée ; déjà présent : la feuille s'ouvre.
+      return CutChip(
+        label: there == null ? ingredient['name'].toString() : itemLabel(there),
+        selected: there != null,
         onLongPress: () => editSuggestion(ingredient),
-        child: FilterChip(
-          selected: there != null,
-          showCheckmark: true,
-          label: Text(
-            there == null ? ingredient['name'].toString() : itemLabel(there),
-          ),
-          tooltip: there == null ? null : 'Déjà dans la liste',
-          onSelected: (_) =>
-              pick(list, ingredient['name'].toString(), ingredient: ingredient),
-        ),
+        onTap: () => there == null
+            ? directAdd(list, ingredient)
+            : pick(list, ingredient['name'].toString(), ingredient: ingredient),
       );
     }
 
@@ -1325,29 +1371,66 @@ class _ShoppingViewState extends State<ShoppingView> {
           child: Icon(Icons.delete_outline, color: c.onErrorContainer),
         ),
         onDismissed: (_) => remove(list, item),
-        child: CheckboxListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          controlAffinity: ListTileControlAffinity.leading,
-          value: item['done'] == true,
-          onChanged: (_) => toggle(list, item),
-          title: Text(
-            item['text'].toString(),
-            style: item['done'] == true
-                ? TextStyle(
-                    decoration: TextDecoration.lineThrough,
-                    color: c.onSurfaceVariant,
-                  )
-                : null,
+        // Rangée plate « Découpes » : tick ciseau + (vignette) + nom + chip qty,
+        // filet 1 px. Le toucher sur le nom coche ; la case porte son haptique.
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.outlineVariant)),
           ),
-          secondary: Row(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              if (photoId != null)
+              CutCheck(
+                value: item['done'] == true,
+                onChanged: (_) => toggle(list, item),
+                semanticLabel: item['text'].toString(),
+              ),
+              if (photoId != null) ...[
                 IngredientPhoto(api: widget.api, id: photoId),
-              TextButton(
-                onPressed: () => pick(list, item['text'].toString()),
-                child: Text(
-                  (item['qty'] ?? '').toString().isEmpty ? 'Qté' : item['qty'],
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    toggle(list, item);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      item['text'].toString(),
+                      style: item['done'] == true
+                          ? TextStyle(
+                              decoration: TextDecoration.lineThrough,
+                              color: c.onSurfaceVariant,
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              // Chip de quantité « Découpes » : un toucher ouvre la feuille.
+              GestureDetector(
+                onTap: () => pick(list, item['text'].toString()),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: ShapeDecoration(
+                    color: c.primary.withValues(alpha: .13),
+                    shape: cutShape(cutSmall),
+                  ),
+                  child: Text(
+                    (item['qty'] ?? '').toString().isEmpty
+                        ? 'Qté'
+                        : item['qty'].toString(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: tokensOf(context).displayFont,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1356,181 +1439,294 @@ class _ShoppingViewState extends State<ShoppingView> {
       );
     }
 
+    final prepTools = <Widget>[
+      // Titre de programmation au-dessus des actions : tient aussi bien en
+      // colonne étroite (volet) qu'en pleine largeur (écran fermé).
+      Row(
+        children: [
+          Icon(
+            draft ? Icons.edit_calendar_outlined : Icons.event_available,
+            color: draft ? c.onSurfaceVariant : c.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              draft
+                  ? 'Pas encore programmées'
+                  : 'Prévues ${listLabel(list, today).toLowerCase()}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Plus d’options',
+            onSelected: (v) => switch (v) {
+              'import' => importList(list),
+              'aisles' => reorderAisles(),
+              'ingredients' => ingredientsPage(),
+              _ => clearDone(list),
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'import',
+                child: Text('Importer une liste…'),
+              ),
+              const PopupMenuItem(
+                value: 'ingredients',
+                child: Text('Ingrédients'),
+              ),
+              const PopupMenuItem(
+                value: 'aisles',
+                child: Text('Ordre des rayons'),
+              ),
+              if (basket.isNotEmpty)
+                const PopupMenuItem(
+                  value: 'clear',
+                  child: Text('Retirer les articles cochés'),
+                ),
+            ],
+          ),
+        ],
+      ),
+      // Programmer / changer la date, sous le titre.
+      Row(
+        children: [
+          if (draft)
+            FilledButton.tonalIcon(
+              onPressed: items.isEmpty || busy ? null : () => schedule(list),
+              icon: const Icon(Icons.event_outlined),
+              label: const Text('Programmer'),
+            )
+          else ...[
+            TextButton(
+              onPressed: busy ? null : () => schedule(list),
+              child: const Text('Changer la date'),
+            ),
+            if (ticket != null)
+              IconButton(
+                tooltip: 'Voir la tâche',
+                onPressed: () => widget.onOpenTicket(ticket),
+                icon: const Icon(Icons.open_in_new),
+              ),
+          ],
+        ],
+      ),
+      const SizedBox(height: 10),
+      TextField(
+        controller: search,
+        focusNode: focus,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          hintText: 'Ajouter un ingrédient…',
+          prefixIcon: const Icon(Icons.search),
+          isDense: true,
+          suffixIcon: query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Effacer',
+                  onPressed: () => setState(search.clear),
+                  icon: const Icon(Icons.close),
+                ),
+        ),
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (v) {
+          if (v.trim().isEmpty) return;
+          final first = matches.firstOrNull;
+          if (first != null &&
+              ingredientKey(first['name']) == ingredientKey(v)) {
+            pick(list, first['name'].toString(), ingredient: first);
+          } else {
+            pick(list, v.trim());
+          }
+        },
+      ),
+      if (query.isEmpty) ...[
+        SectionLabel('Accès rapide', quickIngredients(catalog).length),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [for (final i in quickIngredients(catalog)) suggestion(i)],
+        ),
+      ] else ...[
+        const SizedBox(height: 6),
+        for (final m in matches) match(m),
+        if (!exact)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            leading: const Icon(Icons.add),
+            title: Text('Ajouter « $query »'),
+            subtitle: const Text('Nouvel ingrédient'),
+            onTap: () => pick(list, query),
+          ),
+      ],
+      if (items.isEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.only(top: 32, bottom: 8),
+          child: Text(
+            'La liste est vide. Touchez un ingrédient ou tapez son nom. Appui long sur une suggestion pour la modifier.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: c.onSurfaceVariant),
+          ),
+        ),
+        Center(
+          child: TextButton.icon(
+            onPressed: busy ? null : () => importList(list),
+            icon: const Icon(Icons.content_paste_go_outlined),
+            label: const Text('Importer une liste collée'),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    ];
+
+    // Écran ouvert, mode « Préparer » : les outils d'ajout passent dans un
+    // volet à droite (le sketch), la liste occupe le volet principal à gauche.
+    // En magasin, ou sur écran fermé, tout reste dans une seule colonne.
+    // Écran ouvert, mode « Préparer » : les outils d'ajout passent dans un
+    // volet à droite (le sketch), la liste occupe le volet principal à gauche.
+    // En magasin, ou sur écran fermé, tout reste dans une seule colonne (les
+    // outils réapparaissent en tête via le spread conditionnel ci-dessous).
+    final wide = MediaQuery.sizeOf(context).width >= 640;
+    final mainChildren = <Widget>[
+      if (lists.length > 1)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final l in lists)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(
+                      '${listLabel(l, today)} · ${_maps(l['items']).length}',
+                    ),
+                    selected: l['id'] == list['id'],
+                    onSelected: (_) => setState(() => selectedId = l['id']),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      // Deux présentations d'une même liste : préparer (outillage complet)
+      // ou en magasin (les articles d'abord, le reste replié).
+      Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 6),
+        child: Row(
+          children: [
+            CutTab(
+              label: 'Préparer',
+              selected: mode == 'prep',
+              onTap: () => setState(() => mode = 'prep'),
+            ),
+            CutTab(
+              label: 'En magasin',
+              selected: mode == 'store',
+              onTap: () => setState(() => mode = 'store'),
+            ),
+            const SizedBox(width: 8),
+            // Compteur flexible : il s'ellipse plutôt que de faire déborder la
+            // barre quand la place manque (métriques de police selon la plateforme).
+            Flexible(
+              child: Text(
+                plural(items.length, 'article'),
+                textAlign: TextAlign.end,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (mode == 'prep' && !wide) ...prepTools,
+      if (mode == 'store' && items.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 32),
+          child: Text(
+            'Rien à rapporter. La liste se construit dans « Préparer ».',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: c.onSurfaceVariant),
+          ),
+        ),
+      // Filet « À rapporter » : la ligne de structure du carnet.
+      if (items.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: c.onSurface, width: 2)),
+          ),
+          child: Row(
+            children: [
+              const Text(
+                'À RAPPORTER',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .8,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${items.where((i) => i['done'] != true).length} restants',
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+      for (final (aisle, rows) in groups) ...[
+        SectionLabel(
+          aisle['name'].toString(),
+          rows.length,
+          sign: aisleSign(aisle['id']?.toString()),
+        ),
+        for (final item in rows) row(item),
+      ],
+      if (basket.isNotEmpty) ...[
+        SectionLabel('Dans le panier', basket.length, color: c.primary),
+        for (final item in basket) row(item),
+      ],
+      if (!draft && items.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: busy ? null : () => finish(list),
+          icon: const Icon(Icons.check),
+          label: const Text('Courses faites'),
+        ),
+      ],
+    ];
+    if (wide && mode == 'prep') {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: widget.onChanged,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 16, 110),
+                children: mainChildren,
+              ),
+            ),
+          ),
+          VerticalDivider(width: 1, thickness: 1, color: c.outlineVariant),
+          SizedBox(
+            width: 320,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 20, 110),
+              children: prepTools,
+            ),
+          ),
+        ],
+      );
+    }
     return RefreshIndicator(
       onRefresh: widget.onChanged,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-        children: [
-          if (lists.length > 1)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final l in lists)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(
-                          '${listLabel(l, today)} · ${_maps(l['items']).length}',
-                        ),
-                        selected: l['id'] == list['id'],
-                        onSelected: (_) => setState(() => selectedId = l['id']),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Row(
-            children: [
-              Icon(
-                draft ? Icons.edit_calendar_outlined : Icons.event_available,
-                color: draft ? c.onSurfaceVariant : c.primary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  draft
-                      ? 'Pas encore programmées'
-                      : 'Prévues ${listLabel(list, today).toLowerCase()}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              if (draft)
-                FilledButton.tonalIcon(
-                  onPressed: items.isEmpty || busy
-                      ? null
-                      : () => schedule(list),
-                  icon: const Icon(Icons.event_outlined),
-                  label: const Text('Programmer'),
-                )
-              else ...[
-                TextButton(
-                  onPressed: busy ? null : () => schedule(list),
-                  child: const Text('Changer la date'),
-                ),
-                if (ticket != null)
-                  IconButton(
-                    tooltip: 'Voir la tâche',
-                    onPressed: () => widget.onOpenTicket(ticket),
-                    icon: const Icon(Icons.open_in_new),
-                  ),
-              ],
-              PopupMenuButton<String>(
-                tooltip: 'Plus d’options',
-                onSelected: (v) => switch (v) {
-                  'import' => importList(list),
-                  'aisles' => reorderAisles(),
-                  'ingredients' => ingredientsPage(),
-                  _ => clearDone(list),
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'import',
-                    child: Text('Importer une liste…'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'ingredients',
-                    child: Text('Ingrédients'),
-                  ),
-                  const PopupMenuItem(
-                    value: 'aisles',
-                    child: Text('Ordre des rayons'),
-                  ),
-                  if (basket.isNotEmpty)
-                    const PopupMenuItem(
-                      value: 'clear',
-                      child: Text('Retirer les articles cochés'),
-                    ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: search,
-            focusNode: focus,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              hintText: 'Ajouter un ingrédient…',
-              prefixIcon: const Icon(Icons.search),
-              isDense: true,
-              suffixIcon: query.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Effacer',
-                      onPressed: () => setState(search.clear),
-                      icon: const Icon(Icons.close),
-                    ),
-            ),
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (v) {
-              if (v.trim().isEmpty) return;
-              final first = matches.firstOrNull;
-              if (first != null &&
-                  ingredientKey(first['name']) == ingredientKey(v)) {
-                pick(list, first['name'].toString(), ingredient: first);
-              } else {
-                pick(list, v.trim());
-              }
-            },
-          ),
-          if (query.isEmpty) ...[
-            SectionLabel('Accès rapide', quickIngredients(catalog).length),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final i in quickIngredients(catalog)) suggestion(i),
-              ],
-            ),
-          ] else ...[
-            const SizedBox(height: 6),
-            for (final m in matches) match(m),
-            if (!exact)
-              ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                leading: const Icon(Icons.add),
-                title: Text('Ajouter « $query »'),
-                subtitle: const Text('Nouvel ingrédient'),
-                onTap: () => pick(list, query),
-              ),
-          ],
-          if (items.isEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 32, bottom: 8),
-              child: Text(
-                'La liste est vide. Touchez un ingrédient ou tapez son nom. Appui long sur une suggestion pour la modifier.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.onSurfaceVariant),
-              ),
-            ),
-            Center(
-              child: TextButton.icon(
-                onPressed: busy ? null : () => importList(list),
-                icon: const Icon(Icons.content_paste_go_outlined),
-                label: const Text('Importer une liste collée'),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          for (final (aisle, rows) in groups) ...[
-            SectionLabel(aisle['name'].toString(), rows.length),
-            for (final item in rows) row(item),
-          ],
-          if (basket.isNotEmpty) ...[
-            SectionLabel('Dans le panier', basket.length, color: c.primary),
-            for (final item in basket) row(item),
-          ],
-          if (!draft && items.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: busy ? null : () => finish(list),
-              icon: const Icon(Icons.check),
-              label: const Text('Courses faites'),
-            ),
-          ],
-        ],
+        children: mainChildren,
       ),
     );
   }

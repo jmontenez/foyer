@@ -1,183 +1,89 @@
 import 'package:flutter/material.dart';
 
-/// Add a palette here and its stable ID to the server's Appearance.PaletteIds.
+/// Un duo personnel « Découpes » : principal (--p, actions & sélection) et accent
+/// (--a, marges & tampons). Appliqué **littéralement** — mêmes valeurs en clair et
+/// en veillée. Les neutres du contenu ne sont jamais teintés par le duo.
+/// Ajouter un duo ici et son ID stable dans Appearance.PaletteIds côté serveur.
 class AppPalette {
   final String id, name;
-  final Color primary, accent, background;
+  final Color primary, accent;
 
-  /// Marquée : couleurs appliquées telles quelles, sans les tons adoucis de Material 3.
-  final bool bold;
+  /// Veillée (sombre). Le duo reste identique ; seuls les neutres changent.
   final bool dark;
   const AppPalette(
     this.id,
     this.name,
     this.primary,
-    this.accent,
-    this.background, {
-    this.bold = false,
+    this.accent, {
     this.dark = false,
   });
 }
 
+/// Les trois duos du sketch, en clair puis en veillée (mêmes p/a, règle PR #40).
 const palettes = [
+  AppPalette('sauge', 'Sauge & ambre', Color(0xFF386653), Color(0xFFB58A44)),
+  AppPalette('encre', 'Encre & corail', Color(0xFF1F4FE0), Color(0xFFFF3D5E)),
+  AppPalette('prune', 'Prune & citron', Color(0xFF7A1FA2), Color(0xFFFACC15)),
   AppPalette(
-    'sky-orange',
-    'Ciel & orange',
-    Color(0xFF68BCE8),
-    Color(0xFFE87D32),
-    Color(0xFFF4F9FC),
-  ),
-  AppPalette(
-    'sage',
-    'Sauge & crème',
+    'sauge-nuit',
+    'Sauge, veillée',
     Color(0xFF386653),
     Color(0xFFB58A44),
-    Color(0xFFF7F5F0),
-  ),
-  AppPalette(
-    'violet-navy',
-    'Violet & bleu nuit',
-    Color(0xFF9164C8),
-    Color(0xFF233C78),
-    Color(0xFFF7F5FC),
-  ),
-  AppPalette(
-    'rose-plum',
-    'Rose & prune',
-    Color(0xFFDA93AF),
-    Color(0xFF743F73),
-    Color(0xFFFCF5F8),
-  ),
-  AppPalette(
-    'navy-gold',
-    'Marine & doré',
-    Color(0xFF284C7C),
-    Color(0xFFD8A638),
-    Color(0xFFF5F7FA),
-  ),
-  AppPalette(
-    'turquoise-coral',
-    'Turquoise & corail',
-    Color(0xFF39ABA9),
-    Color(0xFFE77D70),
-    Color(0xFFF2FAF9),
-  ),
-  AppPalette(
-    'forest-mint',
-    'Forêt & menthe',
-    Color(0xFF31674C),
-    Color(0xFF85CDB1),
-    Color(0xFFF3F8F3),
-  ),
-  AppPalette(
-    'terracotta-sand',
-    'Terracotta & sable',
-    Color(0xFFB96749),
-    Color(0xFFD7B880),
-    Color(0xFFFCF6F0),
-  ),
-  AppPalette(
-    'cherry-cream',
-    'Cerise & vanille',
-    Color(0xFFB24E69),
-    Color(0xFFD6B96E),
-    Color(0xFFFCF6F3),
-  ),
-  AppPalette(
-    'indigo-ice',
-    'Indigo & glacier',
-    Color(0xFF565DB0),
-    Color(0xFF72B9D0),
-    Color(0xFFF5F6FC),
-  ),
-  AppPalette(
-    'slate-copper',
-    'Ardoise & cuivre',
-    Color(0xFF596C7F),
-    Color(0xFFC2855F),
-    Color(0xFFF5F7F8),
-  ),
-  AppPalette(
-    'ember-night',
-    'Braise & nuit',
-    Color(0xFFFF7A1A),
-    Color(0xFFFFC247),
-    Color(0xFF0F0F11),
-    bold: true,
     dark: true,
   ),
   AppPalette(
-    'lime-charcoal',
-    'Citron vert & charbon',
-    Color(0xFFB8F02B),
-    Color(0xFF22D3EE),
-    Color(0xFF111412),
-    bold: true,
-    dark: true,
-  ),
-  AppPalette(
-    'ruby-onyx',
-    'Rubis & onyx',
-    Color(0xFFFF3D5E),
-    Color(0xFFFF9F1C),
-    Color(0xFF120D0F),
-    bold: true,
-    dark: true,
-  ),
-  AppPalette(
-    'electric-violet',
-    'Violet électrique',
-    Color(0xFFA459F5),
-    Color(0xFFF472B6),
-    Color(0xFF0E0B15),
-    bold: true,
-    dark: true,
-  ),
-  AppPalette(
-    'abyss-cyan',
-    'Abysses & cyan',
-    Color(0xFF16B4F2),
-    Color(0xFF2DD4BF),
-    Color(0xFF08131B),
-    bold: true,
-    dark: true,
-  ),
-  AppPalette(
-    'tomato-teal',
-    'Tomate & canard',
-    Color(0xFFE03A3E),
-    Color(0xFF13807A),
-    Color(0xFFFFF7F2),
-    bold: true,
-  ),
-  AppPalette(
-    'royal-sun',
-    'Bleu roi & soleil',
+    'encre-nuit',
+    'Encre, veillée',
     Color(0xFF1F4FE0),
+    Color(0xFFFF3D5E),
+    dark: true,
+  ),
+  AppPalette(
+    'prune-nuit',
+    'Prune, veillée',
+    Color(0xFF7A1FA2),
     Color(0xFFFACC15),
-    Color(0xFFF4F7FF),
-    bold: true,
-  ),
-  AppPalette(
-    'ink-coral',
-    'Encre & corail',
-    Color(0xFF2B59C3),
-    Color(0xFFC0512F),
-    Color(0xFFFBFAF7),
-    bold: true,
-  ),
-  AppPalette(
-    'fuchsia-lemon',
-    'Fuchsia & citron',
-    Color(0xFFD6207C),
-    Color(0xFFF9C80E),
-    Color(0xFFFFF5FA),
-    bold: true,
+    dark: true,
   ),
 ];
 
-/// Onglets du sélecteur : palettes douces d’origine, puis palettes marquées.
-const paletteTabs = [('Douces', false), ('Marquées', true)];
+/// Neutres chauds **fixes** du sketch — jamais teintés par le duo (voir
+/// [buildAppTheme]). Deux jeux seulement : papier (clair) et veillée (sombre).
+class _Neutrals {
+  final Color paper, panel, ink, muted;
+  final double lineOpacity;
+  const _Neutrals(
+    this.paper,
+    this.panel,
+    this.ink,
+    this.muted,
+    this.lineOpacity,
+  );
+}
+
+const _lightNeutrals = _Neutrals(
+  Color(0xFFF6EFE3), // --paper
+  Color(0xFFFFFDF6), // --panel
+  Color(0xFF342650), // --ink
+  Color(0xFF6E6386), // --muted
+  .16,
+);
+const _darkNeutrals = _Neutrals(
+  Color(0xFF241B31),
+  Color(0xFF2D2340),
+  Color(0xFFF2EBDF),
+  Color(0xFFB6ABC9),
+  .17,
+);
+
+_Neutrals _neutralsFor(bool dark) => dark ? _darkNeutrals : _lightNeutrals;
+
+/// Fond papier (ou veillée) d’un mode — pour les aperçus du sélecteur.
+Color paperFor(bool dark) => _neutralsFor(dark).paper;
+
+/// Mélange sRGB (approxime le color-mix oklab du sketch pour les tons adoucis).
+Color _mix(Color base, Color over, double amount) =>
+    Color.lerp(base, over, amount)!;
 
 /// Texte noir ou blanc, le plus lisible sur [background] (contraste ≥ 4,5 garanti).
 Color readableOn(Color background) {
@@ -185,13 +91,31 @@ Color readableOn(Color background) {
   return (l + .05) / .05 >= 1.05 / (l + .05) ? Colors.black : Colors.white;
 }
 
-AppPalette paletteById(String? id) =>
-    palettes.firstWhere((p) => p.id == id, orElse: () => palettes[1]);
+/// Anciennes palettes sombres (refonte précédente) : on y ramène les données
+/// stockées qui ne correspondent plus à aucun duo, pour garder la veillée.
+const _legacyDarkIds = {
+  'ember-night',
+  'lime-charcoal',
+  'ruby-onyx',
+  'electric-violet',
+  'abyss-cyan',
+  'd2-sauge-nuit',
+  'd2-braise-nuit',
+  'd2-prune-nuit',
+};
 
-/// Palette personnalisée : l’utilisateur choisit principal + accent et clair/sombre.
-/// Les couleurs sont appliquées telles quelles (`bold`, comme les palettes marquées) :
-/// ce qu’on règle au curseur est ce qu’on voit, identique en clair et en sombre ;
-/// la lisibilité du texte posé dessus reste garantie par [readableOn].
+/// Ramène un identifiant stocké (éventuellement d’une ancienne palette) vers un
+/// duo connu : inchangé s’il existe, sinon veillée pour un ancien sombre, Sauge sinon.
+String _migratePalette(String? id) {
+  if (id != null && palettes.any((p) => p.id == id)) return id;
+  return _legacyDarkIds.contains(id) ? 'sauge-nuit' : 'sauge';
+}
+
+AppPalette paletteById(String? id) =>
+    palettes.firstWhere((p) => p.id == id, orElse: () => palettes[0]);
+
+/// Duo personnalisé : l’utilisateur choisit principal + accent et clair/veillée.
+/// Les neutres restent ceux du sketch ; seul le duo change.
 const customPaletteId = 'custom';
 
 Color? colorFromHex(String? v) =>
@@ -202,36 +126,14 @@ Color? colorFromHex(String? v) =>
 String hexOf(Color c) =>
     '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 
-/// Fond teinté dans la teinte du principal, très clair ou très sombre — le même motif
-/// que les fonds accordés à la main des palettes prédéfinies.
-Color customBackground(Color primary, bool dark) {
-  final h = HSLColor.fromColor(primary);
-  return dark
-      ? HSLColor.fromAHSL(
-          1,
-          h.hue,
-          (h.saturation * .35).clamp(0, .35),
-          .055,
-        ).toColor()
-      : HSLColor.fromAHSL(
-          1,
-          h.hue,
-          (h.saturation * .45).clamp(0, .5),
-          .975,
-        ).toColor();
-}
-
-/// La palette effective d’une apparence : prédéfinie, ou construite depuis le duo choisi.
+/// La palette effective d’une apparence : prédéfinie, ou le duo choisi au curseur.
 AppPalette paletteFor(AppAppearance a) {
   if (a.paletteId != customPaletteId) return paletteById(a.paletteId);
-  final primary = colorFromHex(a.customPrimary) ?? palettes[1].primary;
   return AppPalette(
     customPaletteId,
     'Sur mesure',
-    primary,
-    colorFromHex(a.customAccent) ?? palettes[1].accent,
-    customBackground(primary, a.customDark),
-    bold: true,
+    colorFromHex(a.customPrimary) ?? palettes[0].primary,
+    colorFromHex(a.customAccent) ?? palettes[0].accent,
     dark: a.customDark,
   );
 }
@@ -261,7 +163,7 @@ class AppAppearance {
   final String customPrimary, customAccent;
   final bool customDark;
   const AppAppearance({
-    this.paletteId = 'sage',
+    this.paletteId = 'sauge',
     this.fontId = 'system',
     this.listStyle = 'cards',
     this.density = 'comfortable',
@@ -271,11 +173,14 @@ class AppAppearance {
     this.customDark = false,
   });
 
-  /// Valeurs inconnues ou absentes (anciennes données) : réglage neutre.
+  /// Valeurs inconnues ou absentes (anciennes données) : réglage neutre, et les
+  /// anciennes palettes sont ramenées vers un duo connu ([_migratePalette]).
   factory AppAppearance.fromMember(Map<dynamic, dynamic>? m) {
-    final id = m?['paletteId']?.toString();
+    final raw = m?['paletteId']?.toString();
     return AppAppearance(
-      paletteId: id == customPaletteId ? customPaletteId : paletteById(id).id,
+      paletteId: raw == customPaletteId
+          ? customPaletteId
+          : _migratePalette(raw),
       fontId: fontById(m?['fontId']?.toString()).id,
       listStyle: m?['listStyle'] == 'rows' ? 'rows' : 'cards',
       density: m?['density'] == 'compact' ? 'compact' : 'comfortable',
@@ -346,62 +251,21 @@ class AppAppearance {
   );
 }
 
-/// Styles prêts à l’emploi : un choix règle tous les jetons, affinables ensuite.
-class StylePreset {
-  final String id, name, description;
-  final AppAppearance appearance;
-  const StylePreset(this.id, this.name, this.description, this.appearance);
-}
-
-const stylePresets = [
-  StylePreset(
-    'braise',
-    'Braise',
-    'Sombre · cartes',
-    AppAppearance(paletteId: 'ember-night', fontId: 'grotesk'),
-  ),
-  StylePreset(
-    'sauge',
-    'Sauge',
-    'Clair · cartes',
-    AppAppearance(paletteId: 'sage', fontId: 'serif'),
-  ),
-  StylePreset(
-    'liste',
-    'Liste',
-    'Clair · lignes',
-    AppAppearance(
-      paletteId: 'ink-coral',
-      fontId: 'manrope',
-      listStyle: 'rows',
-      density: 'compact',
-    ),
-  ),
-];
-
-/// Un style est reconnu sur ses jetons visibles ; le duo personnalisé mémorisé n’entre pas en jeu.
-StylePreset? presetOf(AppAppearance a) => stylePresets
-    .where(
-      (p) =>
-          p.appearance.paletteId == a.paletteId &&
-          p.appearance.fontId == a.fontId &&
-          p.appearance.listStyle == a.listStyle &&
-          p.appearance.density == a.density &&
-          p.appearance.corners == a.corners,
-    )
-    .firstOrNull;
-
 final selectedAppearance = ValueNotifier<AppAppearance>(const AppAppearance());
 
 /// Jetons non couverts par ThemeData, lus par les composants de Foyer.
 @immutable
 class FoyerTokens extends ThemeExtension<FoyerTokens> {
   final double radius;
+
+  /// Profondeur du coin coupé « Découpes » (voir [cutShape]).
+  final double cut;
   final bool compact;
   final bool rows;
   final String? displayFont;
   const FoyerTokens({
     required this.radius,
+    this.cut = 16,
     required this.compact,
     required this.rows,
     this.displayFont,
@@ -410,11 +274,13 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
   @override
   FoyerTokens copyWith({
     double? radius,
+    double? cut,
     bool? compact,
     bool? rows,
     String? displayFont,
   }) => FoyerTokens(
     radius: radius ?? this.radius,
+    cut: cut ?? this.cut,
     compact: compact ?? this.compact,
     rows: rows ?? this.rows,
     displayFont: displayFont ?? this.displayFont,
@@ -425,63 +291,95 @@ class FoyerTokens extends ThemeExtension<FoyerTokens> {
       other == null || t < .5 ? this : other;
 }
 
+/// Signature « Découpes » : le coin supérieur droit franchement coupé (asymétrique),
+/// les autres à peine — comme une feuille de papier dont on a ciselé un coin.
+/// Jamais un arrondi : c'est ce qui rend l'identité reconnaissable sans couleur.
+/// [cut] = étendue VERTICALE du biseau (px) ; l'horizontale suit le ratio du
+/// sketch (26/18 = 13/9 ≈ 1.444). Gros éléments : cutBig (18). Petits : cutSmall (9).
+OutlinedBorder cutShape(double cut, {BorderSide side = BorderSide.none}) =>
+    BeveledRectangleBorder(
+      side: side,
+      borderRadius: BorderRadius.only(
+        topRight: Radius.elliptical(cut * 1.444, cut),
+      ),
+    );
+
+/// Biseaux du sketch : --cut (cartes/panneaux) et --cut-sm (chips/boutons/onglets).
+const cutBig = 18.0;
+const cutSmall = 9.0;
+
+/// Construit le ColorScheme du sketch : **neutres fixes** (paper/panel/ink/muted
+/// selon le mode) et **duo** (p/a) posé seulement sur actions, accents et tampons.
+/// On part d’un `fromSeed` pour les rôles résiduels (error, inverse…) puis on
+/// écrase tout ce que l’app lit, de sorte que le duo ne teinte jamais les neutres.
+ColorScheme _schemeFor(AppPalette palette) {
+  final dark = palette.dark;
+  final n = _neutralsFor(dark);
+  final p = palette.primary, a = palette.accent;
+  final pSoft = _mix(n.paper, p, dark ? .26 : .13);
+  final aMark = _mix(n.paper, a, dark ? .62 : .72);
+  final line = n.ink.withValues(alpha: n.lineOpacity);
+  return ColorScheme.fromSeed(
+    seedColor: p,
+    brightness: dark ? Brightness.dark : Brightness.light,
+  ).copyWith(
+    primary: p,
+    onPrimary: readableOn(p),
+    primaryContainer: pSoft,
+    onPrimaryContainer: readableOn(pSoft),
+    secondary: a,
+    onSecondary: readableOn(a),
+    // Le « mark » accent du sketch (avatars, points, signes) : accent adouci vers
+    // le papier, lisible, posé partout où un composant lit secondaryContainer.
+    secondaryContainer: aMark,
+    onSecondaryContainer: readableOn(aMark),
+    tertiary: a,
+    onTertiary: readableOn(a),
+    surface: n.paper,
+    onSurface: n.ink,
+    onSurfaceVariant: n.muted,
+    surfaceContainerLowest: n.panel,
+    surfaceContainerLow: n.panel,
+    surfaceContainer: _mix(n.paper, n.ink, .04),
+    surfaceContainerHigh: _mix(n.paper, n.ink, .06),
+    surfaceContainerHighest: _mix(n.paper, n.ink, .08),
+    outline: n.ink.withValues(alpha: dark ? .30 : .28),
+    outlineVariant: line,
+  );
+}
+
 ThemeData buildAppTheme(AppAppearance appearance) {
   final palette = paletteFor(appearance);
-  final font = fontById(appearance.fontId);
+  // Typo de la direction « Découpes » : titres Manrope (graisses fortes), texte
+  // Atkinson Hyperlegible. Le choix de police n'est plus un réglage public
+  // (axes réduits) ; `fontId` reste stocké côté serveur pour compatibilité.
+  const bodyFont = 'Atkinson';
+  const displayFont = 'Manrope';
   final sharp = appearance.corners == 'sharp';
   final radius = sharp ? 8.0 : 20.0;
   final fieldRadius = sharp ? 6.0 : 14.0;
-  final brightness = palette.dark ? Brightness.dark : Brightness.light;
-  final accent = ColorScheme.fromSeed(
-    seedColor: palette.accent,
-    brightness: brightness,
-  );
-  var colors =
-      ColorScheme.fromSeed(
-        seedColor: palette.primary,
-        brightness: brightness,
-        surface: palette.background,
-      ).copyWith(
-        secondary: accent.primary,
-        onSecondary: accent.onPrimary,
-        secondaryContainer: accent.primaryContainer,
-        onSecondaryContainer: accent.onPrimaryContainer,
-      );
-  if (palette.bold) {
-    colors = colors.copyWith(
-      primary: palette.primary,
-      onPrimary: readableOn(palette.primary),
-      secondaryContainer: palette.accent,
-      onSecondaryContainer: readableOn(palette.accent),
-    );
-  }
-  // Cartes et champs : blancs sur fond clair, légèrement éclaircis sur fond sombre.
-  final card = palette.dark
-      ? Color.alphaBlend(
-          Colors.white.withValues(alpha: .07),
-          palette.background,
-        )
-      : Colors.white;
+  // Coin coupé des cartes/panneaux (--cut du sketch) ; les boutons utilisent cutSmall.
+  final cut = sharp ? 12.0 : cutBig;
+  final colors = _schemeFor(palette);
+  // Les cartes et champs reposent sur le panneau (neutre fixe), jamais teinté.
+  final card = colors.surfaceContainerLowest;
   final base = ThemeData(
     useMaterial3: true,
-    fontFamily: font.body,
+    fontFamily: bodyFont,
     visualDensity: appearance.density == 'compact'
         ? VisualDensity.compact
         : VisualDensity.standard,
-    scaffoldBackgroundColor: palette.background,
+    scaffoldBackgroundColor: colors.surface,
     colorScheme: colors,
     appBarTheme: AppBarTheme(
-      backgroundColor: palette.background,
+      backgroundColor: colors.surface,
       foregroundColor: colors.onSurface,
       centerTitle: false,
     ),
     cardTheme: CardThemeData(
       color: card,
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radius),
-        side: BorderSide(color: colors.outlineVariant),
-      ),
+      shape: cutShape(cut, side: BorderSide(color: colors.outlineVariant)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -497,34 +395,32 @@ ThemeData buildAppTheme(AppAppearance appearance) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        shape: sharp
-            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-            : const StadiumBorder(),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        // Boutons plats au petit coin coupé (--cut-sm).
+        shape: cutShape(cutSmall),
       ),
     ),
   );
   // Titres dans la police d’affichage ; le texte courant garde la police de lecture.
-  final display = font.display;
   final text = base.textTheme;
   return base.copyWith(
-    textTheme: display == null
-        ? text
-        : text.copyWith(
-            displayLarge: text.displayLarge?.copyWith(fontFamily: display),
-            displayMedium: text.displayMedium?.copyWith(fontFamily: display),
-            displaySmall: text.displaySmall?.copyWith(fontFamily: display),
-            headlineLarge: text.headlineLarge?.copyWith(fontFamily: display),
-            headlineMedium: text.headlineMedium?.copyWith(fontFamily: display),
-            headlineSmall: text.headlineSmall?.copyWith(fontFamily: display),
-            titleLarge: text.titleLarge?.copyWith(fontFamily: display),
-          ),
+    textTheme: text.copyWith(
+      displayLarge: text.displayLarge?.copyWith(fontFamily: displayFont),
+      displayMedium: text.displayMedium?.copyWith(fontFamily: displayFont),
+      displaySmall: text.displaySmall?.copyWith(fontFamily: displayFont),
+      headlineLarge: text.headlineLarge?.copyWith(fontFamily: displayFont),
+      headlineMedium: text.headlineMedium?.copyWith(fontFamily: displayFont),
+      headlineSmall: text.headlineSmall?.copyWith(fontFamily: displayFont),
+      titleLarge: text.titleLarge?.copyWith(fontFamily: displayFont),
+    ),
     extensions: [
       FoyerTokens(
         radius: radius,
+        cut: cut,
         compact: appearance.density == 'compact',
         rows: appearance.listStyle == 'rows',
-        displayFont: display,
+        displayFont: displayFont,
       ),
     ],
   );
@@ -585,7 +481,7 @@ class _PalettePickerState extends State<PalettePicker> {
           ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Thème sombre'),
+          title: const Text('Veillée (sombre)'),
           value: a.paletteId == customPaletteId && a.customDark,
           onChanged: (v) => custom((x) => x.copyWith(customDark: v)),
         ),
@@ -612,12 +508,8 @@ class _PalettePickerState extends State<PalettePicker> {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: paletteTabs.length + 1,
-    initialIndex: selectedAppearance.value.paletteId == customPaletteId
-        ? 2
-        : paletteById(selectedAppearance.value.paletteId).bold
-        ? 1
-        : 0,
+    length: 2,
+    initialIndex: selectedAppearance.value.paletteId == customPaletteId ? 1 : 0,
     child: SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -629,27 +521,21 @@ class _PalettePickerState extends State<PalettePicker> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Un aperçu immédiat, un choix rien que pour vous. Vos couleurs vous suivent sur vos appareils.',
+              'Un duo appliqué tel quel, sur un papier qui ne change pas. Vos couleurs vous suivent sur vos appareils.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            TabBar(
+            const TabBar(
               tabs: [
-                for (final (label, _) in paletteTabs) Tab(text: label),
-                const Tab(text: 'Sur mesure'),
+                Tab(text: 'Duos'),
+                Tab(text: 'Sur mesure'),
               ],
             ),
             const SizedBox(height: 12),
             Expanded(
               child: TabBarView(
                 children: [
-                  for (final (_, bold) in paletteTabs)
-                    ListView(
-                      children: palettes
-                          .where((p) => p.bold == bold)
-                          .map(_tile)
-                          .toList(),
-                    ),
+                  ListView(children: palettes.map(_tile).toList()),
                   customTab(),
                 ],
               ),
@@ -702,7 +588,7 @@ class _PalettePickerState extends State<PalettePicker> {
               width: 72,
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: p.background,
+                color: paperFor(p.dark),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.outlineVariant,
@@ -718,7 +604,7 @@ class _PalettePickerState extends State<PalettePicker> {
               ),
             ),
             title: Text(p.name),
-            subtitle: p.dark ? const Text('Thème sombre') : null,
+            subtitle: p.dark ? const Text('Veillée') : null,
             trailing: selected ? const Icon(Icons.check_circle) : null,
             onTap: () => setState(
               () => selectedAppearance.value = selectedAppearance.value
@@ -800,7 +686,7 @@ class ColorSliders extends StatelessWidget {
           1,
           (v) => onChanged(color.withSaturation(v)),
         ),
-        // Bornée : un principal quasi noir ou blanc rend le fond dérivé inutilisable.
+        // Bornée : un principal quasi noir ou blanc rend le duo illisible.
         slider(
           'Luminosité',
           color.lightness.clamp(.05, .95),
@@ -910,16 +796,9 @@ class _AppearancePageState extends State<AppearancePage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         children: [
-          heading('Style'),
-          Row(
-            children: [
-              for (final preset in stylePresets) ...[
-                if (preset != stylePresets.first) const SizedBox(width: 10),
-                Expanded(child: presetCard(preset, colors)),
-              ],
-            ],
-          ),
-          heading('Réglages fins'),
+          // Axes réduits : la direction Découpes fixe police, angles et style de
+          // liste ; restent la palette/le duo et la densité.
+          heading('Couleurs'),
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(
@@ -930,30 +809,12 @@ class _AppearancePageState extends State<AppearancePage> {
               onTap: choosePalette,
             ),
           ),
-          const SizedBox(height: 16),
-          segmented(
-            'Police',
-            [for (final f in fontPairs) (f.id, f.name, f.display)],
-            current.fontId,
-            (v) => current.copyWith(fontId: v),
-          ),
-          segmented(
-            'Affichage des tâches',
-            [('cards', 'Cartes', null), ('rows', 'Lignes', null)],
-            current.listStyle,
-            (v) => current.copyWith(listStyle: v),
-          ),
+          heading('Confort'),
           segmented(
             'Densité',
             [('comfortable', 'Aérée', null), ('compact', 'Compacte', null)],
             current.density,
             (v) => current.copyWith(density: v),
-          ),
-          segmented(
-            'Angles',
-            [('soft', 'Doux', null), ('sharp', 'Marqués', null)],
-            current.corners,
-            (v) => current.copyWith(corners: v),
           ),
           const SizedBox(height: 8),
           Text(
@@ -961,79 +822,6 @@ class _AppearancePageState extends State<AppearancePage> {
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget presetCard(StylePreset preset, ColorScheme colors) {
-    final palette = paletteById(preset.appearance.paletteId);
-    final selected = preset.appearance == current;
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: '${preset.name}, ${preset.description}',
-      excludeSemantics: true,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        // Le style règle les jetons visibles ; le duo personnalisé mémorisé reste intact.
-        onTap: () => choose(
-          preset.appearance.copyWith(
-            customPrimary: current.customPrimary,
-            customAccent: current.customAccent,
-            customDark: current.customDark,
-          ),
-        ),
-        child: Ink(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected ? colors.primary : colors.outlineVariant,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 52,
-                decoration: BoxDecoration(
-                  color: palette.background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colors.outlineVariant),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final c in [palette.primary, palette.accent])
-                      Container(
-                        width: 18,
-                        height: 18,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          color: c,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                preset.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontFamily: fontById(preset.appearance.fontId).display,
-                ),
-              ),
-              Text(
-                preset.description,
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

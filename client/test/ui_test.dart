@@ -65,14 +65,19 @@ void main() {
     ),
   );
 
-  testWidgets('Tâche en carte : badge, progression, commentaire au singulier', (
+  testWidgets('Rangée plate : titre, ligne personne · méta, sans carte', (
     tester,
   ) async {
-    await pump(tester, stylePresets.first.appearance);
-    expect(find.byType(Card), findsOneWidget);
-    expect(find.text('URGENT'), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
-    expect(find.text('2/3 · 1 commentaire'), findsOneWidget);
+    await pump(tester, const AppAppearance());
+    // Plus de carte ni de barre de progression : rangée plate du sketch.
+    expect(find.byType(Card), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Réparer la fuite'), findsOneWidget);
+    // Ligne du dessous : responsable puis méta et compteurs.
+    expect(
+      find.textContaining('Aujourd’hui · En cours · 2/3 · 1 commentaire'),
+      findsOneWidget,
+    );
     expect(
       find.bySemanticsLabel(
         'Réparer la fuite, urgent, Aujourd’hui · En cours, Camille, 2 sur 3 étapes, 1 commentaire',
@@ -81,14 +86,21 @@ void main() {
     );
   });
 
-  testWidgets('Tâche en ligne selon le jeton d’affichage', (tester) async {
-    await pump(tester, stylePresets.last.appearance);
-    expect(find.byType(Card), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(
-      find.text('Aujourd’hui · En cours · 2/3 · 1 commentaire'),
-      findsOneWidget,
+  testWidgets('Rangée plate : sélection teintée biseautée', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: TaskTile(
+            onTap: () {},
+            selected: true,
+            task: const TaskView(title: 'Préparer le week-end', meta: 'Samedi'),
+          ),
+        ),
+      ),
     );
+    expect(find.byType(Card), findsNothing);
+    expect(find.text('Préparer le week-end'), findsOneWidget);
   });
 
   testWidgets('Glisser une carte : déplacement au-delà du seuil seulement', (
@@ -139,7 +151,7 @@ void main() {
     expect(chosen, 'doing');
   });
 
-  testWidgets('Envie signalée sur la carte et lue par le lecteur d’écran', (
+  testWidgets('Envie signalée sur la rangée et lue par le lecteur d’écran', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -157,7 +169,8 @@ void main() {
         ),
       ),
     );
-    expect(find.text('ENVIE'), findsOneWidget);
+    // « Envie » est inline dans la ligne personne · méta (plus de badge encadré).
+    expect(find.textContaining('Envie'), findsOneWidget);
     expect(
       find.bySemanticsLabel(
         'Week-end à la mer, envie, Un jour, sans responsable',
@@ -192,28 +205,19 @@ void main() {
     expect(find.text('Annuler'), findsNothing);
   });
 
-  test(
-    'Barre : marges réduites puis onglet actif sans nom quand la place manque',
-    () {
-      expect(navLayout(400, 6, 60).label, isTrue);
-      expect(navLayout(400, 6, 60).padding, 12);
-      // Grande police : on resserre d’abord.
-      final tight = navLayout(340, 6, 95);
-      expect((tight.padding, tight.label), (8, true));
-      // Encore trop large : l’onglet actif garde sa couleur mais perd son nom.
-      expect(navLayout(320, 6, 140).label, isFalse);
-    },
-  );
-
+  // Le bandeau à quatre destinations tient sur les petites largeurs, même en
+  // grande police : libellés tronqués proprement, jamais de débordement.
   for (final (width, scale) in [(320.0, 1.0), (360.0, 1.3), (412.0, 1.5)]) {
     testWidgets(
-      'Les 6 onglets tiennent à ${width.toInt()} px, police ×$scale',
+      'Les 4 destinations tiennent à ${width.toInt()} px, police ×$scale',
       (tester) async {
         tester.view.physicalSize = Size(width, 800);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
+        var picked = -1;
         await tester.pumpWidget(
           MaterialApp(
+            theme: buildAppTheme(const AppAppearance()),
             home: MediaQuery(
               data: MediaQueryData(
                 size: Size(width, 800),
@@ -223,24 +227,22 @@ void main() {
                 bottomNavigationBar: FloatingNav(
                   index: 2,
                   items: const [
-                    (Icons.wb_sunny_outlined, 'Aujourd’hui'),
-                    (Icons.date_range_outlined, 'Semaine'),
-                    (Icons.view_kanban_outlined, 'Tableau'),
-                    (Icons.inventory_2_outlined, 'Backlog'),
-                    (Icons.history, 'Historique'),
-                    (Icons.shopping_basket_outlined, 'Courses'),
+                    (FoyerSign.sun, 'Aujourd’hui'),
+                    (FoyerSign.bag, 'Courses'),
+                    (FoyerSign.cal, 'Prévu'),
+                    (FoyerSign.book, 'Journal'),
                   ],
-                  onSelected: (_) {},
+                  onSelected: (i) => picked = i,
                 ),
               ),
             ),
           ),
         );
         expect(tester.takeException(), isNull);
-        final basket = tester.getRect(
-          find.byIcon(Icons.shopping_basket_outlined),
-        );
-        expect(basket.right, lessThanOrEqualTo(width - 12));
+        final band = tester.getRect(find.byType(FloatingNav));
+        expect(band.right, lessThanOrEqualTo(width));
+        await tester.tap(find.bySemanticsLabel('Journal'));
+        expect(picked, 3);
       },
     );
   }

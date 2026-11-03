@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- « + » rond dans la couleur d’accent, comme le bouton de l’application. -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-    <solid android:color="@color/widget_accent" />
-</shape>
+<!-- « + » : petit carré au coin coupé (cut-sm) dans la couleur d’accent, comme le bouton
+     plat de l’application (plus de pastille ronde). Teinté au runtime vers l’accent. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="@color/widget_accent"
+        android:pathData="M0,0 L37,0 L48,8 L48,48 L0,48 Z" />
+</vector>
