@@ -232,15 +232,18 @@ class _CutCheckPainter extends CustomPainter {
     required this.mark,
   });
 
-  // Le « rond coupé au ciseau » : volontairement irrégulier, jamais un cercle.
+  // Carré arrondi asymétrique « Découpes » (cohérent avec les boutons) :
+  // haut-gauche + bas-droite marqués, les deux autres resserrés.
   static Path shape(Size s) => Path()
-    ..moveTo(s.width * .50, 0)
-    ..lineTo(s.width * .96, s.height * .18)
-    ..lineTo(s.width, s.height * .62)
-    ..lineTo(s.width * .72, s.height)
-    ..lineTo(s.width * .14, s.height * .92)
-    ..lineTo(0, s.height * .38)
-    ..close();
+    ..addRRect(
+      RRect.fromRectAndCorners(
+        Offset.zero & s,
+        topLeft: Radius.circular(s.width * .42),
+        bottomRight: Radius.circular(s.width * .42),
+        topRight: Radius.circular(s.width * .16),
+        bottomLeft: Radius.circular(s.width * .16),
+      ),
+    );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1380,24 +1383,22 @@ class FoyerRail extends StatelessWidget {
 }
 
 /// Tampon biseauté irrégulier derrière le signe actif (rail et bandeau).
+// Tampon « Découpes » de la destination active (rail ouvert + bandeau fermé) :
+// coin arrondi asymétrique, comme les boutons (haut-gauche + bas-droite marqués).
+RRect _stampRRect(Size s) => RRect.fromRectAndCorners(
+  Offset.zero & s,
+  topLeft: Radius.circular(s.height * .5),
+  topRight: Radius.circular(s.height * .22),
+  bottomRight: Radius.circular(s.height * .42),
+  bottomLeft: Radius.circular(s.height * .22),
+);
+
 class _StampBg extends CustomPainter {
   final Color color;
   _StampBg(this.color);
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * .48, 0)
-        ..lineTo(w, h * .14)
-        ..lineTo(w * .92, h * .78)
-        ..lineTo(w * .58, h)
-        ..lineTo(w * .08, h * .88)
-        ..lineTo(0, h * .26)
-        ..close(),
-      Paint()..color = color,
-    );
-  }
+  void paint(Canvas canvas, Size size) =>
+      canvas.drawRRect(_stampRRect(size), Paint()..color = color);
 
   @override
   bool shouldRepaint(_StampBg old) => old.color != color;
@@ -1634,20 +1635,8 @@ class _StampPainter extends CustomPainter {
   final Color color;
   _StampPainter(this.color);
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    canvas.drawPath(
-      Path()
-        ..moveTo(w * .48, 0)
-        ..lineTo(w, h * .14)
-        ..lineTo(w * .92, h * .78)
-        ..lineTo(w * .58, h)
-        ..lineTo(w * .08, h * .88)
-        ..lineTo(0, h * .26)
-        ..close(),
-      Paint()..color = color,
-    );
-  }
+  void paint(Canvas canvas, Size size) =>
+      canvas.drawRRect(_stampRRect(size), Paint()..color = color);
 
   @override
   bool shouldRepaint(_StampPainter old) => old.color != color;
