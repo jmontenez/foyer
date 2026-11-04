@@ -1654,6 +1654,7 @@ class _ShoppingViewState extends State<ShoppingView> {
           if (addOpen) ...[
             Positioned.fill(
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => addOpen = false),
                 child: ColoredBox(color: Colors.black.withValues(alpha: .45)),
               ),
