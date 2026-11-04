@@ -929,6 +929,9 @@ class _ShoppingViewState extends State<ShoppingView> {
   final focus = FocusNode();
   String? selectedId;
   bool busy = false;
+  // Écran moyen : feuilles qui se recouvrent. false = liste devant (le volet
+  // d'ajout dépasse à droite) ; true = volet d'ajout devant.
+  bool prepFront = false;
 
   // Présentation « Préparer » / « En magasin » : un état d'affichage local à
   // l'appareil (jamais envoyé au serveur), retenu pour la session de l'app.
@@ -1589,7 +1592,11 @@ class _ShoppingViewState extends State<ShoppingView> {
     // Deux-volets réservé aux vraies tablettes (≥ 1000) : en dessous (tél/pliants)
     // la fiche s'ouvre en plein écran plutôt que de serrer la liste. Les « feuilles »
     // (overlap volontaire) arriveront pour les largeurs intermédiaires.
-    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= 1000;
+    // Écran moyen (640-1000) en préparation : la liste et le volet d'ajout
+    // deviennent deux feuilles qui se recouvrent (comme la fiche de tâche).
+    final sheets = width >= 640 && width < 1000 && mode == 'prep';
     final mainChildren = <Widget>[
       if (lists.length > 1)
         SingleChildScrollView(
@@ -1640,7 +1647,9 @@ class _ShoppingViewState extends State<ShoppingView> {
           ],
         ),
       ),
-      if (mode == 'prep' && !wide) ...prepTools,
+      // Téléphone fermé (<640) : outils d'ajout inline. Au medium ils passent
+      // en feuille (cf. `sheets`), au large en volet docké (cf. plus bas).
+      if (mode == 'prep' && width < 640) ...prepTools,
       if (mode == 'store' && items.isEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 32),
@@ -1701,6 +1710,32 @@ class _ShoppingViewState extends State<ShoppingView> {
         ),
       ],
     ];
+    final listPane = RefreshIndicator(
+      onRefresh: widget.onChanged,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+        children: mainChildren,
+      ),
+    );
+    if (sheets) {
+      // Liste devant par défaut ; le volet d'ajout dépasse à droite, un tap sur
+      // ce bout le ramène devant (et la liste dépasse alors à gauche).
+      return BinderSheets(
+        list: listPane,
+        detail: Material(
+          type: MaterialType.transparency,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
+            children: prepTools,
+          ),
+        ),
+        listColor: c.surface,
+        detailColor: contrastPanel(c),
+        detailFront: prepFront,
+        onShowList: () => setState(() => prepFront = false),
+        onShowDetail: () => setState(() => prepFront = true),
+      );
+    }
     if (wide && mode == 'prep') {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1741,13 +1776,7 @@ class _ShoppingViewState extends State<ShoppingView> {
         ],
       );
     }
-    return RefreshIndicator(
-      onRefresh: widget.onChanged,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-        children: mainChildren,
-      ),
-    );
+    return listPane;
   }
 }
 
