@@ -1513,10 +1513,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: TicketPage(
-                          key: detailKey,
-                          data: data!,
-                          embedded: true,
+                        // Material transparent : l'encre des ListTile/InkWell de la
+                        // fiche se pose dessus, pas sur le DecoratedBox coloré.
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: TicketPage(
+                            key: detailKey,
+                            data: data!,
+                            embedded: true,
                           ticket: selectedTicketId == null
                               ? null
                               : maps(data!['tickets']).firstWhere(
@@ -1527,6 +1531,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),

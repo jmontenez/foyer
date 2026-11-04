@@ -1725,9 +1725,14 @@ class _ShoppingViewState extends State<ShoppingView> {
               ),
             ),
             clipBehavior: Clip.antiAlias,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
-              children: prepTools,
+            // Material transparent : les ListTile/InkWell peignent leur encre
+            // dessus, pas sur le DecoratedBox coloré (sinon assertion Flutter).
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
+                children: prepTools,
+              ),
             ),
           ),
         ],
