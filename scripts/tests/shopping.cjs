@@ -102,8 +102,8 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';
-  // Fermer la feuille d'ajout (tap sur le voile en haut) : la liste redevient l'écran.
-  await page.mouse.click(195, 90);
+  // Fermer la feuille d'ajout : la liste redevient l'écran principal.
+  await page.getByRole('button',{name:'Fermer',exact:true}).click();
   await page.getByRole('heading',{name:/^SURGELÉS/}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-liste-mobile.png', fullPage:true});
 

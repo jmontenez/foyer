@@ -1682,13 +1682,26 @@ class _ShoppingViewState extends State<ShoppingView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: c.onSurfaceVariant.withValues(alpha: .4),
-                          borderRadius: BorderRadius.circular(2),
+                      // Poignée = bouton « Fermer » (le tap sur le voile ferme aussi).
+                      Semantics(
+                        button: true,
+                        label: 'Fermer',
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => addOpen = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: c.onSurfaceVariant.withValues(alpha: .4),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                       Flexible(
