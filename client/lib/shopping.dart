@@ -1103,7 +1103,7 @@ class _ShoppingViewState extends State<ShoppingView> {
     final performers = await askPerformers(
       context,
       _maps(widget.data['members']),
-      {if (me != null) me},
+      {?me},
       action: 'Courses faites',
     );
     if (performers == null) return;
