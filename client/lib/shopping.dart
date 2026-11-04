@@ -1171,17 +1171,72 @@ class _ShoppingViewState extends State<ShoppingView> {
             inList.containsKey(ingredientKey(query)));
     final (groups, basket) = groupByAisle(items, aisles);
 
+    // Habituel en ligne (sketch « Ajout rapide ») : nom à gauche, quantité
+    // mémorisée, bouton rond + à droite. Absent de la liste : un toucher l'ajoute
+    // avec sa quantité ; déjà présent : nom · quantité grisés, pastille ✓, le
+    // toucher ouvre la fiche. Appui long pour modifier l'ingrédient.
     Widget suggestion(Map<String, dynamic> ingredient) {
       final there = inList[ingredientKey(ingredient['name'])];
-      // Puce « Découpes ». Habituel absent de la liste : un toucher l'ajoute
-      // avec sa quantité mémorisée ; déjà présent : la feuille s'ouvre.
-      return CutChip(
-        label: there == null ? ingredient['name'].toString() : itemLabel(there),
-        selected: there != null,
-        onLongPress: () => editSuggestion(ingredient),
-        onTap: () => there == null
-            ? directAdd(list, ingredient)
-            : pick(list, ingredient['name'].toString(), ingredient: ingredient),
+      final label = there != null
+          ? itemLabel(there)
+          : ingredient['name'].toString();
+      final hintQty = there == null
+          ? (ingredient['lastQty'] ?? '').toString()
+          : '';
+      void tap() => there == null
+          ? directAdd(list, ingredient)
+          : pick(list, ingredient['name'].toString(), ingredient: ingredient);
+      void longPress() => editSuggestion(ingredient);
+      return Semantics(
+        button: true,
+        label: label,
+        onTap: tap,
+        onLongPress: longPress,
+        excludeSemantics: true,
+        child: InkWell(
+          onTap: tap,
+          onLongPress: longPress,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: c.outlineVariant)),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: tokensOf(context).displayFont,
+                    fontWeight: FontWeight.w700,
+                    color: there != null ? c.onSurfaceVariant : c.onSurface,
+                  ),
+                ),
+              ),
+              if (hintQty.isNotEmpty) ...[
+                Text(
+                  hintQty,
+                  style: TextStyle(fontSize: 13, color: c.onSurfaceVariant),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: there != null ? c.primary : c.onSurface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  there != null ? Icons.check : Icons.add,
+                  size: 18,
+                  color: there != null ? c.onPrimary : c.surface,
+                ),
+              ),
+            ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -1305,45 +1360,75 @@ class _ShoppingViewState extends State<ShoppingView> {
     }
 
     final prepTools = <Widget>[
-      // En-tête du volet d'ajout : options (importer, ingrédients, rayons).
-      Align(
-        alignment: Alignment.centerRight,
-        child: PopupMenuButton<String>(
-          tooltip: 'Plus d’options',
-          onSelected: (v) => switch (v) {
-            'import' => importList(list),
-            'aisles' => reorderAisles(),
-            'ingredients' => ingredientsPage(),
-            _ => clearDone(list),
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'import',
-              child: Text('Importer une liste…'),
+      // En-tête « Découpes » du volet d'ajout : kicker + question, et le menu
+      // d'options (importer, ingrédients, rayons) discret à droite.
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'AJOUT RAPIDE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .8,
+                    color: c.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'On reprend les habituels ?',
+                  style: TextStyle(
+                    fontFamily: tokensOf(context).displayFont,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                    height: 1.15,
+                    color: c.onSurface,
+                  ),
+                ),
+              ],
             ),
-            const PopupMenuItem(
-              value: 'ingredients',
-              child: Text('Ingrédients'),
-            ),
-            const PopupMenuItem(
-              value: 'aisles',
-              child: Text('Ordre des rayons'),
-            ),
-            if (basket.isNotEmpty)
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Plus d’options',
+            onSelected: (v) => switch (v) {
+              'import' => importList(list),
+              'aisles' => reorderAisles(),
+              'ingredients' => ingredientsPage(),
+              _ => clearDone(list),
+            },
+            itemBuilder: (_) => [
               const PopupMenuItem(
-                value: 'clear',
-                child: Text('Retirer les articles cochés'),
+                value: 'import',
+                child: Text('Importer une liste…'),
               ),
-          ],
-        ),
+              const PopupMenuItem(
+                value: 'ingredients',
+                child: Text('Ingrédients'),
+              ),
+              const PopupMenuItem(
+                value: 'aisles',
+                child: Text('Ordre des rayons'),
+              ),
+              if (basket.isNotEmpty)
+                const PopupMenuItem(
+                  value: 'clear',
+                  child: Text('Retirer les articles cochés'),
+                ),
+            ],
+          ),
+        ],
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 12),
       TextField(
         controller: search,
         focusNode: focus,
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
-          hintText: 'Ajouter un ingrédient…',
+          hintText: 'Un ingrédient…',
           prefixIcon: const Icon(Icons.search),
           isDense: true,
           suffixIcon: query.isEmpty
@@ -1367,11 +1452,22 @@ class _ShoppingViewState extends State<ShoppingView> {
         },
       ),
       if (query.isEmpty) ...[
-        SectionLabel('Accès rapide', quickIngredients(catalog).length),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [for (final i in quickIngredients(catalog)) suggestion(i)],
+        const SizedBox(height: 6),
+        // Accès rapide en liste verticale (sketch) : habituels, un toucher ajoute.
+        for (final i in quickIngredients(catalog)) suggestion(i),
+        const SizedBox(height: 10),
+        Text(
+          'Un toucher pour ajouter. La quantité habituelle est conservée.',
+          style: TextStyle(fontSize: 12, color: c.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: busy ? null : () => importList(list),
+            icon: const Icon(Icons.north_east, size: 18),
+            label: const Text('Coller une liste'),
+          ),
         ),
       ] else ...[
         const SizedBox(height: 6),
@@ -1385,24 +1481,6 @@ class _ShoppingViewState extends State<ShoppingView> {
             subtitle: const Text('Nouvel ingrédient'),
             onTap: () => pick(list, query),
           ),
-      ],
-      if (items.isEmpty) ...[
-        Padding(
-          padding: const EdgeInsets.only(top: 32, bottom: 8),
-          child: Text(
-            'La liste est vide. Touchez un ingrédient ou tapez son nom. Appui long sur une suggestion pour la modifier.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: c.onSurfaceVariant),
-          ),
-        ),
-        Center(
-          child: TextButton.icon(
-            onPressed: busy ? null : () => importList(list),
-            icon: const Icon(Icons.content_paste_go_outlined),
-            label: const Text('Importer une liste collée'),
-          ),
-        ),
-        const SizedBox(height: 16),
       ],
     ];
 
