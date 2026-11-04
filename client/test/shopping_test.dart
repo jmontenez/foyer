@@ -340,4 +340,60 @@ void main() {
     },
   );
 
+  testWidgets('Courses : Préparer sans coche (poubelle), En magasin avec coche', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final data = {
+      'today': '2026-09-25',
+      'tickets': [],
+      'members': [],
+      'me': {'id': 'a'},
+      'shopping': {
+        'lists': [
+          {
+            'id': 'draft',
+            'items': [
+              {
+                'id': '1',
+                'text': 'Lait',
+                'qty': '2 L',
+                'aisle': 'dairy',
+                'done': false,
+              },
+            ],
+          },
+        ],
+        'ingredients': catalog,
+        'aisles': [
+          {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+        ],
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShoppingView(
+            data: data,
+            api: Api(),
+            onChanged: () async {},
+            onOpenTicket: (_) {},
+          ),
+        ),
+      ),
+    );
+    // Préparer (défaut) : pas de case à cocher sur la ligne, une poubelle.
+    expect(find.byType(CutCheck), findsNothing);
+    expect(find.byIcon(Icons.delete_outline), findsWidgets);
+    // En magasin : la case revient, plus de suppression.
+    await tester.tap(find.text('En magasin'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CutCheck), findsOneWidget);
+    expect(find.byIcon(Icons.delete_outline), findsNothing);
+    // Remettre en Préparer (l'état de mode est statique, partagé entre tests).
+    await tester.tap(find.text('Préparer'));
+    await tester.pumpAndSettle();
+  });
 }
