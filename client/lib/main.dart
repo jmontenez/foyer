@@ -1087,10 +1087,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
       );
     }
-    // Seuil mesuré sur les pliants (Fold 5 ouvert 690, Magic V5 724) : au-delà,
-    // le menu passe sur le côté (rail) plutôt qu'en bas. Fermés (~350), ils gardent
-    // le bandeau bas.
-    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    // Deux seuils distincts. `wide` (≥ 640, pliants ouverts : Fold 5 690, Magic V5
+    // 724) : le menu passe sur le côté (rail) plutôt qu'en bas. `twoPane` (≥ 1000,
+    // vraie tablette) : la fiche s'affiche en DEUX-VOLETS côte à côte. Entre les deux,
+    // le rail reste mais la fiche s'ouvre en plein écran (pas de serrage de la liste).
+    final wide = MediaQuery.sizeOf(context).width >= 640;
+    final twoPane = MediaQuery.sizeOf(context).width >= 1000;
     final today =
         DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
     final subtitles = [
@@ -1497,7 +1499,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  if (wide && detailOpen)
+                  if (twoPane && detailOpen)
                     Expanded(
                       flex: 6,
                       // Volet fiche : bloc contrasté « primaire doux » détaché de
