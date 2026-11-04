@@ -1206,8 +1206,90 @@ class _ShoppingViewState extends State<ShoppingView> {
       );
     }
 
+    // Deux modes. Préparer : pas de coche, un toucher ouvre la fiche de
+    // l'ingrédient, une poubelle (et le slide) retire de la liste. En magasin :
+    // case à cocher pour valider ses achats, pas de suppression.
     Widget row(Map<String, dynamic> item) {
       final photoId = photoOf(item['text'].toString());
+      final store = mode == 'store';
+      final qtyChip = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: ShapeDecoration(
+          color: c.primary.withValues(alpha: .13),
+          shape: cutShape(cutSmall),
+        ),
+        child: Text(
+          (item['qty'] ?? '').toString().isEmpty
+              ? 'Qté'
+              : item['qty'].toString(),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            fontFamily: tokensOf(context).displayFont,
+          ),
+        ),
+      );
+      // Rangée plate « Découpes » : (case) + (vignette) + nom + chip qty, filet 1 px.
+      final content = Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.outlineVariant)),
+        ),
+        child: Row(
+          children: [
+            if (store)
+              CutCheck(
+                value: item['done'] == true,
+                onChanged: (_) => toggle(list, item),
+                semanticLabel: item['text'].toString(),
+              ),
+            if (photoId != null) ...[
+              IngredientPhoto(api: widget.api, id: photoId),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  if (store) {
+                    HapticFeedback.selectionClick();
+                    toggle(list, item);
+                  } else {
+                    pick(list, item['text'].toString());
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    item['text'].toString(),
+                    style: store && item['done'] == true
+                        ? TextStyle(
+                            decoration: TextDecoration.lineThrough,
+                            color: c.onSurfaceVariant,
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+            // Préparer : un toucher sur la chip édite ; en magasin, informative.
+            if (store)
+              qtyChip
+            else
+              GestureDetector(
+                onTap: () => pick(list, item['text'].toString()),
+                child: qtyChip,
+              ),
+            // Préparer : poubelle pour retirer (le slide reste possible aussi).
+            if (!store)
+              IconButton(
+                tooltip: 'Retirer de la liste',
+                icon: Icon(Icons.delete_outline, color: c.onSurfaceVariant),
+                onPressed: () => remove(list, item),
+              ),
+          ],
+        ),
+      );
+      if (store) return content;
       return Dismissible(
         key: ValueKey('${list['id']}-${item['id']}'),
         direction: DismissDirection.endToStart,
@@ -1218,71 +1300,7 @@ class _ShoppingViewState extends State<ShoppingView> {
           child: Icon(Icons.delete_outline, color: c.onErrorContainer),
         ),
         onDismissed: (_) => remove(list, item),
-        // Rangée plate « Découpes » : tick ciseau + (vignette) + nom + chip qty,
-        // filet 1 px. Le toucher sur le nom coche ; la case porte son haptique.
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.outlineVariant)),
-          ),
-          child: Row(
-            children: [
-              CutCheck(
-                value: item['done'] == true,
-                onChanged: (_) => toggle(list, item),
-                semanticLabel: item['text'].toString(),
-              ),
-              if (photoId != null) ...[
-                IngredientPhoto(api: widget.api, id: photoId),
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    toggle(list, item);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      item['text'].toString(),
-                      style: item['done'] == true
-                          ? TextStyle(
-                              decoration: TextDecoration.lineThrough,
-                              color: c.onSurfaceVariant,
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-              ),
-              // Chip de quantité « Découpes » : un toucher ouvre la feuille.
-              GestureDetector(
-                onTap: () => pick(list, item['text'].toString()),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: ShapeDecoration(
-                    color: c.primary.withValues(alpha: .13),
-                    shape: cutShape(cutSmall),
-                  ),
-                  child: Text(
-                    (item['qty'] ?? '').toString().isEmpty
-                        ? 'Qté'
-                        : item['qty'].toString(),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: tokensOf(context).displayFont,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: content,
       );
     }
 
