@@ -1,7 +1,10 @@
 const { chromium } = require('../../artifacts/browser/node_modules/playwright');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:390,height:844}});
+  // Deux-volets (>= 640) : les outils d'ajout sont dans le volet droit, toujours
+  // visibles — pas de feuille à ouvrir/fermer (qui tape de façon flaky sous
+  // Flutter web). La feuille téléphone est couverte par le test widget.
+  const page = await browser.newPage({viewport:{width:720,height:1000}});
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const state = async () => page.evaluate(async()=> (await fetch('/api/v1/state')).json());
@@ -44,12 +47,11 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.locator('flt-glass-pane').waitFor({state:'attached'});
   await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
 
-  // Téléphone : la liste est l'écran ; « Ajouter un ingrédient » lève une feuille
-  // (recherche + habituels). Un toucher sur un habituel l'ajoute (quantité mémorisée).
+  // Accès rapide (volet droit, liste verticale des habituels) : un toucher ajoute
+  // directement (quantité mémorisée) ; « Modifier » dans le retour rouvre la feuille.
   await page.getByRole('button',{name:'Courses',exact:true}).click();
-  await page.getByRole('button',{name:'Ajouter un ingrédient',exact:true}).click();
   await chip('Lait').waitFor();
-  await page.screenshot({path:'artifacts/browser/courses-ajout-mobile.png'});
+  await page.screenshot({path:'artifacts/browser/courses-vide.png'});
   await chip('Lait').click();
   await until(async () => (await draft()).some(i => i.text === 'Lait' && i.aisle === 'dairy'), 'Lait non ajouté directement');
   await page.getByRole('button',{name:'Modifier',exact:true}).click();
@@ -102,17 +104,9 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';
-  // Fermer la feuille d'ajout (retenté : le rendu Flutter web rate parfois un tap) :
-  // la liste redevient l'écran principal quand le bouton « Ajouter » réapparaît.
-  const addBar = page.getByRole('button',{name:'Ajouter un ingrédient',exact:true});
-  for (let i = 0; i < 6; i++) {
-    await page.getByRole('button',{name:'Fermer',exact:true}).click().catch(() => {});
-    if (await addBar.isVisible().catch(() => false)) break;
-    await page.waitForTimeout(400);
-  }
-  await addBar.waitFor();
+  // La liste (volet gauche) montre l'ingrédient rangé au rayon Surgelés.
   await page.getByRole('heading',{name:/^SURGELÉS/}).waitFor();
-  await page.screenshot({path:'artifacts/browser/courses-liste-mobile.png', fullPage:true});
+  await page.screenshot({path:'artifacts/browser/courses-liste.png', fullPage:true});
 
   // En magasin : on coche un article ; « Courses faites ! » range les achats dans
   // l'historique (tâche déjà faite) et garde les non achetés dans le brouillon.
