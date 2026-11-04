@@ -395,6 +395,9 @@ class ItemSheet extends StatefulWidget {
   // Photo actuelle de l’ingrédient au catalogue, et affichage du champ photo (pas à l’import).
   final String? imageId;
   final bool withPhoto;
+  // Mode « classeur » intégré : au lieu de fermer une modale (Navigator.pop), le
+  // résultat (ou null = annuler) est renvoyé par ce callback.
+  final void Function(ItemChoice?)? onResult;
   const ItemSheet({
     super.key,
     required this.name,
@@ -405,6 +408,7 @@ class ItemSheet extends StatefulWidget {
     this.inList = false,
     this.imageId,
     this.withPhoto = false,
+    this.onResult,
   });
   @override
   State<ItemSheet> createState() => _ItemSheetState();
@@ -421,7 +425,16 @@ class _ItemSheetState extends State<ItemSheet> {
     super.dispose();
   }
 
-  void done() => Navigator.pop<ItemChoice>(context, (
+  // Modale : ferme en renvoyant le choix. Classeur intégré : via le callback.
+  void _finish(ItemChoice? choice) {
+    if (widget.onResult != null) {
+      widget.onResult!(choice);
+    } else {
+      Navigator.pop<ItemChoice>(context, choice);
+    }
+  }
+
+  void done() => _finish((
     qty: qty.text.trim(),
     aisle: aisle,
     remove: false,
@@ -445,7 +458,23 @@ class _ItemSheetState extends State<ItemSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(widget.name, style: Theme.of(context).textTheme.titleLarge),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  // Classeur : une croix pour refermer la fiche sans enregistrer.
+                  if (widget.onResult != null)
+                    IconButton(
+                      tooltip: 'Fermer',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => _finish(null),
+                    ),
+                ],
+              ),
               if (widget.inList)
                 Text(
                   'Déjà dans la liste',
@@ -462,7 +491,7 @@ class _ItemSheetState extends State<ItemSheet> {
                   Expanded(
                     child: TextField(
                       controller: qty,
-                      autofocus: true,
+                      autofocus: widget.onResult == null,
                       maxLength: 40,
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => done(),
@@ -511,7 +540,7 @@ class _ItemSheetState extends State<ItemSheet> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: () => Navigator.pop<ItemChoice>(context, (
+                    onPressed: () => _finish((
                       qty: '',
                       aisle: aisle,
                       remove: true,
@@ -848,6 +877,9 @@ class _ShoppingViewState extends State<ShoppingView> {
   // Téléphone (Préparer) : la feuille d'ajout (recherche + habituels) est-elle
   // ouverte ? La liste reste l'écran principal ; « Ajouter » lève la feuille.
   bool addOpen = false;
+  // Classeur (option B) : l'article dont la fiche s'ouvre par-dessus tout le
+  // courses (qui dépasse à gauche) ; un tap sur ce bout referme.
+  Map<String, dynamic>? openItem;
 
   // Présentation « Préparer » / « En magasin » : un état d'affichage local à
   // l'appareil (jamais envoyé au serveur), retenu pour la session de l'app.
@@ -947,6 +979,23 @@ class _ShoppingViewState extends State<ShoppingView> {
       inList: existing != null,
     );
     if (choice == null) return;
+    await applyItemChoice(list, name, ingredient, existing, choice);
+  }
+
+  // Ouvre/ferme la fiche d'un article en mode classeur (par-dessus le courses).
+  void openClasseur(Map<String, dynamic> item) =>
+      setState(() => openItem = item);
+  void closeClasseur() => setState(() => openItem = null);
+
+  // Applique le choix de la feuille (ajout, modif quantité/rayon, retrait, photo).
+  // Extrait de `pick` pour être réutilisé par le classeur intégré.
+  Future<void> applyItemChoice(
+    Map<String, dynamic> list,
+    String name,
+    Map<String, dynamic>? ingredient,
+    Map<String, dynamic>? existing,
+    ItemChoice choice,
+  ) async {
     search.clear();
     await run(() async {
       if (existing == null) {
@@ -1312,7 +1361,8 @@ class _ShoppingViewState extends State<ShoppingView> {
                     HapticFeedback.selectionClick();
                     toggle(list, item);
                   } else {
-                    pick(list, item['text'].toString());
+                    // Préparer : ouvre la fiche de l'article en mode classeur.
+                    openClasseur(item);
                   }
                 },
                 child: Padding(
@@ -1329,12 +1379,12 @@ class _ShoppingViewState extends State<ShoppingView> {
                 ),
               ),
             ),
-            // Préparer : un toucher sur la chip édite ; en magasin, informative.
+            // Préparer : un toucher sur la chip ouvre la fiche ; en magasin, informative.
             if (store)
               qtyChip
             else
               GestureDetector(
-                onTap: () => pick(list, item['text'].toString()),
+                onTap: () => openClasseur(item),
                 child: qtyChip,
               ),
             // Préparer : poubelle pour retirer (le slide reste possible aussi).
@@ -1604,9 +1654,47 @@ class _ShoppingViewState extends State<ShoppingView> {
         children: mainChildren,
       ),
     );
+    // Classeur (option B) : la fiche de l'article se pose par-dessus TOUT le
+    // courses, qui dépasse à gauche ; un tap sur ce bout referme.
+    Widget wrap(Widget body) {
+      if (openItem == null) return body;
+      final item = openItem!;
+      return BinderSheets(
+        list: body,
+        detail: ItemSheet(
+          name: item['text'].toString(),
+          qty: item['qty']?.toString(),
+          aisle: item['aisle']?.toString(),
+          inList: true,
+          aisles: aisles,
+          api: widget.api,
+          imageId: photoOf(item['text'].toString()),
+          withPhoto: widget.data['demo'] != true,
+          onResult: (choice) {
+            closeClasseur();
+            if (choice != null) {
+              applyItemChoice(
+                list,
+                item['text'].toString(),
+                null,
+                item,
+                choice,
+              );
+            }
+          },
+        ),
+        listColor: c.surface,
+        detailColor: contrastPanel(c),
+        detailFront: true,
+        onShowList: closeClasseur,
+        onShowDetail: () {},
+      );
+    }
+
     if (twoPane && mode == 'prep') {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      return wrap(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: RefreshIndicator(
@@ -1642,16 +1730,18 @@ class _ShoppingViewState extends State<ShoppingView> {
             ),
           ),
         ],
-      );
+      ),
+    );
     }
     if (mode == 'prep') {
       // Téléphone : la liste est l'écran principal ; « Ajouter un ingrédient »
       // lève une feuille (recherche + habituels) sans quitter la liste, qui se
       // remplit au fil des ajouts. La feuille réutilise `prepTools`.
-      return Stack(
-        children: [
-          listPane,
-          if (addOpen) ...[
+      return wrap(
+        Stack(
+          children: [
+            listPane,
+            if (addOpen) ...[
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -1682,27 +1772,37 @@ class _ShoppingViewState extends State<ShoppingView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Poignée = bouton « Fermer » (le tap sur le voile ferme aussi).
-                      Semantics(
-                        button: true,
-                        label: 'Fermer',
-                        excludeSemantics: true,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => addOpen = false),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            alignment: Alignment.center,
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: c.onSurfaceVariant.withValues(alpha: .4),
-                                borderRadius: BorderRadius.circular(2),
+                      // En-tête : poignée (tap pour fermer) + croix « Fermer »
+                      // (bouton fiable ; le tap sur le voile ferme aussi).
+                      Row(
+                        children: [
+                          const SizedBox(width: 48),
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => setState(() => addOpen = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                alignment: Alignment.center,
+                                child: Container(
+                                  width: 40,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: c.onSurfaceVariant.withValues(
+                                      alpha: .4,
+                                    ),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          IconButton(
+                            tooltip: 'Fermer',
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(() => addOpen = false),
+                          ),
+                        ],
                       ),
                       Flexible(
                         child: ListView(
@@ -1739,9 +1839,10 @@ class _ShoppingViewState extends State<ShoppingView> {
               ),
             ),
         ],
+        ),
       );
     }
-    return listPane;
+    return wrap(listPane);
   }
 }
 
