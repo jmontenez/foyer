@@ -1738,7 +1738,8 @@ class _ShoppingViewState extends State<ShoppingView> {
       // lève une feuille (recherche + habituels) sans quitter la liste, qui se
       // remplit au fil des ajouts. La feuille réutilise `prepTools`.
       return wrap(
-        Stack(
+        LayoutBuilder(
+          builder: (context, box) => Stack(
           children: [
             listPane,
             if (addOpen) ...[
@@ -1754,9 +1755,9 @@ class _ShoppingViewState extends State<ShoppingView> {
               right: 0,
               bottom: 0,
               child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.72,
-                ),
+                // Hauteur bornée à la zone courses (pas à l'écran) : il reste
+                // toujours une bande « voile » en haut, tappable pour fermer.
+                constraints: BoxConstraints(maxHeight: box.maxHeight * 0.82),
                 decoration: ShapeDecoration(
                   color: contrastPanel(c),
                   shape: const RoundedRectangleBorder(
@@ -1839,6 +1840,7 @@ class _ShoppingViewState extends State<ShoppingView> {
               ),
             ),
         ],
+        ),
         ),
       );
     }
