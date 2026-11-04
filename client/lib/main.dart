@@ -135,6 +135,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   // Deux volets (écran ouvert) : fiche affichée à droite plutôt qu'en route
   // plein écran. `selectedTicketId` = null pour une nouvelle tâche dans le volet.
   bool detailOpen = false;
+  // Écran moyen (feuilles qui se recouvrent) : quelle feuille est devant.
+  // true = la fiche couvre, la liste dépasse à gauche ; false = l'inverse.
+  bool detailFront = true;
   String? selectedTicketId;
   GlobalKey<_TicketPageState> detailKey = GlobalKey<_TicketPageState>();
   String person = 'all', query = '', tag = 'all';
@@ -486,14 +489,17 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<void> openTicket([Map<String, dynamic>? ticket]) async {
     if (data == null) return;
-    // Écran ouvert : la fiche s'affiche dans le volet de droite (pas de route
-    // plein écran). On confirme d'abord l'abandon d'une saisie en cours.
-    if (MediaQuery.sizeOf(context).width >= 1000) {
+    // Écran ouvert (≥ 640) : la fiche s'affiche sur place, pas en route plein
+    // écran. ≥ 1000 = deux-volets côte à côte ; 640-1000 = feuilles qui se
+    // recouvrent (la fiche se pose devant). On confirme d'abord l'abandon d'une
+    // saisie en cours.
+    if (MediaQuery.sizeOf(context).width >= 640) {
       final leave =
           await (detailKey.currentState?.confirmLeave() ?? Future.value(true));
       if (!leave || !mounted) return;
       setState(() {
         detailOpen = true;
+        detailFront = true;
         selectedTicketId = ticket?['id']?.toString();
         detailKey = GlobalKey<_TicketPageState>();
       });
@@ -1233,16 +1239,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 utilities: [?searchUtil, notifUtil],
               ),
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    // Liste maître un peu plus étroite que la fiche : le volet de
-                    // droite (détail) a besoin de largeur (méta + notes + étapes).
-                    flex: detailOpen ? 5 : 1,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
-                      child: Column(
+              child: Builder(
+                builder: (context) {
+                  final c = Theme.of(context).colorScheme;
+                  final listColumn = Padding(
+                    padding: EdgeInsets.symmetric(horizontal: wide ? 16 : 0),
+                    child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           ScreenHeader(
@@ -1497,44 +1499,69 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  if (twoPane && detailOpen)
-                    Expanded(
-                      flex: 6,
-                      // Volet fiche : bloc contrasté « primaire doux » détaché de
-                      // la liste (plus de filet — le contraste fait la séparation).
-                      child: Container(
-                        decoration: ShapeDecoration(
-                          color: contrastPanel(Theme.of(context).colorScheme),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(26),
-                              bottomLeft: Radius.circular(22),
+                    );
+
+                  if (!detailOpen) return listColumn;
+
+                  // Fiche brute : la couleur du support (volet ou feuille) est
+                  // posée par le conteneur ci-dessous ou par BinderSheets.
+                  // Material transparent : l'encre des ListTile/InkWell s'y pose.
+                  final fiche = Material(
+                    type: MaterialType.transparency,
+                    child: TicketPage(
+                      key: detailKey,
+                      data: data!,
+                      embedded: true,
+                      ticket: selectedTicketId == null
+                          ? null
+                          : maps(data!['tickets']).firstWhere(
+                              (x) => x['id'] == selectedTicketId,
+                              orElse: () => <String, dynamic>{},
                             ),
+                      onClose: closeDetail,
+                    ),
+                  );
+
+                  if (twoPane) {
+                    // Deux-volets côte à côte (grande tablette). Fiche = bloc
+                    // contrasté « primaire doux » détaché de la liste.
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 5, child: listColumn),
+                        Expanded(
+                          flex: 6,
+                          child: Container(
+                            decoration: ShapeDecoration(
+                              color: contrastPanel(c),
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.only(
+                                  topLeft: Radius.circular(26),
+                                  bottomLeft: Radius.circular(22),
+                                ),
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: fiche,
                           ),
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        // Material transparent : l'encre des ListTile/InkWell de la
-                        // fiche se pose dessus, pas sur le DecoratedBox coloré.
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: TicketPage(
-                            key: detailKey,
-                            data: data!,
-                            embedded: true,
-                          ticket: selectedTicketId == null
-                              ? null
-                              : maps(data!['tickets']).firstWhere(
-                                  (x) => x['id'] == selectedTicketId,
-                                  orElse: () => <String, dynamic>{},
-                                ),
-                          onClose: closeDetail,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                      ],
+                    );
+                  }
+
+                  // Écran moyen (640-1000) : feuilles qui se recouvrent. La fiche
+                  // se pose devant, la liste dépasse d'un vrai bout à gauche ; un
+                  // tap sur ce bout ramène la liste devant (et inversement).
+                  return BinderSheets(
+                    list: listColumn,
+                    detail: fiche,
+                    listColor: c.surface,
+                    detailColor: contrastPanel(c),
+                    detailFront: detailFront,
+                    onShowList: () => setState(() => detailFront = false),
+                    onShowDetail: () => setState(() => detailFront = true),
+                  );
+                },
               ),
             ),
           ],

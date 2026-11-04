@@ -2190,3 +2190,98 @@ SnackBar undoSnackBar(String text, VoidCallback onUndo) => SnackBar(
   persist: false,
   action: SnackBarAction(label: 'Annuler', onPressed: onUndo),
 );
+
+/// Deux feuilles qui se recouvrent (écran moyen, 640-1000). La feuille de devant
+/// couvre ~70 % ; celle du fond dépasse d'un vrai bout (~30 %) du côté opposé. Un
+/// tap sur ce bout fait passer la feuille du fond devant (et l'autre recule mais
+/// dépasse à son tour). Coin arrondi + ombre = papier posé. Sert à la fiche de
+/// tâche comme au volet d'ajout d'ingrédient (courses).
+class BinderSheets extends StatelessWidget {
+  const BinderSheets({
+    super.key,
+    required this.list,
+    required this.detail,
+    required this.listColor,
+    required this.detailColor,
+    required this.detailFront,
+    required this.onShowList,
+    required this.onShowDetail,
+    this.peek = 0.3,
+  });
+
+  /// Contenu de la liste (la « page »).
+  final Widget list;
+
+  /// Contenu du détail (fiche de tâche ou volet d'ajout).
+  final Widget detail;
+  final Color listColor;
+  final Color detailColor;
+
+  /// true : le détail est devant (la liste dépasse à gauche) ; false : l'inverse.
+  final bool detailFront;
+
+  /// Ramener la liste / le détail devant (tap sur le bout qui dépasse).
+  final VoidCallback onShowList;
+  final VoidCallback onShowDetail;
+
+  /// Part de largeur occupée par le bout qui dépasse.
+  final double peek;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final peekW = box.maxWidth * peek;
+        final back = detailFront ? list : detail;
+        final front = detailFront ? detail : list;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Feuille du fond : pleine largeur ; seul son bord dépasse, le reste
+            // est couvert par la feuille de devant (opaque).
+            Positioned.fill(child: back),
+            // Capteur de tap sur le bout qui dépasse → ramène le fond devant.
+            // Opaque : intercepte avant le contenu de la feuille du fond.
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: detailFront ? 0 : null,
+              right: detailFront ? null : 0,
+              width: peekW,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: detailFront ? onShowList : onShowDetail,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            // Feuille de devant : couvre ~70 %, ancrée du côté opposé au bout,
+            // coin arrondi + ombre sur le bord qui chevauche.
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: detailFront ? peekW : 0,
+              right: detailFront ? 0 : peekW,
+              child: Material(
+                color: detailFront ? detailColor : listColor,
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: detailFront
+                      ? const BorderRadius.only(
+                          topLeft: Radius.circular(26),
+                          bottomLeft: Radius.circular(22),
+                        )
+                      : const BorderRadius.only(
+                          topRight: Radius.circular(26),
+                          bottomRight: Radius.circular(22),
+                        ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: front,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
