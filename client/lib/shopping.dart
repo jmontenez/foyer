@@ -1586,7 +1586,10 @@ class _ShoppingViewState extends State<ShoppingView> {
     // volet à droite (le sketch), la liste occupe le volet principal à gauche.
     // En magasin, ou sur écran fermé, tout reste dans une seule colonne (les
     // outils réapparaissent en tête via le spread conditionnel ci-dessous).
-    final wide = MediaQuery.sizeOf(context).width >= 640;
+    // Deux-volets réservé aux vraies tablettes (≥ 1000) : en dessous (tél/pliants)
+    // la fiche s'ouvre en plein écran plutôt que de serrer la liste. Les « feuilles »
+    // (overlap volontaire) arriveront pour les largeurs intermédiaires.
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
     final mainChildren = <Widget>[
       if (lists.length > 1)
         SingleChildScrollView(
