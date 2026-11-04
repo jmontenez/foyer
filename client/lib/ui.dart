@@ -1235,12 +1235,8 @@ class FoyerRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final band = Color.alphaBlend(
-      c.secondaryContainer.withValues(
-        alpha: Theme.of(context).brightness == Brightness.dark ? .30 : .48,
-      ),
-      Theme.of(context).scaffoldBackgroundColor,
-    );
+    // Rail « full » (Découpes original) : bande accent saturé + highlight encre.
+    final band = c.secondaryContainer;
     return Container(
       width: 88,
       color: band,
@@ -1285,7 +1281,7 @@ class FoyerRail extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 11),
                       decoration: i == index
                           ? ShapeDecoration(
-                              color: c.primary,
+                              color: c.onSurface,
                               shape: cutShape(13),
                             )
                           : null,
@@ -1296,8 +1292,8 @@ class FoyerRail extends StatelessWidget {
                             sign,
                             size: 20,
                             color: i == index
-                                ? c.onPrimary
-                                : c.onSurfaceVariant,
+                                ? c.surface
+                                : c.onSurface,
                           ),
                           const SizedBox(height: 5),
                           Text(
@@ -1311,8 +1307,8 @@ class FoyerRail extends StatelessWidget {
                                   ? FontWeight.w800
                                   : FontWeight.w700,
                               color: i == index
-                                  ? c.onPrimary
-                                  : c.onSurfaceVariant,
+                                  ? c.surface
+                                  : c.onSurface,
                             ),
                           ),
                         ],
