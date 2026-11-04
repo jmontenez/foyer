@@ -120,7 +120,9 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await until(async () => (await state()).tickets.some(t => t.shopping && t.stageId === 'done'), 'Tâche Courses faite non créée');
   await page.screenshot({path:'artifacts/browser/courses-faites-mobile.png'});
   const back = await draft();
-  if (back.length !== 1 || back[0].text !== renamed || back[0].done) throw new Error('Non acheté non gardé dans le brouillon : ' + JSON.stringify(back));
+  // Checkout : l'article coché (Lait) est rangé dans l'historique, les non cochés restent.
+  if (back.some(i => i.text === 'Lait')) throw new Error('Article coché (Lait) non retiré : ' + JSON.stringify(back));
+  if (!back.some(i => i.text === renamed && !i.done)) throw new Error('Non acheté non gardé dans le brouillon : ' + JSON.stringify(back));
   if(errors.length) throw Error(errors.join('\n'));
   console.log('PASS : accès rapide, « déjà dans la liste », nouvel ingrédient et rayon, recherche, En magasin + « Courses faites » (checkout), brouillon conservé.');
   await browser.close();
