@@ -3365,8 +3365,9 @@ class _TicketPageState extends State<TicketPage> {
     ];
   }
 
-  // Actions de clôture au bas de la fiche (sketch) : gros « C'est fait » puis
-  // « Reporter » / « On ne le fait pas » en liens, et À faire/Bloqué en secondaire.
+  // Actions de clôture (remontées en haut de la fiche, après les méta) : gros
+  // « C'est fait » puis « Reporter » / « On ne le fait pas » en liens, et
+  // À faire/Bloqué en secondaire.
   List<Widget> closeActions() {
     final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
     if (closed) return [];
@@ -3706,6 +3707,9 @@ class _TicketPageState extends State<TicketPage> {
                 ),
               ),
               ...actions(),
+              // « C'est fait » et la clôture remontés en haut (accessibles sans
+              // défiler toute la fiche), juste après le résumé et les méta.
+              ...closeActions(),
               heading(existing ? 'Notes' : 'L’essentiel'),
               TextField(
                 controller: description,
@@ -3759,8 +3763,6 @@ class _TicketPageState extends State<TicketPage> {
                   label: const Text('Commenter'),
                 ),
               ),
-              // Actions de clôture en bas (sketch) : C'est fait + liens.
-              ...closeActions(),
               const SizedBox(height: 16),
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,
