@@ -1,7 +1,9 @@
 const { chromium } = require('../../artifacts/browser/node_modules/playwright');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:390,height:844}});
+  // Grande hauteur : l'accès rapide en liste verticale allonge le volet, on garde
+  // les sections de la liste dans le viewport (Flutter ne construit pas le hors-champ).
+  const page = await browser.newPage({viewport:{width:390,height:1600}});
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const state = async () => page.evaluate(async()=> (await fetch('/api/v1/state')).json());
