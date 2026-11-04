@@ -95,9 +95,9 @@ void main() {
   testWidgets(
     'Une suggestion déjà dans la liste le montre avant de la toucher',
     (tester) async {
-      // Écran étroit (< 640) : outils d'ajout inline, une seule colonne (dès 640
-      // ils passent dans le volet droit, en deux-volets).
-      tester.view.physicalSize = const Size(600, 1000);
+      // Deux-volets (>= 640) : les outils d'ajout sont dans le volet droit, visibles
+      // (sur téléphone ils passent dans une feuille ouverte par « Ajouter »).
+      tester.view.physicalSize = const Size(1000, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final data = {
@@ -390,5 +390,51 @@ void main() {
     // Remettre en Préparer (l'état de mode est statique, partagé entre tests).
     await tester.tap(find.text('Préparer'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('Courses téléphone : « Ajouter » lève la feuille d’ajout', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final data = {
+      'today': '2026-09-25',
+      'tickets': [],
+      'members': [],
+      'me': {'id': 'a'},
+      'shopping': {
+        'lists': [
+          {'id': 'draft', 'items': []},
+        ],
+        'ingredients': catalog,
+        'aisles': [
+          {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+        ],
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShoppingView(
+            data: data,
+            api: Api(),
+            onChanged: () async {},
+            onOpenTicket: (_) {},
+          ),
+        ),
+      ),
+    );
+    // Feuille fermée : la liste est l'écran, un bouton « Ajouter », pas de recherche.
+    expect(
+      find.widgetWithText(FilledButton, 'Ajouter un ingrédient'),
+      findsOneWidget,
+    );
+    expect(find.byType(TextField), findsNothing);
+    // « Ajouter » lève la feuille : recherche + habituels apparaissent.
+    await tester.tap(find.widgetWithText(FilledButton, 'Ajouter un ingrédient'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('On reprend les habituels ?'), findsOneWidget);
   });
 }

@@ -1,9 +1,7 @@
 const { chromium } = require('../../artifacts/browser/node_modules/playwright');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  // Grande hauteur : l'accès rapide en liste verticale allonge le volet, on garde
-  // les sections de la liste dans le viewport (Flutter ne construit pas le hors-champ).
-  const page = await browser.newPage({viewport:{width:390,height:1600}});
+  const page = await browser.newPage({viewport:{width:390,height:844}});
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const state = async () => page.evaluate(async()=> (await fetch('/api/v1/state')).json());
@@ -46,11 +44,12 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.locator('flt-glass-pane').waitFor({state:'attached'});
   await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
 
-  // Ajout rapide (liste verticale des habituels) : un toucher ajoute directement
-  // (quantité mémorisée) ; « Modifier » dans le retour visible rouvre la feuille.
+  // Téléphone : la liste est l'écran ; « Ajouter un ingrédient » lève une feuille
+  // (recherche + habituels). Un toucher sur un habituel l'ajoute (quantité mémorisée).
   await page.getByRole('button',{name:'Courses',exact:true}).click();
+  await page.getByRole('button',{name:'Ajouter un ingrédient',exact:true}).click();
   await chip('Lait').waitFor();
-  await page.screenshot({path:'artifacts/browser/courses-vide-mobile.png'});
+  await page.screenshot({path:'artifacts/browser/courses-ajout-mobile.png'});
   await chip('Lait').click();
   await until(async () => (await draft()).some(i => i.text === 'Lait' && i.aisle === 'dairy'), 'Lait non ajouté directement');
   await page.getByRole('button',{name:'Modifier',exact:true}).click();
@@ -66,14 +65,12 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await chip('Surgelés').click();
   await page.getByRole('button',{name:'Ajouter',exact:true}).click();
   await until(async () => (await draft()).some(i => i.text === fresh && i.aisle === 'frozen'), 'Nouvel ingrédient non ajouté');
-  await page.getByRole('heading',{name:/^SURGELÉS/}).waitFor();
   const known = (await state()).shopping.ingredients.find(i => i.name === fresh);
   if (!known || known.aisle !== 'frozen') throw new Error('Rayon non mémorisé');
   // Recherche tolérante : « frite » retrouve l’ingrédient, marqué dans la liste.
   await type(fresh.slice(0, 9), page.getByRole('button',{name:fresh + ' Dans la liste'}));
   await page.screenshot({path:'artifacts/browser/courses-recherche-mobile.png'});
   await page.getByRole('button',{name:'Effacer',exact:true}).click();
-  await page.screenshot({path:'artifacts/browser/courses-liste-mobile.png', fullPage:true});
   // Ordre des rayons : l’écran s’ouvre depuis le menu.
   await page.getByRole('button',{name:'Plus d’options',exact:true}).click();
   await page.getByRole('menuitem',{name:'Ordre des rayons'}).or(page.getByRole('button',{name:'Ordre des rayons'})).or(page.getByText('Ordre des rayons',{exact:true})).first().click();
@@ -105,6 +102,10 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';
+  // Fermer la feuille d'ajout : la liste redevient l'écran principal.
+  await page.getByRole('button',{name:'Fermer',exact:true}).click();
+  await page.getByRole('heading',{name:/^SURGELÉS/}).waitFor();
+  await page.screenshot({path:'artifacts/browser/courses-liste-mobile.png', fullPage:true});
 
   // En magasin : on coche un article ; « Courses faites ! » range les achats dans
   // l'historique (tâche déjà faite) et garde les non achetés dans le brouillon.
@@ -119,7 +120,9 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await until(async () => (await state()).tickets.some(t => t.shopping && t.stageId === 'done'), 'Tâche Courses faite non créée');
   await page.screenshot({path:'artifacts/browser/courses-faites-mobile.png'});
   const back = await draft();
-  if (back.length !== 1 || back[0].text !== renamed || back[0].done) throw new Error('Non acheté non gardé dans le brouillon : ' + JSON.stringify(back));
+  // Checkout : l'article coché (Lait) est rangé dans l'historique, les non cochés restent.
+  if (back.some(i => i.text === 'Lait')) throw new Error('Article coché (Lait) non retiré : ' + JSON.stringify(back));
+  if (!back.some(i => i.text === renamed && !i.done)) throw new Error('Non acheté non gardé dans le brouillon : ' + JSON.stringify(back));
   if(errors.length) throw Error(errors.join('\n'));
   console.log('PASS : accès rapide, « déjà dans la liste », nouvel ingrédient et rayon, recherche, En magasin + « Courses faites » (checkout), brouillon conservé.');
   await browser.close();
