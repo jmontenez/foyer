@@ -289,6 +289,12 @@ api.MapPost("/shopping/schedule", async (ShoppingScheduleInput input, HttpContex
     if (settings.PublicDemo && input.Mode == "new" && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
     return Shopping.Schedule(h, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow);
 }));
+// « Courses faites » : les articles cochés du brouillon deviennent une tâche Courses déjà faite.
+api.MapPost("/shopping/checkout", async (ShoppingCheckoutInput input, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    if (settings.PublicDemo && h.Tickets.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
+    return Shopping.Checkout(h, input.Performers, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow);
+}));
 api.MapPut("/shopping/ingredients/{name}", async (string name, IngredientInput input, HttpContext ctx, Store store) => await store.Update(h =>
     Shopping.EditIngredient(h, name, input, Security.Member(ctx, h).Id, DateTimeOffset.UtcNow)));
 api.MapDelete("/shopping/ingredients/{name}", async (string name, Store store) =>

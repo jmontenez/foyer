@@ -402,4 +402,43 @@ public class ShoppingTests
         Assert.False(h.Tickets[0].Shopping);
         Assert.Null(h.Tickets[0].Checklist[0].Qty);
     }
+
+    [Fact]
+    public void CheckoutMovesBoughtToDoneTicketAndKeepsTheRest()
+    {
+        var h = Home();
+        var milk = Add(h, "Lait", "2 L");
+        Add(h, "Œufs", "6");
+        var bread = Add(h, "Pain");
+        // Achetés : le lait et le pain ; pas les œufs.
+        Shopping.Update(h, Shopping.Draft, milk.Id, new ShoppingItemPatch(true, null, null), "a", Now);
+        Shopping.Update(h, Shopping.Draft, bread.Id, new ShoppingItemPatch(true, null, null), "a", Now);
+        var ticket = Shopping.Checkout(h, ["a"], "a", Now);
+        Assert.Equal("done", ticket.StageId);
+        Assert.True(ticket.Shopping);
+        Assert.Equal(["a"], ticket.Performers);
+        Assert.NotNull(ticket.ClosedAt);
+        Assert.Equal(new[] { "Lait", "Pain" }, ticket.Checklist.Select(c => c.Text).OrderBy(x => x).ToArray());
+        Assert.All(ticket.Checklist, c => Assert.True(c.Done));
+        Assert.Contains(h.Tickets, t => t.Id == ticket.Id);
+        // Le brouillon ne garde que le non-acheté.
+        Assert.Equal(new[] { "Œufs" }, h.ShoppingDraft.Select(c => c.Text).ToArray());
+    }
+
+    [Fact]
+    public void CheckoutNeedsACheckedItem()
+    {
+        var h = Home();
+        Add(h, "Lait");
+        Assert.Throws<RuleException>(() => Shopping.Checkout(h, ["a"], "a", Now));
+    }
+
+    [Fact]
+    public void CheckoutNeedsAPerformer()
+    {
+        var h = Home();
+        var milk = Add(h, "Lait");
+        Shopping.Update(h, Shopping.Draft, milk.Id, new ShoppingItemPatch(true, null, null), "a", Now);
+        Assert.Throws<RuleException>(() => Shopping.Checkout(h, [], "a", Now));
+    }
 }
