@@ -289,6 +289,7 @@ enum FoyerSign {
   sun,
   cal,
   book,
+  hourglass,
 }
 
 /// Signe d’un rayon de courses (ids du serveur, repli : cabas).
@@ -513,6 +514,16 @@ class _SignPainter extends CustomPainter {
             ..close(),
           fill,
         );
+      case FoyerSign.hourglass:
+        // Sablier : deux triangles joints au centre + barres haut/bas.
+        canvas.drawPath(poly([(5, 4.5), (19, 4.5), (12, 12)]), fill);
+        canvas.drawPath(poly([(12, 12), (19, 19.5), (5, 19.5)]), fill);
+        final bar = Paint()
+          ..color = color
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(4.5, 4), const Offset(19.5, 4), bar);
+        canvas.drawLine(const Offset(4.5, 20), const Offset(19.5, 20), bar);
     }
   }
 
@@ -1371,17 +1382,6 @@ class FoyerRail extends StatelessWidget {
   }
 }
 
-/// Tampon biseauté irrégulier derrière le signe actif (rail et bandeau).
-// Tampon « Découpes » de l'active dans le bandeau fermé : coin arrondi asymétrique
-// (le rail ouvert, lui, utilise un bloc icône+label ; cf. FoyerRail).
-RRect _stampRRect(Size s) => RRect.fromRectAndCorners(
-  Offset.zero & s,
-  topLeft: Radius.circular(s.height * .5),
-  topRight: Radius.circular(s.height * .22),
-  bottomRight: Radius.circular(s.height * .42),
-  bottomLeft: Radius.circular(s.height * .22),
-);
-
 /// Pastille de filtre (pleine quand active).
 class FilterPill extends StatelessWidget {
   final String label;
@@ -1464,15 +1464,11 @@ class FloatingNav extends StatelessWidget {
   final int index;
   final List<(FoyerSign, String)> items;
   final ValueChanged<int> onSelected;
-  final List<Map<String, dynamic>> members;
-  final VoidCallback? onProfile;
   const FloatingNav({
     super.key,
     required this.index,
     required this.items,
     required this.onSelected,
-    this.members = const [],
-    this.onProfile,
   });
   @override
   Widget build(BuildContext context) {
@@ -1482,7 +1478,8 @@ class FloatingNav extends StatelessWidget {
     return ClipPath(
       clipper: _TornTop(),
       child: Material(
-        color: Theme.of(context).cardTheme.color,
+        // Même bande accent que le rail latéral.
+        color: c.secondaryContainer,
         elevation: 6,
         shadowColor: Colors.black26,
         child: SafeArea(
@@ -1491,7 +1488,9 @@ class FloatingNav extends StatelessWidget {
             height: 72,
             child: Row(
               children: [
-                const SizedBox(width: 4),
+                // Mêmes langage que le rail : destination active = bloc encre au
+                // coin (subtil) sur la bande accent. Plus de réglages ici (ils
+                // restent sur l'avatar de l'en-tête).
                 for (final (i, (sign, label)) in items.indexed)
                   Expanded(
                     child: Semantics(
@@ -1503,81 +1502,46 @@ class FloatingNav extends StatelessWidget {
                         message: label,
                         child: InkWell(
                           onTap: () => onSelected(i),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(
-                                width: 46,
-                                height: 32,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    if (i == index)
-                                      CustomPaint(
-                                        size: const Size(44, 32),
-                                        painter: _StampPainter(c.primary),
-                                      ),
-                                    SignIcon(
-                                      sign,
-                                      size: 19,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(3, 6, 3, 6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 5),
+                              decoration: i == index
+                                  ? ShapeDecoration(
+                                      color: c.onSurface,
+                                      shape: cutShape(13),
+                                    )
+                                  : null,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SignIcon(
+                                    sign,
+                                    size: 19,
+                                    color: i == index ? c.surface : c.onSurface,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontFamily: t.displayFont,
+                                      fontWeight: FontWeight.w800,
                                       color: i == index
-                                          ? c.onPrimary
-                                          : c.onSurfaceVariant,
+                                          ? c.surface
+                                          : c.onSurface,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontFamily: t.displayFont,
-                                  fontWeight: i == index
-                                      ? FontWeight.w800
-                                      : FontWeight.w700,
-                                  color: i == index
-                                      ? c.onSurface
-                                      : c.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                // Avatars « À deux » à droite (toucher = réglages).
-                if (members.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Semantics(
-                    button: true,
-                    label: 'Réglages',
-                    child: GestureDetector(
-                      onTap: onProfile,
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 6, right: 12),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (final (i, m) in members.indexed)
-                              Padding(
-                                padding: EdgeInsets.only(left: i == 0 ? 0 : 3),
-                                child: MemberAvatar(
-                                  name: m['name'].toString(),
-                                  index: i,
-                                  size: 24,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
@@ -1606,18 +1570,6 @@ class _TornTop extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_TornTop old) => false;
-}
-
-/// Tampon irrégulier derrière le signe actif — même famille que les découpes.
-class _StampPainter extends CustomPainter {
-  final Color color;
-  _StampPainter(this.color);
-  @override
-  void paint(Canvas canvas, Size size) =>
-      canvas.drawRRect(_stampRRect(size), Paint()..color = color);
-
-  @override
-  bool shouldRepaint(_StampPainter old) => old.color != color;
 }
 
 /// État vide « Découpes » : une petite composition de signes superposés en

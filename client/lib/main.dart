@@ -1163,18 +1163,20 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Ce qu’il faut rapporter',
     ];
     final tickets = visible();
-    // Quatre destinations ; « Prévu » regroupe Semaine, Tableau et Un jour
-    // (les vues internes 0..5 restent inchangées, seule la porte d'entrée change).
+    // Cinq destinations : « Prévu » = Semaine/Tableau ; le backlog (« Un jour »,
+    // vue interne tab 3) a sa propre porte d'entrée pour y accéder directement.
     const destinations = [
       (FoyerSign.sun, 'Aujourd’hui'),
       (FoyerSign.bag, 'Courses'),
       (FoyerSign.cal, 'Prévu'),
+      (FoyerSign.hourglass, 'Backlog'),
       (FoyerSign.book, 'Journal'),
     ];
     final destination = switch (tab) {
       0 => 0,
       5 => 1,
-      4 => 3,
+      3 => 3,
+      4 => 4,
       _ => 2,
     };
     void openDestination(int d) => setState(() {
@@ -1186,7 +1188,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       tab = switch (d) {
         0 => 0,
         1 => 5,
-        3 => 4,
+        3 => 3,
+        4 => 4,
         _ => lastPlanned,
       };
     });
@@ -1274,8 +1277,6 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               index: destination,
               items: destinations,
               onSelected: openDestination,
-              members: members,
-              onProfile: settingsDialog,
             ),
       body: SafeArea(
         bottom: false,
@@ -1430,10 +1431,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                               child: Row(
                                 children: [
+                                  // « Un jour » (backlog) est désormais une
+                                  // destination à part : Prévu = Semaine/Tableau.
                                   for (final (t, label) in [
                                     (1, 'Semaine'),
                                     (2, 'Tableau'),
-                                    (3, 'Un jour'),
                                   ])
                                     FilterPill(
                                       label: label,
