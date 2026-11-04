@@ -1772,27 +1772,37 @@ class _ShoppingViewState extends State<ShoppingView> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Poignée = bouton « Fermer » (le tap sur le voile ferme aussi).
-                      Semantics(
-                        button: true,
-                        label: 'Fermer',
-                        excludeSemantics: true,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => addOpen = false),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            alignment: Alignment.center,
-                            child: Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: c.onSurfaceVariant.withValues(alpha: .4),
-                                borderRadius: BorderRadius.circular(2),
+                      // En-tête : poignée (tap pour fermer) + croix « Fermer »
+                      // (bouton fiable ; le tap sur le voile ferme aussi).
+                      Row(
+                        children: [
+                          const SizedBox(width: 48),
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => setState(() => addOpen = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                alignment: Alignment.center,
+                                child: Container(
+                                  width: 40,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    color: c.onSurfaceVariant.withValues(
+                                      alpha: .4,
+                                    ),
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          IconButton(
+                            tooltip: 'Fermer',
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(() => addOpen = false),
+                          ),
+                        ],
                       ),
                       Flexible(
                         child: ListView(
