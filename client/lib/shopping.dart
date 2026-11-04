@@ -877,9 +877,9 @@ class _ShoppingViewState extends State<ShoppingView> {
   // Téléphone (Préparer) : la feuille d'ajout (recherche + habituels) est-elle
   // ouverte ? La liste reste l'écran principal ; « Ajouter » lève la feuille.
   bool addOpen = false;
-  // Classeur (option B) : l'article dont la fiche s'ouvre par-dessus tout le
-  // courses (qui dépasse à gauche) ; un tap sur ce bout referme.
-  Map<String, dynamic>? openItem;
+  // Classeur (option B) : l'ingrédient (nom + éventuel catalogue) dont la fiche
+  // s'ouvre par-dessus tout le courses ; un tap sur le bout qui dépasse referme.
+  ({String name, Map<String, dynamic>? ingredient})? classeur;
 
   // Présentation « Préparer » / « En magasin » : un état d'affichage local à
   // l'appareil (jamais envoyé au serveur), retenu pour la session de l'app.
@@ -940,52 +940,16 @@ class _ShoppingViewState extends State<ShoppingView> {
     return null;
   }
 
-  Future<ItemChoice?> sheet(
-    String name, {
-    String? qty,
-    String? aisle,
-    bool inList = false,
-  }) => showModalBottomSheet<ItemChoice>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    builder: (_) => ItemSheet(
-      name: name,
-      qty: qty,
-      aisle: aisle,
-      inList: inList,
-      aisles: aisles,
-      api: widget.api,
-      imageId: photoOf(name),
-      withPhoto: widget.data['demo'] != true,
-    ),
-  );
-
-  // Toucher une suggestion : ajout, ou modification si l’ingrédient est déjà dans la liste.
-  Future<void> pick(
-    Map<String, dynamic> list,
-    String name, {
-    Map<String, dynamic>? ingredient,
-  }) async {
-    final existing = _maps(list['items'])
-        .where(
-          (i) => ingredientKey(i['text'].toString()) == ingredientKey(name),
-        )
-        .firstOrNull;
-    final choice = await sheet(
-      existing?['text']?.toString() ?? ingredient?['name']?.toString() ?? name,
-      qty: existing?['qty']?.toString() ?? ingredient?['lastQty']?.toString(),
-      aisle: existing?['aisle']?.toString() ?? ingredient?['aisle']?.toString(),
-      inList: existing != null,
-    );
-    if (choice == null) return;
-    await applyItemChoice(list, name, ingredient, existing, choice);
-  }
-
-  // Ouvre/ferme la fiche d'un article en mode classeur (par-dessus le courses).
-  void openClasseur(Map<String, dynamic> item) =>
-      setState(() => openItem = item);
-  void closeClasseur() => setState(() => openItem = null);
+  // Ouvre la fiche d'un ingrédient en mode classeur — AJOUT (nouvel ingrédient
+  // ou habituel) comme ÉDITION — par-dessus tout le courses. Ferme la feuille
+  // d'ajout téléphone au passage. La résolution « déjà dans la liste ? » se fait
+  // dans `wrap` d'après le nom.
+  void openClasseur(String name, {Map<String, dynamic>? ingredient}) =>
+      setState(() {
+        classeur = (name: name, ingredient: ingredient);
+        addOpen = false;
+      });
+  void closeClasseur() => setState(() => classeur = null);
 
   // Applique le choix de la feuille (ajout, modif quantité/rayon, retrait, photo).
   // Extrait de `pick` pour être réutilisé par le classeur intégré.
@@ -1064,12 +1028,7 @@ class _ShoppingViewState extends State<ShoppingView> {
           label: 'Modifier',
           // La liste est relue au moment du toucher : celle capturée avant le
           // rafraîchissement ne contient pas encore l'article ajouté.
-          onPressed: () => pick(
-            _maps(widget.data['shopping']['lists'])
-                .firstWhere((l) => l['id'] == list['id'], orElse: () => list),
-            name,
-            ingredient: ingredient,
-          ),
+          onPressed: () => openClasseur(name, ingredient: ingredient),
         ),
       ),
     );
@@ -1235,9 +1194,13 @@ class _ShoppingViewState extends State<ShoppingView> {
       final hintQty = there == null
           ? (ingredient['lastQty'] ?? '').toString()
           : '';
-      void tap() => there == null
-          ? directAdd(list, ingredient)
-          : pick(list, ingredient['name'].toString(), ingredient: ingredient);
+      void tap() {
+        if (there == null) {
+          directAdd(list, ingredient);
+        } else {
+          openClasseur(ingredient['name'].toString(), ingredient: ingredient);
+        }
+      }
       void longPress() => editSuggestion(ingredient);
       return Semantics(
         button: true,
@@ -1308,7 +1271,7 @@ class _ShoppingViewState extends State<ShoppingView> {
               ? 'Dans la liste${(there['qty'] ?? '').toString().isEmpty ? '' : ' · ${there['qty']}'}'
               : aisle?['name']?.toString() ?? '',
         ),
-        onTap: () => pick(list, m['name'].toString(), ingredient: m),
+        onTap: () => openClasseur(m['name'].toString(), ingredient: m),
         onLongPress: () => editSuggestion(m),
       );
     }
@@ -1362,7 +1325,7 @@ class _ShoppingViewState extends State<ShoppingView> {
                     toggle(list, item);
                   } else {
                     // Préparer : ouvre la fiche de l'article en mode classeur.
-                    openClasseur(item);
+                    openClasseur(item['text'].toString());
                   }
                 },
                 child: Padding(
@@ -1384,7 +1347,7 @@ class _ShoppingViewState extends State<ShoppingView> {
               qtyChip
             else
               GestureDetector(
-                onTap: () => openClasseur(item),
+                onTap: () => openClasseur(item['text'].toString()),
                 child: qtyChip,
               ),
             // Préparer : poubelle pour retirer (le slide reste possible aussi).
@@ -1498,9 +1461,9 @@ class _ShoppingViewState extends State<ShoppingView> {
           final first = matches.firstOrNull;
           if (first != null &&
               ingredientKey(first['name']) == ingredientKey(v)) {
-            pick(list, first['name'].toString(), ingredient: first);
+            openClasseur(first['name'].toString(), ingredient: first);
           } else {
-            pick(list, v.trim());
+            openClasseur(v.trim());
           }
         },
       ),
@@ -1532,7 +1495,7 @@ class _ShoppingViewState extends State<ShoppingView> {
             leading: const Icon(Icons.add),
             title: Text('Ajouter « $query »'),
             subtitle: const Text('Nouvel ingrédient'),
-            onTap: () => pick(list, query),
+            onTap: () => openClasseur(query),
           ),
       ],
     ];
@@ -1657,29 +1620,37 @@ class _ShoppingViewState extends State<ShoppingView> {
     // Classeur (option B) : la fiche de l'article se pose par-dessus TOUT le
     // courses, qui dépasse à gauche ; un tap sur ce bout referme.
     Widget wrap(Widget body) {
-      if (openItem == null) return body;
-      final item = openItem!;
+      if (classeur == null) return body;
+      final name = classeur!.name;
+      final ingredient = classeur!.ingredient;
+      // Déjà dans la liste ? → édition ; sinon → ajout.
+      final existing = _maps(list['items'])
+          .where(
+            (i) => ingredientKey(i['text'].toString()) == ingredientKey(name),
+          )
+          .firstOrNull;
       return BinderSheets(
         list: body,
         detail: ItemSheet(
-          name: item['text'].toString(),
-          qty: item['qty']?.toString(),
-          aisle: item['aisle']?.toString(),
-          inList: true,
+          name:
+              existing?['text']?.toString() ??
+              ingredient?['name']?.toString() ??
+              name,
+          qty:
+              existing?['qty']?.toString() ??
+              ingredient?['lastQty']?.toString(),
+          aisle:
+              existing?['aisle']?.toString() ??
+              ingredient?['aisle']?.toString(),
+          inList: existing != null,
           aisles: aisles,
           api: widget.api,
-          imageId: photoOf(item['text'].toString()),
+          imageId: photoOf(name),
           withPhoto: widget.data['demo'] != true,
           onResult: (choice) {
             closeClasseur();
             if (choice != null) {
-              applyItemChoice(
-                list,
-                item['text'].toString(),
-                null,
-                item,
-                choice,
-              );
+              applyItemChoice(list, name, ingredient, existing, choice);
             }
           },
         ),
