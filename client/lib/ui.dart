@@ -232,18 +232,8 @@ class _CutCheckPainter extends CustomPainter {
     required this.mark,
   });
 
-  // Carré arrondi asymétrique « Découpes » (cohérent avec les boutons) :
-  // haut-gauche + bas-droite marqués, les deux autres resserrés.
-  static Path shape(Size s) => Path()
-    ..addRRect(
-      RRect.fromRectAndCorners(
-        Offset.zero & s,
-        topLeft: Radius.circular(s.width * .42),
-        bottomRight: Radius.circular(s.width * .42),
-        topRight: Radius.circular(s.width * .16),
-        bottomLeft: Radius.circular(s.width * .16),
-      ),
-    );
+  // Rond, comme le Découpes original : les articles se cochent dans un cercle.
+  static Path shape(Size s) => Path()..addOval(Offset.zero & s);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1287,47 +1277,46 @@ class FoyerRail extends StatelessWidget {
                   onTap: () => onSelected(i),
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: 46,
-                          height: 34,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              if (i == index)
-                                CustomPaint(
-                                  size: const Size(44, 32),
-                                  painter: _StampBg(c.primary),
-                                ),
-                              SignIcon(
-                                sign,
-                                size: 20,
-                                color: i == index
-                                    ? c.onPrimary
-                                    : c.onSurfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Manrope',
-                            fontSize: 11,
-                            fontWeight: i == index
-                                ? FontWeight.w800
-                                : FontWeight.w700,
+                    padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+                    // Highlight de l'active : bloc arrondi qui couvre icône + label
+                    // (plus long, comme le Découpes original), pas juste l'icône.
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      decoration: i == index
+                          ? ShapeDecoration(
+                              color: c.primary,
+                              shape: cutShape(13),
+                            )
+                          : null,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SignIcon(
+                            sign,
+                            size: 20,
                             color: i == index
-                                ? c.onSurface
+                                ? c.onPrimary
                                 : c.onSurfaceVariant,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 5),
+                          Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Manrope',
+                              fontSize: 11,
+                              fontWeight: i == index
+                                  ? FontWeight.w800
+                                  : FontWeight.w700,
+                              color: i == index
+                                  ? c.onPrimary
+                                  : c.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1383,8 +1372,8 @@ class FoyerRail extends StatelessWidget {
 }
 
 /// Tampon biseauté irrégulier derrière le signe actif (rail et bandeau).
-// Tampon « Découpes » de la destination active (rail ouvert + bandeau fermé) :
-// coin arrondi asymétrique, comme les boutons (haut-gauche + bas-droite marqués).
+// Tampon « Découpes » de l'active dans le bandeau fermé : coin arrondi asymétrique
+// (le rail ouvert, lui, utilise un bloc icône+label ; cf. FoyerRail).
 RRect _stampRRect(Size s) => RRect.fromRectAndCorners(
   Offset.zero & s,
   topLeft: Radius.circular(s.height * .5),
@@ -1392,17 +1381,6 @@ RRect _stampRRect(Size s) => RRect.fromRectAndCorners(
   bottomRight: Radius.circular(s.height * .42),
   bottomLeft: Radius.circular(s.height * .22),
 );
-
-class _StampBg extends CustomPainter {
-  final Color color;
-  _StampBg(this.color);
-  @override
-  void paint(Canvas canvas, Size size) =>
-      canvas.drawRRect(_stampRRect(size), Paint()..color = color);
-
-  @override
-  bool shouldRepaint(_StampBg old) => old.color != color;
-}
 
 /// Pastille de filtre (pleine quand active).
 class FilterPill extends StatelessWidget {
