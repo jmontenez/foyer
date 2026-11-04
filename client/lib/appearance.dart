@@ -24,6 +24,9 @@ const palettes = [
   AppPalette('sauge', 'Sauge & ambre', Color(0xFF386653), Color(0xFFB58A44)),
   AppPalette('encre', 'Encre & corail', Color(0xFF1F4FE0), Color(0xFFFF3D5E)),
   AppPalette('prune', 'Prune & citron', Color(0xFF7A1FA2), Color(0xFFFACC15)),
+  AppPalette('ciel', 'Ciel & orange', Color(0xFF1C9DDC), Color(0xFFF2802B)),
+  AppPalette('lagon', 'Lagon & corail', Color(0xFF0E9B8E), Color(0xFFFF6F61)),
+  AppPalette('terre', 'Terre & turquoise', Color(0xFFC25A3C), Color(0xFF2FA8C4)),
   AppPalette(
     'sauge-nuit',
     'Sauge, veillée',
@@ -43,6 +46,27 @@ const palettes = [
     'Prune, veillée',
     Color(0xFF7A1FA2),
     Color(0xFFFACC15),
+    dark: true,
+  ),
+  AppPalette(
+    'ciel-nuit',
+    'Ciel, veillée',
+    Color(0xFF1C9DDC),
+    Color(0xFFF2802B),
+    dark: true,
+  ),
+  AppPalette(
+    'lagon-nuit',
+    'Lagon, veillée',
+    Color(0xFF0E9B8E),
+    Color(0xFFFF6F61),
+    dark: true,
+  ),
+  AppPalette(
+    'terre-nuit',
+    'Terre, veillée',
+    Color(0xFFC25A3C),
+    Color(0xFF2FA8C4),
     dark: true,
   ),
 ];
@@ -323,6 +347,15 @@ OutlinedBorder bevelShape(double cut, {BorderSide side = BorderSide.none}) =>
 /// Biseaux du sketch : --cut (cartes/panneaux) et --cut-sm (chips/boutons/onglets).
 const cutBig = 18.0;
 const cutSmall = 9.0;
+
+/// Bloc contrasté « primaire doux » (volet d'ajout des courses, fiche de tâche) :
+/// une teinte légère du primaire qui se détache de la liste neutre tout en
+/// suivant le duo. Un peu plus marquée en veillée pour rester lisible.
+Color contrastPanel(ColorScheme c) => Color.lerp(
+  c.surface,
+  c.primary,
+  c.brightness == Brightness.dark ? 0.30 : 0.18,
+)!;
 
 /// Construit le ColorScheme du sketch : **neutres fixes** (paper/panel/ink/muted
 /// selon le mode) et **duo** (p/a) posé seulement sur actions, accents et tampons.
