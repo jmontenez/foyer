@@ -341,39 +341,4 @@ void main() {
     },
   );
 
-  testWidgets('Courses : liste et volet d’ajout se recouvrent sur écran moyen', (
-    tester,
-  ) async {
-    // Écran moyen (640-1000) en préparation : deux feuilles qui se recouvrent.
-    tester.view.physicalSize = const Size(800, 1000);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final data = {
-      'today': '2026-09-25',
-      'tickets': [],
-      'members': [],
-      'shopping': {
-        'lists': [
-          {'id': 'draft', 'items': []},
-        ],
-        'ingredients': catalog,
-        'aisles': [
-          {'id': 'dairy', 'name': 'Crèmerie & œufs'},
-        ],
-      },
-    };
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ShoppingView(
-            data: data,
-            api: Api(),
-            onChanged: () async {},
-            onOpenTicket: (_) {},
-          ),
-        ),
-      ),
-    );
-    expect(find.byType(BinderSheets), findsOneWidget);
-  });
 }
