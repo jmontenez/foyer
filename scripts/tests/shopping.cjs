@@ -15,7 +15,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   // Les puces se lisent comme des cases à cocher (FilterChip) ou des choix (ChoiceChip).
   const chip = (name) => page.getByRole('checkbox',{name,exact:true}).or(page.getByRole('radio',{name,exact:true})).or(page.getByRole('button',{name,exact:true})).first();
   // Saisie dans la recherche : Flutter web crée le vrai champ au focus, on réessaie si besoin.
-  const type = async (text, expected, field = 'Ajouter un ingrédient…') => {
+  const type = async (text, expected, field = 'Un ingrédient…') => {
     const box = page.getByRole('textbox',{name:field});
     for (let i = 0; i < 5; i++) {
       await box.click();
