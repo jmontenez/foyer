@@ -102,8 +102,15 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.screenshot({path:'artifacts/browser/courses-ingredients-mobile.png'});
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';
-  // Fermer la feuille d'ajout : la liste redevient l'écran principal.
-  await page.getByRole('button',{name:'Fermer',exact:true}).click();
+  // Fermer la feuille d'ajout (retenté : le rendu Flutter web rate parfois un tap) :
+  // la liste redevient l'écran principal quand le bouton « Ajouter » réapparaît.
+  const addBar = page.getByRole('button',{name:'Ajouter un ingrédient',exact:true});
+  for (let i = 0; i < 6; i++) {
+    await page.getByRole('button',{name:'Fermer',exact:true}).click().catch(() => {});
+    if (await addBar.isVisible().catch(() => false)) break;
+    await page.waitForTimeout(400);
+  }
+  await addBar.waitFor();
   await page.getByRole('heading',{name:/^SURGELÉS/}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-liste-mobile.png', fullPage:true});
 
