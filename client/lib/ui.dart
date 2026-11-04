@@ -2233,13 +2233,15 @@ class BinderSheets extends StatelessWidget {
       builder: (context, box) {
         final peekW = box.maxWidth * peek;
         final back = detailFront ? list : detail;
+        final backColor = detailFront ? listColor : detailColor;
         final front = detailFront ? detail : list;
         return Stack(
           fit: StackFit.expand,
           children: [
-            // Feuille du fond : pleine largeur ; seul son bord dépasse, le reste
-            // est couvert par la feuille de devant (opaque).
-            Positioned.fill(child: back),
+            // Feuille du fond : pleine largeur, posée sur SA couleur (sinon le
+            // bout qui dépasse perdrait sa teinte) ; le reste est couvert par la
+            // feuille de devant (opaque).
+            Positioned.fill(child: Material(color: backColor, child: back)),
             // Capteur de tap sur le bout qui dépasse → ramène le fond devant.
             // Opaque : intercepte avant le contenu de la feuille du fond.
             Positioned(
