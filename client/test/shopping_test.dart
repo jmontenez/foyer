@@ -437,4 +437,56 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('On reprend les habituels ?'), findsOneWidget);
   });
+
+  testWidgets('Courses : taper un article (Préparer) ouvre sa fiche en classeur', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final data = {
+      'today': '2026-09-25',
+      'tickets': [],
+      'members': [],
+      'me': {'id': 'a'},
+      'shopping': {
+        'lists': [
+          {
+            'id': 'draft',
+            'items': [
+              {
+                'id': '1',
+                'text': 'Lait',
+                'qty': '2 L',
+                'aisle': 'dairy',
+                'done': false,
+              },
+            ],
+          },
+        ],
+        'ingredients': catalog,
+        'aisles': [
+          {'id': 'dairy', 'name': 'Crèmerie & œufs'},
+        ],
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ShoppingView(
+            data: data,
+            api: Api(),
+            onChanged: () async {},
+            onOpenTicket: (_) {},
+          ),
+        ),
+      ),
+    );
+    // Pas de fiche au départ ; un toucher sur l'article l'ouvre en classeur.
+    expect(find.byType(ItemSheet), findsNothing);
+    await tester.tap(find.text('Lait'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ItemSheet), findsOneWidget);
+    expect(find.text('Rayon'), findsOneWidget);
+  });
 }
