@@ -3418,26 +3418,29 @@ class _TicketPageState extends State<TicketPage> {
     ];
   }
 
-  // Actions de clôture (remontées en haut de la fiche, après les méta) : gros
-  // « C'est fait » puis « Reporter » / « On ne le fait pas » en liens, et
-  // À faire/Bloqué en secondaire.
+  // Actions de clôture (remontées en haut de la fiche, après les méta). Sur un
+  // ticket backlog (« Un jour »), l'action principale est de la PASSER À FAIRE ;
+  // ailleurs, c'est « C'est fait ». Le reste passe en liens.
   List<Widget> closeActions() {
     final closed = t['stageId'] == 'done' || t['stageId'] == 'abandoned';
     if (closed) return [];
+    final backlog = t['stageId'] == 'backlog';
     return [
       const SizedBox(height: 20),
       CutButton(
-        label: saving ? 'Enregistrement…' : 'C’est fait',
-        icon: Icons.check,
-        onTap: saving ? null : finish,
+        label: backlog
+            ? 'La passer à faire'
+            : (saving ? 'Enregistrement…' : 'C’est fait'),
+        icon: backlog ? Icons.playlist_add_check : Icons.check,
+        onTap: saving ? null : (backlog ? makeTodo : finish),
       ),
       const SizedBox(height: 12),
       Row(
         children: [
           LinkText(
-            label: 'Reporter',
+            label: backlog ? 'C’est fait' : 'Reporter',
             strong: true,
-            onTap: saving ? null : postpone,
+            onTap: saving ? null : (backlog ? finish : postpone),
           ),
           const Spacer(),
           LinkText(
@@ -3447,14 +3450,14 @@ class _TicketPageState extends State<TicketPage> {
           ),
         ],
       ),
-      const SizedBox(height: 10),
-      if (t['stageId'] == 'backlog')
-        LinkText(label: 'La passer à faire', onTap: saving ? null : makeTodo)
-      else
+      // Bloquer n'a de sens que sur une tâche active (pas dans le backlog).
+      if (!backlog) ...[
+        const SizedBox(height: 10),
         LinkText(
           label: blocked ? 'La débloquer' : 'La marquer bloquée',
           onTap: saving ? null : toggleBlocked,
         ),
+      ],
     ];
   }
 
