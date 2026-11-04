@@ -996,6 +996,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (data == null) {
+      final c = Theme.of(context).colorScheme;
       return Scaffold(
         body: Center(
           child: SingleChildScrollView(
@@ -1007,26 +1008,60 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(
-                      Icons.cottage_rounded,
-                      size: 72,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'Foyer',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.displayMedium
-                          ?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontWeight: FontWeight.w700,
+                    // Marque « Découpes » : tampon maison au coin coupé.
+                    Center(
+                      child: Container(
+                        width: 88,
+                        height: 88,
+                        decoration: ShapeDecoration(
+                          color: c.secondaryContainer,
+                          shape: cutShape(24),
+                        ),
+                        child: Center(
+                          child: SignIcon(
+                            FoyerSign.house,
+                            size: 44,
+                            color: c.onSecondaryContainer,
                           ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
+                    const SizedBox(height: 22),
+                    // Wordmark « foyer✱ », cohérent avec le rail.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'foyer',
+                          style: TextStyle(
+                            fontFamily: tokensOf(context).displayFont,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 42,
+                            color: c.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: CustomPaint(
+                              painter: AsteriskPainter(c.primary),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
                       'Un endroit pour nos idées.\nUn peu plus de place dans nos têtes.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 18, height: 1.5),
+                      style: TextStyle(
+                        fontSize: 16,
+                        height: 1.5,
+                        color: c.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 32),
                     if (loading)
@@ -1061,17 +1096,35 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                               : 'Démonstration locale · données fictives',
                           textAlign: TextAlign.center,
                         ),
+                        const SizedBox(height: 12),
                         Wrap(
                           alignment: WrapAlignment.center,
+                          spacing: 10,
+                          runSpacing: 8,
                           children: [
-                            TextButton(
-                              onPressed: () => login(demo: 0),
-                              child: const Text('Camille'),
-                            ),
-                            TextButton(
-                              onPressed: () => login(demo: 1),
-                              child: const Text('Alex'),
-                            ),
+                            for (final (i, label) in const [
+                              (0, 'Camille'),
+                              (1, 'Alex'),
+                            ])
+                              FilledButton.tonal(
+                                onPressed: () => login(demo: i),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Avatar décoratif : son infobulle ne doit pas
+                                    // polluer le nom accessible du bouton.
+                                    ExcludeSemantics(
+                                      child: MemberAvatar(
+                                        name: label,
+                                        index: i,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(label),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ],
