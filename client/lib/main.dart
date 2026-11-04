@@ -147,6 +147,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   String? boardStage;
   DateTime? weekDay;
   String backlogKind = 'all', period = '30';
+  // Filtres cumulables du panneau « Filtrer » (vides = pas de filtre) : priorité
+  // et type, en plus de « qui » (person) et « tag » ci-dessus.
+  final Set<String> prioritySel = {}, typeSel = {};
   Timer? timer;
   bool foreground = true;
   bool refreshing = false;
@@ -955,6 +958,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         return false;
       }
       if (tag != 'all' && !strings(t['tagIds']).contains(tag)) return false;
+      // Filtres cumulables du panneau « Filtrer ».
+      if (prioritySel.isNotEmpty && !prioritySel.contains(t['priority'])) {
+        return false;
+      }
+      if (typeSel.isNotEmpty && !typeSel.contains(t['kind'])) return false;
       if (tab == 3 && backlogKind != 'all') {
         if (backlogKind == 'dated'
             ? t['startDate'] == null
@@ -1642,6 +1650,136 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         : DateTime(d.year, d.month, d.day);
   }
 
+  // Panneau « Filtrer » : champs cumulables (priorité, type) + qui et tag. Les
+  // toggles muent l'état ; la liste se rafraîchit à la fermeture.
+  Future<void> filterSheet(
+    List<Map<String, dynamic>> members,
+    Map<String, dynamic> me,
+  ) async {
+    final tags = maps(data!['tags']);
+    void toggleIn(Set<String> s, String v) {
+      if (!s.remove(v)) s.add(v);
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final c = Theme.of(ctx).colorScheme;
+          Widget chip(String label, bool on, VoidCallback act) =>
+              FilterPill(label: label, selected: on, onTap: () => setSheet(act));
+          Widget section(String title, List<Widget> chips) => Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: c.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(spacing: 6, runSpacing: 6, children: chips),
+              ],
+            ),
+          );
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Filtrer',
+                            style: Theme.of(ctx).textTheme.titleLarge,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => setSheet(() {
+                            prioritySel.clear();
+                            typeSel.clear();
+                            person = 'all';
+                            tag = 'all';
+                          }),
+                          child: const Text('Réinitialiser'),
+                        ),
+                      ],
+                    ),
+                    section('Priorité', [
+                      for (final p in ['urgent', 'high', 'normal', 'low'])
+                        chip(
+                          priorityName(p),
+                          prioritySel.contains(p),
+                          () => toggleIn(prioritySel, p),
+                        ),
+                    ]),
+                    section('Qui s’en occupe', [
+                      chip('Tout le foyer', person == 'all', () => person = 'all'),
+                      for (final m in [
+                        ...members.where((m) => m['id'] == me['id']),
+                        ...members.where((m) => m['id'] != me['id']),
+                      ])
+                        chip(
+                          m['id'] == me['id'] ? 'Moi' : m['name'].toString(),
+                          person == m['id'],
+                          () => person = person == m['id']
+                              ? 'all'
+                              : m['id'].toString(),
+                        ),
+                      chip(
+                        'Personne',
+                        person == 'none',
+                        () => person = person == 'none' ? 'all' : 'none',
+                      ),
+                    ]),
+                    section('Type', [
+                      for (final (k, label) in [
+                        ('obligation', 'Obligations'),
+                        ('wish', 'Envies'),
+                      ])
+                        chip(
+                          label,
+                          typeSel.contains(k),
+                          () => toggleIn(typeSel, k),
+                        ),
+                    ]),
+                    if (tags.isNotEmpty)
+                      section('Tag', [
+                        chip('Tous', tag == 'all', () => tag = 'all'),
+                        for (final g in tags)
+                          chip(
+                            g['name'].toString(),
+                            tag == g['id'],
+                            () => tag = tag == g['id']
+                                ? 'all'
+                                : g['id'].toString(),
+                          ),
+                      ]),
+                    const SizedBox(height: 18),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Voir les tâches'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   List<Widget> filterPills(
     List<Map<String, dynamic>> members,
     Map<String, dynamic> me,
@@ -1650,6 +1788,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     FilterPill pill(String label, bool selected, VoidCallback onTap) =>
         FilterPill(label: label, selected: selected, onTap: onTap);
     return [
+      // Panneau « Filtrer » (priorité + type, cumulables) sur les vues de tâches.
+      if (tab != 4)
+        pill(
+          'Filtrer',
+          prioritySel.isNotEmpty || typeSel.isNotEmpty,
+          () => filterSheet(members, me),
+        ),
       if (tab == 3)
         for (final (id, label) in [
           ('all', 'Tout'),
