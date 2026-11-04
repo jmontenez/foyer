@@ -47,7 +47,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   // Ajout rapide (liste verticale des habituels) : un toucher ajoute directement
   // (quantité mémorisée) ; « Modifier » dans le retour visible rouvre la feuille.
   await page.getByRole('button',{name:'Courses',exact:true}).click();
-  await page.getByText('On reprend les habituels ?',{exact:true}).waitFor();
+  await chip('Lait').waitFor();
   await page.screenshot({path:'artifacts/browser/courses-vide-mobile.png'});
   await chip('Lait').click();
   await until(async () => (await draft()).some(i => i.text === 'Lait' && i.aisle === 'dairy'), 'Lait non ajouté directement');
