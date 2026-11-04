@@ -95,8 +95,8 @@ void main() {
   testWidgets(
     'Une suggestion déjà dans la liste le montre avant de la toucher',
     (tester) async {
-      // Écran étroit (< 640) : outils d'ajout inline, une seule colonne (au
-      // medium ils passeraient en feuille qui se recouvre, cf. BinderSheets).
+      // Écran étroit (< 640) : outils d'ajout inline, une seule colonne (dès 640
+      // ils passent dans le volet droit, en deux-volets).
       tester.view.physicalSize = const Size(600, 1000);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -139,15 +139,10 @@ void main() {
           ),
         ),
       );
-      // Accès rapide : la puce du lait est sélectionnée et porte la quantité.
-      final milk = tester.widget<CutChip>(
-        find.widgetWithText(CutChip, 'Lait · 2 L'),
-      );
-      expect(milk.selected, isTrue);
-      expect(
-        tester.widget<CutChip>(find.widgetWithText(CutChip, 'Pommes')).selected,
-        isFalse,
-      );
+      // Accès rapide (liste verticale) : l'habituel déjà dans la liste affiche sa
+      // quantité ; un habituel absent s'affiche simplement par son nom.
+      expect(find.text('Lait · 2 L'), findsOneWidget);
+      expect(find.text('Pommes'), findsOneWidget);
       expect(find.text('CRÈMERIE & ŒUFS'), findsOneWidget);
       // Recherche : l’état « Dans la liste » et l’ajout d’un nouvel ingrédient.
       await tester.enterText(find.byType(TextField), 'lai');

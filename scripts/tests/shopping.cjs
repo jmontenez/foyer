@@ -1,7 +1,9 @@
 const { chromium } = require('../../artifacts/browser/node_modules/playwright');
 (async () => {
   const browser = await chromium.launch({headless:true});
-  const page = await browser.newPage({viewport:{width:390,height:844}});
+  // Grande hauteur : l'accès rapide en liste verticale allonge le volet, on garde
+  // les sections de la liste dans le viewport (Flutter ne construit pas le hors-champ).
+  const page = await browser.newPage({viewport:{width:390,height:1600}});
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   const state = async () => page.evaluate(async()=> (await fetch('/api/v1/state')).json());
@@ -15,7 +17,7 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   // Les puces se lisent comme des cases à cocher (FilterChip) ou des choix (ChoiceChip).
   const chip = (name) => page.getByRole('checkbox',{name,exact:true}).or(page.getByRole('radio',{name,exact:true})).or(page.getByRole('button',{name,exact:true})).first();
   // Saisie dans la recherche : Flutter web crée le vrai champ au focus, on réessaie si besoin.
-  const type = async (text, expected, field = 'Ajouter un ingrédient…') => {
+  const type = async (text, expected, field = 'Un ingrédient…') => {
     const box = page.getByRole('textbox',{name:field});
     for (let i = 0; i < 5; i++) {
       await box.click();
@@ -44,10 +46,10 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.locator('flt-glass-pane').waitFor({state:'attached'});
   await page.evaluate(()=>document.querySelector('flt-semantics-placeholder')?.click());
 
-  // Accès rapide : un toucher ajoute directement (quantité mémorisée) ;
-  // « Modifier » dans le retour visible rouvre la feuille.
+  // Ajout rapide (liste verticale des habituels) : un toucher ajoute directement
+  // (quantité mémorisée) ; « Modifier » dans le retour visible rouvre la feuille.
   await page.getByRole('button',{name:'Courses',exact:true}).click();
-  await page.getByText('Accès rapide',{exact:false}).waitFor();
+  await chip('Lait').waitFor();
   await page.screenshot({path:'artifacts/browser/courses-vide-mobile.png'});
   await chip('Lait').click();
   await until(async () => (await draft()).some(i => i.text === 'Lait' && i.aisle === 'dairy'), 'Lait non ajouté directement');
