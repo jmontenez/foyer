@@ -845,6 +845,9 @@ class _ShoppingViewState extends State<ShoppingView> {
   final search = TextEditingController();
   final focus = FocusNode();
   bool busy = false;
+  // Téléphone (Préparer) : la feuille d'ajout (recherche + habituels) est-elle
+  // ouverte ? La liste reste l'écran principal ; « Ajouter » lève la feuille.
+  bool addOpen = false;
 
   // Présentation « Préparer » / « En magasin » : un état d'affichage local à
   // l'appareil (jamais envoyé au serveur), retenu pour la session de l'app.
@@ -1513,7 +1516,10 @@ class _ShoppingViewState extends State<ShoppingView> {
             CutTab(
               label: 'En magasin',
               selected: mode == 'store',
-              onTap: () => setState(() => mode = 'store'),
+              onTap: () => setState(() {
+                mode = 'store';
+                addOpen = false;
+              }),
             ),
             const SizedBox(width: 8),
             // Compteur flexible : il s'ellipse plutôt que de faire déborder la
@@ -1529,9 +1535,6 @@ class _ShoppingViewState extends State<ShoppingView> {
           ],
         ),
       ),
-      // Téléphone (<640) : outils d'ajout inline. Dès 640, ils passent dans le
-      // volet docké à droite (cf. plus bas).
-      if (mode == 'prep' && width < 640) ...prepTools,
       if (mode == 'store' && items.isEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 32),
@@ -1638,6 +1641,89 @@ class _ShoppingViewState extends State<ShoppingView> {
               ),
             ),
           ),
+        ],
+      );
+    }
+    if (mode == 'prep') {
+      // Téléphone : la liste est l'écran principal ; « Ajouter un ingrédient »
+      // lève une feuille (recherche + habituels) sans quitter la liste, qui se
+      // remplit au fil des ajouts. La feuille réutilise `prepTools`.
+      return Stack(
+        children: [
+          listPane,
+          if (addOpen) ...[
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => addOpen = false),
+                child: ColoredBox(color: Colors.black.withValues(alpha: .45)),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+                ),
+                decoration: ShapeDecoration(
+                  color: contrastPanel(c),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: c.onSurfaceVariant.withValues(alpha: .4),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Flexible(
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(18, 2, 18, 18),
+                          shrinkWrap: true,
+                          children: prepTools,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ] else
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: FilledButton.icon(
+                onPressed: () => setState(() => addOpen = true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: c.onSurface,
+                  foregroundColor: c.surface,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: cutShape(cutSmall),
+                  textStyle: TextStyle(
+                    fontFamily: tokensOf(context).displayFont,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Ajouter un ingrédient'),
+              ),
+            ),
         ],
       );
     }
