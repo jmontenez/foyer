@@ -22,6 +22,7 @@ public record ShoppingItemInput(string List, string Name, string? Qty, string? A
 public record ShoppingItemPatch(bool? Done, string? Qty, string? Aisle);
 public record ShoppingScheduleInput(DateOnly Date, string Mode, string? TargetId);
 public record ShoppingDateInput(DateOnly Date);
+public record ShoppingCheckoutInput(List<string>? Performers);
 public record IngredientInput(string Name, string? Aisle, string? Qty);
 // Import d’une liste collée : texte analysé en articles (Preview), puis ajout en une fois (Import).
 // Known : rayon trouvé (catalogue ou fourni) ; Merge : l’ingrédient est déjà dans la liste cible.
@@ -403,6 +404,26 @@ public static class Shopping
         t.Shopping = true;
         AttachDraft(h, t);
         Place(t, i.Date, s?.DueInDays, today);
+        return t;
+    }
+
+    // « Courses faites » depuis le brouillon, sans programmation : les articles cochés deviennent
+    // une tâche Courses déjà faite (dans l’historique) ; les non cochés restent dans le brouillon.
+    public static Ticket Checkout(Household h, List<string>? performers, string member, DateTimeOffset now)
+    {
+        var bought = h.ShoppingDraft.Where(c => c.Done).ToList();
+        if (bought.Count == 0) throw new RuleException("Cochez d’abord les articles achetés.");
+        if (h.Tickets.Count(t => !Rules.Closed(t)) >= 1000) throw new RuleException("Trop de tâches ouvertes.");
+        var today = Rules.Today(h, now);
+        var tag = h.Tags.FirstOrDefault(x => x.Name == "Courses")?.Id;
+        var t = new Ticket { Number = h.Tickets.Select(x => x.Number).DefaultIfEmpty(0).Max() + 1, CreatedAt = now, UpdatedAt = now, Shopping = true };
+        // Checklist = les achats (cochés). Créée directement « faite » (create=true → pas de
+        // ReturnUnbought) ; Rules.Apply valide les réalisateurs et pose ClosedAt + l’historique.
+        var checklist = bought.Select(c => c with { Id = NewId() }).ToList();
+        Rules.Apply(h, t, new TicketInput("Faire les courses", "", "obligation", "normal", "done",
+            today, today, [member], (performers ?? []).Distinct().ToList(), tag == null ? [] : [tag], checklist), member, now, create: true);
+        h.Tickets.Add(t);
+        h.ShoppingDraft.RemoveAll(c => c.Done);
         return t;
     }
 
