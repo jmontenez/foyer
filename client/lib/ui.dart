@@ -1245,7 +1245,7 @@ class FoyerRail extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 16),
-            // Wordmark « foyer✳ ».
+            // Wordmark « foyer✱ » : astérisque pleine simple (pas une étoile).
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -1259,7 +1259,11 @@ class FoyerRail extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 2),
-                SignIcon(FoyerSign.star, size: 12, color: c.primary),
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CustomPaint(painter: AsteriskPainter(c.primary)),
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -2286,4 +2290,33 @@ class BinderSheets extends StatelessWidget {
       },
     );
   }
+}
+
+/// Astérisque pleine du wordmark « foyer✱ » : trois barres épaisses à bouts
+/// ronds croisées au centre (6 branches), plus simple et plus plein qu'une étoile.
+class AsteriskPainter extends CustomPainter {
+  const AsteriskPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final r = size.width * 0.46;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.18
+      ..strokeCap = StrokeCap.round;
+    // 3 barres à 0° / 60° / 120° → astérisque à 6 branches (cos60=0.5, sin60≈0.866).
+    const bars = [
+      [Offset(-1, 0), Offset(1, 0)],
+      [Offset(-0.5, -0.866), Offset(0.5, 0.866)],
+      [Offset(0.5, -0.866), Offset(-0.5, 0.866)],
+    ];
+    for (final bar in bars) {
+      canvas.drawLine(center + bar[0] * r, center + bar[1] * r, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(AsteriskPainter old) => old.color != color;
 }
