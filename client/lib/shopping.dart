@@ -1711,11 +1711,22 @@ class _ShoppingViewState extends State<ShoppingView> {
               ),
             ),
           ),
-          VerticalDivider(width: 1, thickness: 1, color: c.outlineVariant),
-          SizedBox(
+          // Volet d'ajout : bloc contrasté « primaire doux » docké à la liste
+          // (plus de filet — le contraste de couleur fait la séparation).
+          Container(
             width: 320,
+            decoration: ShapeDecoration(
+              color: contrastPanel(c),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(26),
+                  bottomLeft: Radius.circular(22),
+                ),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 20, 110),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 110),
               children: prepTools,
             ),
           ),

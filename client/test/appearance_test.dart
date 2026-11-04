@@ -11,9 +11,9 @@ double contrast(Color x, Color y) {
 
 void main() {
   test('Toutes les palettes gardent des contrastes lisibles', () {
-    // Modèle « Découpes » : trois duos, chacun en clair et en veillée.
-    expect(palettes.length, 6);
-    expect(palettes.where((p) => p.dark).length, 3);
+    // Modèle « Découpes » : six duos, chacun en clair et en veillée.
+    expect(palettes.length, 12);
+    expect(palettes.where((p) => p.dark).length, 6);
     expect(palettes.map((p) => p.id).toSet().length, palettes.length);
     for (final palette in palettes) {
       final theme = buildAppTheme(AppAppearance(paletteId: palette.id));

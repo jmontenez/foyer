@@ -1497,28 +1497,36 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                  if (wide && detailOpen) ...[
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
+                  if (wide && detailOpen)
                     Expanded(
                       flex: 6,
-                      child: TicketPage(
-                        key: detailKey,
-                        data: data!,
-                        embedded: true,
-                        ticket: selectedTicketId == null
-                            ? null
-                            : maps(data!['tickets']).firstWhere(
-                                (x) => x['id'] == selectedTicketId,
-                                orElse: () => <String, dynamic>{},
-                              ),
-                        onClose: closeDetail,
+                      // Volet fiche : bloc contrasté « primaire doux » détaché de
+                      // la liste (plus de filet — le contraste fait la séparation).
+                      child: Container(
+                        decoration: ShapeDecoration(
+                          color: contrastPanel(Theme.of(context).colorScheme),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(26),
+                              bottomLeft: Radius.circular(22),
+                            ),
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: TicketPage(
+                          key: detailKey,
+                          data: data!,
+                          embedded: true,
+                          ticket: selectedTicketId == null
+                              ? null
+                              : maps(data!['tickets']).firstWhere(
+                                  (x) => x['id'] == selectedTicketId,
+                                  orElse: () => <String, dynamic>{},
+                                ),
+                          onClose: closeDetail,
+                        ),
                       ),
                     ),
-                  ],
                 ],
               ),
             ),

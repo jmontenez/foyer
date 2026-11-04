@@ -23,9 +23,15 @@ public class AppearanceTests
     [InlineData("sauge")]
     [InlineData("encre")]
     [InlineData("prune")]
+    [InlineData("ciel")]
+    [InlineData("lagon")]
+    [InlineData("terre")]
     [InlineData("sauge-nuit")]
     [InlineData("encre-nuit")]
     [InlineData("prune-nuit")]
+    [InlineData("ciel-nuit")]
+    [InlineData("lagon-nuit")]
+    [InlineData("terre-nuit")]
     public void DuosAreAccepted(string id)
     {
         var member = new Member();

@@ -229,7 +229,8 @@ public static class Appearance
     // Modèle couleur « Découpes » : neutres chauds fixes + trois duos (clair/veillée) + sur mesure.
     // Les anciens identifiants stockés sont ramenés vers un duo connu côté client (_migratePalette).
     public static readonly HashSet<string> PaletteIds = [
-        "sauge", "encre", "prune", "sauge-nuit", "encre-nuit", "prune-nuit", "custom"];
+        "sauge", "encre", "prune", "ciel", "lagon", "terre",
+        "sauge-nuit", "encre-nuit", "prune-nuit", "ciel-nuit", "lagon-nuit", "terre-nuit", "custom"];
     public static readonly HashSet<string> FontIds = ["system", "grotesk", "serif", "manrope"];
     public static readonly HashSet<string> ListStyles = ["cards", "rows"];
     public static readonly HashSet<string> Densities = ["comfortable", "compact"];
