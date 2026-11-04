@@ -149,7 +149,6 @@ void main() {
         isFalse,
       );
       expect(find.text('CRÈMERIE & ŒUFS'), findsOneWidget);
-      expect(find.text('Programmer'), findsOneWidget);
       // Recherche : l’état « Dans la liste » et l’ajout d’un nouvel ingrédient.
       await tester.enterText(find.byType(TextField), 'lai');
       await tester.pump();

@@ -104,41 +104,21 @@ const { chromium } = require('../../artifacts/browser/node_modules/playwright');
   await page.getByRole('button',{name:'Back'}).click();
   const renamed = fresh + ' four';
 
-  // Raccourci Courses : il propose la liste en cours ; « Non » garde le brouillon.
-  await page.getByRole('button',{name:'Aujourd’hui',exact:true}).click();
-  await page.getByRole('button',{name:'Ajouter une tâche'}).click();
-  await page.getByRole('button',{name:/^Faire les courses/}).click();
-  await page.getByText('Une liste en cours (2 articles)',{exact:true}).waitFor();
-  await page.screenshot({path:'artifacts/browser/courses-raccourci-mobile.png'});
-  await page.getByRole('button',{name:'Non',exact:true}).click();
-  await until(async () => (await state()).shopping.lists.length === 2, 'Tâche Courses non créée');
-  if ((await draft()).length !== 2) throw new Error('Le brouillon aurait dû rester');
-  await page.waitForTimeout(6500); // bandeau « Annuler »
-
-  // Programmer le brouillon alors qu’une tâche existe : les trois choix.
-  await page.getByRole('button',{name:'Courses',exact:true}).click();
-  await chip('Non programmée · 2').click();
-  await page.getByRole('button',{name:'Programmer',exact:true}).click();
-  await page.getByRole('button',{name:/^Demain/}).click();
-  await page.getByText('Des courses sont déjà prévues',{exact:true}).waitFor();
-  await page.screenshot({path:'artifacts/browser/courses-trois-choix-mobile.png'});
-  await page.getByRole('button',{name:'Ajouter aux courses d’aujourd’hui',exact:true}).click();
-  await until(async () => (await state()).shopping.lists[0].items.length === 2 && (await draft()).length === 0, 'Liste non ajoutée à la tâche');
-
-  // En magasin : cocher le lait, puis « Courses faites » ; les frites non achetées reviennent.
-  await page.getByRole('group',{name:'Prévues aujourd’hui'}).or(page.getByText('Prévues aujourd’hui',{exact:true})).first().waitFor();
+  // En magasin : on coche un article ; « Courses faites ! » range les achats dans
+  // l'historique (tâche déjà faite) et garde les non achetés dans le brouillon.
+  await chip('En magasin').click();
   await page.getByRole('checkbox',{name:/^Lait/}).click();
-  await until(async () => (await state()).shopping.lists[0].items.find(i => i.text === 'Lait').done, 'Lait non coché');
+  await until(async () => (await draft()).find(i => i.text === 'Lait')?.done === true, 'Lait non coché');
   await page.getByRole('heading',{name:/^DANS LE PANIER/}).waitFor();
   await page.screenshot({path:'artifacts/browser/courses-panier-mobile.png', fullPage:true});
+  await page.getByRole('button',{name:'Courses faites !',exact:true}).click();
+  // Feuille « Qui l'a réalisé ? » : le réalisateur est pré-choisi, on valide.
   await page.getByRole('button',{name:'Courses faites',exact:true}).click();
-  await page.getByRole('button',{name:'Courses faites',exact:true}).last().click();
-  await page.getByText('1 article non acheté remis dans la liste.',{exact:false}).first().waitFor();
+  await until(async () => (await state()).tickets.some(t => t.shopping && t.stageId === 'done'), 'Tâche Courses faite non créée');
   await page.screenshot({path:'artifacts/browser/courses-faites-mobile.png'});
-  await until(async () => (await state()).shopping.lists.length === 1, 'Tâche Courses non close');
   const back = await draft();
-  if (back.length !== 1 || back[0].text !== renamed || back[0].done) throw new Error('Article non acheté non remis : ' + JSON.stringify(back));
+  if (back.length !== 1 || back[0].text !== renamed || back[0].done) throw new Error('Non acheté non gardé dans le brouillon : ' + JSON.stringify(back));
   if(errors.length) throw Error(errors.join('\n'));
-  console.log('PASS : accès rapide, « déjà dans la liste », nouvel ingrédient et rayon, recherche, raccourci Courses, programmation à trois choix, panier et retour des articles non achetés.');
+  console.log('PASS : accès rapide, « déjà dans la liste », nouvel ingrédient et rayon, recherche, En magasin + « Courses faites » (checkout), brouillon conservé.');
   await browser.close();
 })();

@@ -158,50 +158,6 @@ String listLabel(Map<String, dynamic> list, DateTime today) {
 }
 
 /// Choix de la date des courses : aujourd’hui, demain, samedi, ou une autre date.
-Future<DateTime?> pickShoppingDate(BuildContext context, DateTime today) async {
-  final day = DateTime(today.year, today.month, today.day);
-  final saturday = day.add(Duration(days: (6 - day.weekday) % 7));
-  final choice = await showModalBottomSheet<DateTime>(
-    context: context,
-    showDragHandle: true,
-    builder: (c) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Text(
-              'Quand faites-vous les courses ?',
-              style: Theme.of(c).textTheme.titleLarge,
-            ),
-          ),
-          for (final d in {day, day.add(const Duration(days: 1)), saturday})
-            ListTile(
-              leading: const Icon(Icons.event_outlined),
-              title: Text(relativeDay(d, today)),
-              subtitle: Text(headerDay(d)),
-              onTap: () => Navigator.pop(c, d),
-            ),
-          ListTile(
-            leading: const Icon(Icons.calendar_month_outlined),
-            title: const Text('Choisir une date…'),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: c,
-                firstDate: day,
-                lastDate: day.add(const Duration(days: 365)),
-                initialDate: day,
-              );
-              if (c.mounted) Navigator.pop(c, picked);
-            },
-          ),
-        ],
-      ),
-    ),
-  );
-  return choice;
-}
-
 /// « demain », « samedi », « le 3 oct. » : un jour dans une phrase.
 String dayPhrase(String label) {
   final l = label.toLowerCase();
@@ -213,45 +169,6 @@ String ofDay(String label) {
   final l = label.toLowerCase();
   if (RegExp(r'^\d').hasMatch(l)) return 'du $l';
   return RegExp(r'^[aeiouyhâéèêîôœ]').hasMatch(l) ? 'd’$l' : 'de $l';
-}
-
-/// Une tâche Courses existe déjà : l’enrichir, tout regrouper à la nouvelle date, ou garder deux tâches.
-Future<String?> askScheduleMode(
-  BuildContext context,
-  Map<String, dynamic> existing,
-  DateTime date,
-  DateTime today,
-) {
-  final when = listLabel(existing, today);
-  final newDay = relativeDay(date, today);
-  return showDialog<String>(
-    context: context,
-    builder: (c) => AlertDialog(
-      title: const Text('Des courses sont déjà prévues'),
-      content: Text(
-        'Une tâche Courses existe déjà ${dayPhrase(when)}. Que faire de cette liste ?',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(c),
-          child: const Text('Annuler'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(c, 'new'),
-          child: const Text('Garder deux tâches'),
-        ),
-        if (when != newDay)
-          TextButton(
-            onPressed: () => Navigator.pop(c, 'merge'),
-            child: Text('Tout regrouper ${dayPhrase(newDay)}'),
-          ),
-        FilledButton(
-          onPressed: () => Navigator.pop(c, 'append'),
-          child: Text('Ajouter aux courses ${ofDay(when)}'),
-        ),
-      ],
-    ),
-  );
 }
 
 /// Choix de qui a fait la tâche (au moins une personne, deux au plus).
@@ -927,7 +844,6 @@ class ShoppingView extends StatefulWidget {
 class _ShoppingViewState extends State<ShoppingView> {
   final search = TextEditingController();
   final focus = FocusNode();
-  String? selectedId;
   bool busy = false;
 
   // Présentation « Préparer » / « En magasin » : un état d'affichage local à
@@ -959,22 +875,6 @@ class _ShoppingViewState extends State<ShoppingView> {
       Map<String, dynamic>.from(widget.data['shopping'] as Map? ?? {});
   List<Map<String, dynamic>> get aisles => _maps(shopping['aisles']);
   List<Map<String, dynamic>> get catalog => _maps(shopping['ingredients']);
-  DateTime get today =>
-      DateTime.tryParse(widget.data['today'].toString()) ?? DateTime.now();
-
-  // Tâches Courses ouvertes, puis le brouillon s’il n’est pas vide (ou s’il n’y a rien d’autre).
-  List<Map<String, dynamic>> visibleLists() {
-    final all = _maps(shopping['lists']);
-    final tasks = all.where((l) => l['id'] != 'draft').toList();
-    final draft = all.firstWhere(
-      (l) => l['id'] == 'draft',
-      orElse: () => {'id': 'draft', 'items': []},
-    );
-    return [
-      ...tasks,
-      if (_maps(draft['items']).isNotEmpty || tasks.isEmpty) draft,
-    ];
-  }
 
   void show(String text) =>
       ScaffoldMessenger.maybeOf(context)
@@ -1191,79 +1091,30 @@ class _ShoppingViewState extends State<ShoppingView> {
       )
       .then((_) => widget.onChanged());
 
-  Future<void> schedule(Map<String, dynamic> list) async {
-    final date = await pickShoppingDate(context, today);
-    if (date == null || !mounted) return;
-    if (list['id'] != 'draft') {
-      await run(
-        () => widget.api.call('POST', '/api/v1/shopping/${list['id']}/date', {
-          'date': apiDate(date),
-        }),
-      );
-      return;
-    }
-    final tasks = visibleLists().where((l) => l['id'] != 'draft').toList();
-    var mode = 'new';
-    if (tasks.isNotEmpty) {
-      final chosen = await askScheduleMode(context, tasks.first, date, today);
-      if (chosen == null) return;
-      mode = chosen;
-    }
-    await run(() async {
-      final t = await widget.api.call('POST', '/api/v1/shopping/schedule', {
-        'date': apiDate(date),
-        'mode': mode,
-        'targetId': mode == 'new' ? null : tasks.first['id'],
-      });
-      selectedId = t['id']?.toString();
-      show(
-        mode == 'append'
-            ? 'Liste ajoutée aux courses prévues.'
-            : 'Courses prévues ${relativeDay(date, today).toLowerCase()}.',
-      );
-    });
-  }
-
-  Future<void> finish(Map<String, dynamic> list) async {
-    final ticket = _maps(widget.data['tickets'])
-        .where((t) => t['id'] == list['id'])
-        .firstOrNull;
-    if (ticket == null) return;
-    // Clôture : retour haptique franc, comme une touche qu'on enfonce (« Objet »).
+  // « Courses faites ! » : les articles cochés du brouillon deviennent une tâche
+  // Courses déjà faite (dans l'historique) ; les non cochés restent. Retour en
+  // Préparer. Plus de programmation : une seule liste courante.
+  Future<void> checkout(Map<String, dynamic> list) async {
+    final bought = _maps(list['items']).where((i) => i['done'] == true).length;
+    if (bought == 0) return;
+    // Clôture : retour haptique franc, comme une touche qu'on enfonce.
     HapticFeedback.mediumImpact();
     final me = widget.data['me']?['id']?.toString();
-    final assignees = (ticket['assignees'] as List? ?? []).cast<String>();
     final performers = await askPerformers(
       context,
       _maps(widget.data['members']),
-      {...assignees, if (assignees.isEmpty && me != null) me},
+      {?me},
       action: 'Courses faites',
     );
     if (performers == null) return;
-    final left = _maps(list['items']).where((i) => i['done'] != true).length;
     await run(() async {
-      await widget.api.call('PUT', '/api/v1/tickets/${ticket['id']}', {
-        for (final key in [
-          'title',
-          'description',
-          'kind',
-          'priority',
-          'startDate',
-          'dueDate',
-          'assignees',
-          'tagIds',
-          'checklist',
-          'version',
-        ])
-          key: ticket[key],
-        'stageId': 'done',
+      await widget.api.call('POST', '/api/v1/shopping/checkout', {
         'performers': performers,
       });
-      selectedId = null;
+      // Retour automatique en préparation pour la liste suivante.
+      if (mounted) setState(() => mode = 'prep');
       show(
-        left == 0
-            ? 'Bravo, les courses sont faites.'
-            : '${plural(left, 'article non acheté', 'articles non achetés')} remis dans la liste.',
+        'Courses faites — ${plural(bought, 'article rangé', 'articles rangés')} dans l’historique.',
       );
     });
   }
@@ -1305,14 +1156,13 @@ class _ShoppingViewState extends State<ShoppingView> {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final lists = visibleLists();
-    final list = lists.firstWhere(
-      (l) => l['id'] == selectedId,
-      orElse: () => lists.first,
+    // Une seule liste courante : le brouillon (plus de programmation).
+    final list = _maps(shopping['lists']).firstWhere(
+      (l) => l['id'] == 'draft',
+      orElse: () => <String, dynamic>{'id': 'draft', 'items': <dynamic>[]},
     );
     final items = _maps(list['items']);
     final inList = {for (final i in items) ingredientKey(i['text']): i};
-    final draft = list['id'] == 'draft';
     final query = search.text.trim();
     final matches = searchIngredients(catalog, query);
     final exact =
@@ -1320,9 +1170,6 @@ class _ShoppingViewState extends State<ShoppingView> {
         (matches.any((m) => ingredientKey(m['name']) == ingredientKey(query)) ||
             inList.containsKey(ingredientKey(query)));
     final (groups, basket) = groupByAisle(items, aisles);
-    final ticket = _maps(widget.data['tickets'])
-        .where((t) => t['id'] == list['id'])
-        .firstOrNull;
 
     Widget suggestion(Map<String, dynamic> ingredient) {
       final there = inList[ingredientKey(ingredient['name'])];
@@ -1440,75 +1287,37 @@ class _ShoppingViewState extends State<ShoppingView> {
     }
 
     final prepTools = <Widget>[
-      // Titre de programmation au-dessus des actions : tient aussi bien en
-      // colonne étroite (volet) qu'en pleine largeur (écran fermé).
-      Row(
-        children: [
-          Icon(
-            draft ? Icons.edit_calendar_outlined : Icons.event_available,
-            color: draft ? c.onSurfaceVariant : c.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              draft
-                  ? 'Pas encore programmées'
-                  : 'Prévues ${listLabel(list, today).toLowerCase()}',
-              style: Theme.of(context).textTheme.titleMedium,
+      // En-tête du volet d'ajout : options (importer, ingrédients, rayons).
+      Align(
+        alignment: Alignment.centerRight,
+        child: PopupMenuButton<String>(
+          tooltip: 'Plus d’options',
+          onSelected: (v) => switch (v) {
+            'import' => importList(list),
+            'aisles' => reorderAisles(),
+            'ingredients' => ingredientsPage(),
+            _ => clearDone(list),
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'import',
+              child: Text('Importer une liste…'),
             ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Plus d’options',
-            onSelected: (v) => switch (v) {
-              'import' => importList(list),
-              'aisles' => reorderAisles(),
-              'ingredients' => ingredientsPage(),
-              _ => clearDone(list),
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'import',
-                child: Text('Importer une liste…'),
-              ),
-              const PopupMenuItem(
-                value: 'ingredients',
-                child: Text('Ingrédients'),
-              ),
-              const PopupMenuItem(
-                value: 'aisles',
-                child: Text('Ordre des rayons'),
-              ),
-              if (basket.isNotEmpty)
-                const PopupMenuItem(
-                  value: 'clear',
-                  child: Text('Retirer les articles cochés'),
-                ),
-            ],
-          ),
-        ],
-      ),
-      // Programmer / changer la date, sous le titre.
-      Row(
-        children: [
-          if (draft)
-            FilledButton.tonalIcon(
-              onPressed: items.isEmpty || busy ? null : () => schedule(list),
-              icon: const Icon(Icons.event_outlined),
-              label: const Text('Programmer'),
-            )
-          else ...[
-            TextButton(
-              onPressed: busy ? null : () => schedule(list),
-              child: const Text('Changer la date'),
+            const PopupMenuItem(
+              value: 'ingredients',
+              child: Text('Ingrédients'),
             ),
-            if (ticket != null)
-              IconButton(
-                tooltip: 'Voir la tâche',
-                onPressed: () => widget.onOpenTicket(ticket),
-                icon: const Icon(Icons.open_in_new),
+            const PopupMenuItem(
+              value: 'aisles',
+              child: Text('Ordre des rayons'),
+            ),
+            if (basket.isNotEmpty)
+              const PopupMenuItem(
+                value: 'clear',
+                child: Text('Retirer les articles cochés'),
               ),
           ],
-        ],
+        ),
       ),
       const SizedBox(height: 10),
       TextField(
@@ -1594,25 +1403,6 @@ class _ShoppingViewState extends State<ShoppingView> {
     // droite. En dessous (téléphone), une colonne avec l'ajout inline.
     final twoPane = width >= 640;
     final mainChildren = <Widget>[
-      if (lists.length > 1)
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final l in lists)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(
-                      '${listLabel(l, today)} · ${_maps(l['items']).length}',
-                    ),
-                    selected: l['id'] == list['id'],
-                    onSelected: (_) => setState(() => selectedId = l['id']),
-                  ),
-                ),
-            ],
-          ),
-        ),
       // Deux présentations d'une même liste : préparer (outillage complet)
       // ou en magasin (les articles d'abord, le reste replié).
       Padding(
@@ -1697,12 +1487,14 @@ class _ShoppingViewState extends State<ShoppingView> {
         SectionLabel('Dans le panier', basket.length, color: c.primary),
         for (final item in basket) row(item),
       ],
-      if (!draft && items.isNotEmpty) ...[
+      // « Courses faites ! » apparaît dès qu'un article est coché en magasin ;
+      // il range les achats dans l'historique et disparaît si plus rien n'est coché.
+      if (mode == 'store' && items.any((i) => i['done'] == true)) ...[
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: busy ? null : () => finish(list),
+          onPressed: busy ? null : () => checkout(list),
           icon: const Icon(Icons.check),
-          label: const Text('Courses faites'),
+          label: const Text('Courses faites !'),
         ),
       ],
     ];
