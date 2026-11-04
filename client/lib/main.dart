@@ -488,7 +488,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if (data == null) return;
     // Écran ouvert : la fiche s'affiche dans le volet de droite (pas de route
     // plein écran). On confirme d'abord l'abandon d'une saisie en cours.
-    if (MediaQuery.sizeOf(context).width >= 640) {
+    if (MediaQuery.sizeOf(context).width >= 1000) {
       final leave =
           await (detailKey.currentState?.confirmLeave() ?? Future.value(true));
       if (!leave || !mounted) return;
@@ -1090,7 +1090,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     // Seuil mesuré sur les pliants (Fold 5 ouvert 690, Magic V5 724) : au-delà,
     // le menu passe sur le côté (rail) plutôt qu'en bas. Fermés (~350), ils gardent
     // le bandeau bas.
-    final wide = MediaQuery.sizeOf(context).width >= 640;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
     final today =
         DateTime.tryParse(data!['today'].toString()) ?? DateTime.now();
     final subtitles = [
