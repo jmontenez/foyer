@@ -354,7 +354,11 @@ class _CalendarViewState extends State<CalendarView> {
 
   // Éditeur d'événement du foyer (création si [event] est null, sinon modification).
   // Les tâches ont leur propre fiche ; ici on ne touche qu'aux CalendarEvent.
-  Future<void> _openEditor(Map<String, dynamic>? event) async {
+  Future<void> _openEditor(
+    Map<String, dynamic>? event, {
+    DateTime? initialDay,
+    int? initialMinute,
+  }) async {
     final members = _maps(widget.data['members']);
     final start = event == null
         ? null
@@ -365,9 +369,11 @@ class _CalendarViewState extends State<CalendarView> {
     final titleCtrl = TextEditingController(
       text: event?['title']?.toString() ?? '',
     );
-    var date = start == null ? _focus : _dateOnly(start);
+    var date = start == null ? (initialDay ?? _focus) : _dateOnly(start);
     var allDay = event?['allDay'] == true;
-    var startMin = (start != null && !allDay) ? start.hour * 60 + start.minute : 540;
+    var startMin = start != null && !allDay
+        ? start.hour * 60 + start.minute
+        : (initialMinute ?? 540);
     var durMin = (start != null && end != null && !allDay)
         ? max(15, end.difference(start).inMinutes)
         : 60;
@@ -804,6 +810,19 @@ class _CalendarViewState extends State<CalendarView> {
       ),
       child: Stack(
         children: [
+          // Fond tappable (sous les blocs) : taper un créneau vide ouvre un nouvel
+          // événement à l'heure touchée (arrondie au quart d'heure, modifiable).
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (d) {
+                final minute = ((d.localPosition.dy / _hourH * 4).round() * 15)
+                    .clamp(0, 1425)
+                    .toInt();
+                _openEditor(null, initialDay: day, initialMinute: minute);
+              },
+            ),
+          ),
           for (var h = 1; h < 24; h++)
             Positioned(
               top: h * _hourH,
