@@ -26,11 +26,6 @@ internal data class WidgetTheme(
         tint(views, viewId, bg)
     }
 
-    fun row(views: RemoteViews, viewId: Int) {
-        views.setInt(viewId, "setBackgroundResource", if (sharp) R.drawable.widget_row_background_sharp else R.drawable.widget_row_background)
-        tint(views, viewId, card)
-    }
-
     fun icon(views: RemoteViews, viewId: Int, color: Int) = views.setInt(viewId, "setColorFilter", color)
 
     // « Courses. » : le point final dans la couleur d’accent, comme les titres de l’application.

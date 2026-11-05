@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget « Aujourd’hui » : en-tête (ouvre Aujourd’hui), « + » (création rapide), six lignes fixes :
      le rond marque la tâche faite (en arrière-plan), le texte ouvre sa fiche.
-     Typo « Découpes » : titre en Manrope ExtraBold, texte courant en Atkinson Hyperlegible. -->
+     Rangées PLATES comme l'app (plus de carte ni de coin coupé), compactes.
+     Typo « Découpes » : titres Manrope ExtraBold, méta Atkinson Hyperlegible. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -51,17 +52,16 @@
         android:id="@+id/row0"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row0_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row0_text"
@@ -69,18 +69,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row0_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row0_meta"
                 android:layout_width="match_parent"
@@ -96,17 +96,16 @@
         android:id="@+id/row1"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row1_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row1_text"
@@ -114,18 +113,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row1_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row1_meta"
                 android:layout_width="match_parent"
@@ -141,17 +140,16 @@
         android:id="@+id/row2"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row2_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row2_text"
@@ -159,18 +157,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row2_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row2_meta"
                 android:layout_width="match_parent"
@@ -186,17 +184,16 @@
         android:id="@+id/row3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row3_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row3_text"
@@ -204,18 +201,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row3_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row3_meta"
                 android:layout_width="match_parent"
@@ -231,17 +228,16 @@
         android:id="@+id/row4"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row4_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row4_text"
@@ -249,18 +245,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row4_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row4_meta"
                 android:layout_width="match_parent"
@@ -276,17 +272,16 @@
         android:id="@+id/row5"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:background="@drawable/widget_row_background"
+        android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:visibility="gone">
         <ImageView
             android:id="@+id/row5_check"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:contentDescription="C’est fait"
-            android:padding="10dp"
+            android:padding="9dp"
             android:src="@drawable/widget_check" />
         <LinearLayout
             android:id="@+id/row5_text"
@@ -294,18 +289,18 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:paddingEnd="12dp">
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:paddingEnd="8dp">
             <TextView
                 android:id="@+id/row5_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="@font/atkinson"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:textColor="@color/widget_text"
-                android:textSize="14sp" />
+                android:textSize="15sp" />
             <TextView
                 android:id="@+id/row5_meta"
                 android:layout_width="match_parent"
