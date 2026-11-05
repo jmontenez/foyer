@@ -1515,10 +1515,8 @@ class FloatingNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final t = tokensOf(context);
-    // Bandeau « papier déchiré » : bord supérieur irrégulier (sketch .navband).
-    return ClipPath(
-      clipper: _TornTop(),
-      child: Material(
+    // Bandeau de navigation : bord supérieur DROIT (ligne horizontale), bande accent.
+    return Material(
         // Même bande accent que le rail latéral.
         color: c.secondaryContainer,
         elevation: 6,
@@ -1605,30 +1603,8 @@ class FloatingNav extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
-}
-
-/// Bord supérieur « papier déchiré » du bandeau de navigation (sketch .navband).
-class _TornTop extends CustomClipper<Path> {
-  @override
-  Path getClip(Size s) {
-    final w = s.width, h = s.height;
-    return Path()
-      ..moveTo(0, 14)
-      ..lineTo(w * .035, 4)
-      ..lineTo(w * .30, 9)
-      ..lineTo(w * .52, 0)
-      ..lineTo(w * .76, 8)
-      ..lineTo(w, 3)
-      ..lineTo(w, h)
-      ..lineTo(0, h)
-      ..close();
-  }
-
-  @override
-  bool shouldReclip(_TornTop old) => false;
 }
 
 /// État vide « Découpes » : une petite composition de signes superposés en

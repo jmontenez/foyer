@@ -11,6 +11,9 @@ public sealed class Household
     public List<Stage> Stages { get; set; } = [new("todo", "À faire", "todo", 0), new("doing", "En cours", "doing", 1), new("waiting", "En attente / Bloqué", "waiting", 2)];
     public List<Tag> Tags { get; set; } = Defaults.Tags();
     public List<Ticket> Tickets { get; set; } = [];
+    // Calendrier partagé du foyer : événements autonomes (anniversaires, rdv, imports…),
+    // distincts des tâches. Les tâches datées restent dans Tickets (vue union côté client).
+    public List<CalendarEvent> Events { get; set; } = [];
     public List<LoginSession> Sessions { get; set; } = [];
     public List<Device> Devices { get; set; } = [];
     public List<Notification> Notifications { get; set; } = [];
@@ -63,6 +66,10 @@ public sealed class Ticket
     public string StageId { get; set; } = "backlog";
     public DateOnly? StartDate { get; set; }
     public DateOnly? DueDate { get; set; }
+    // Heure de début (minutes depuis minuit, 0–1439) et durée (minutes) optionnelles : une
+    // tâche datée AVEC heure+durée devient un bloc horaire au calendrier (même enregistrement).
+    public int? StartMinute { get; set; }
+    public int? DurationMinutes { get; set; }
     public List<string> Assignees { get; set; } = [];
     public List<string> Performers { get; set; } = [];
     public List<string> TagIds { get; set; } = [];
@@ -111,7 +118,53 @@ public sealed class Notification
 }
 public record TicketInput(string Title, string Description, string Kind, string Priority, string StageId,
     DateOnly? StartDate, DateOnly? DueDate, List<string> Assignees, List<string> Performers,
-    List<string> TagIds, List<CheckItem> Checklist, int Version = 0, string? ShortcutId = null);
+    List<string> TagIds, List<CheckItem> Checklist, int Version = 0, string? ShortcutId = null,
+    int? StartMinute = null, int? DurationMinutes = null);
+// Événement de calendrier (entité autonome ; voir Household.Events).
+public sealed class CalendarEvent
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Title { get; set; } = "";
+    public string? Notes { get; set; }
+    public bool AllDay { get; set; }
+    public DateTimeOffset Start { get; set; }
+    public DateTimeOffset End { get; set; }
+    // Récurrence iCal (RRULE brut) ; null = ponctuel. Parsing fin reporté à un palier ultérieur.
+    public string? Rrule { get; set; }
+    public string Category { get; set; } = "other"; // birthday|appointment|reminder|other
+    public List<string> Participants { get; set; } = [];
+    public string? Location { get; set; }
+    // Provenance : local (saisi dans Foyer) | google | ics. Réservé à la synchro (palier 3).
+    public string Source { get; set; } = "local";
+    public string? ExternalId { get; set; }
+    // Lien optionnel vers une tâche (adhésion douce tâche <-> événement).
+    public string? TaskId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+public static class CalendarEvents
+{
+    public static readonly HashSet<string> Categories = ["birthday", "appointment", "reminder", "other"];
+
+    // Crée (existing == null) ou met à jour un événement LOCAL du foyer ; tout est validé avant d’appliquer.
+    public static CalendarEvent Apply(Household h, CalendarEvent? existing, CalendarEventInput i, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(i.Title) || i.Title.Length > 200) throw new RuleException("Titre requis (200 caractères maximum).");
+        if (!Categories.Contains(i.Category)) throw new RuleException("Catégorie inconnue.");
+        if (i.End < i.Start) throw new RuleException("La fin doit suivre le début.");
+        var participants = i.Participants ?? [];
+        if (participants.Any(id => !h.Members.Any(m => m.Id == id))) throw new RuleException("Membre inconnu.");
+        if (i.TaskId is not null && !h.Tickets.Any(t => t.Id == i.TaskId)) throw new RuleException("Tâche inconnue.");
+        if ((i.Notes?.Length ?? 0) > 12000 || (i.Location?.Length ?? 0) > 300 || (i.Rrule?.Length ?? 0) > 500) throw new RuleException("Note, lieu ou récurrence trop long.");
+        var e = existing ?? new CalendarEvent();
+        if (existing is null) h.Events.Add(e);
+        e.Title = i.Title.Trim(); e.Notes = i.Notes; e.AllDay = i.AllDay;
+        e.Start = i.Start; e.End = i.End; e.Rrule = i.Rrule; e.Category = i.Category;
+        e.Participants = participants.Distinct().ToList(); e.Location = i.Location;
+        e.TaskId = i.TaskId; e.UpdatedAt = now;
+        return e;
+    }
+}
 public sealed class RuleException(string message, int status = 400) : Exception(message) { public int Status { get; } = status; }
 public static class Defaults
 {
@@ -142,6 +195,9 @@ public static class Rules
         if (i.Kind is not ("obligation" or "wish") || i.Priority is not ("low" or "normal" or "high" or "urgent")) throw new RuleException("Type ou priorité invalide.");
         if (!h.Stages.Any(s => s.Id == i.StageId) && i.StageId is not ("backlog" or "done" or "abandoned")) throw new RuleException("Étape inconnue.");
         if (i.StartDate > i.DueDate) throw new RuleException("Le début doit précéder l’échéance.");
+        if (i.StartMinute is < 0 or > 1439) throw new RuleException("Heure invalide.");
+        if (i.DurationMinutes is < 1 or > 1440) throw new RuleException("Durée invalide.");
+        if (i.StartMinute is not null && i.DueDate is null) throw new RuleException("Une heure nécessite une date d’échéance.");
         if (i.Assignees.Concat(i.Performers).Any(id => !h.Members.Any(m => m.Id == id))) throw new RuleException("Membre inconnu.");
         if (i.StageId == "done" && i.Performers.Distinct().Count() is < 1 or > 2) throw new RuleException("Choisissez qui a réalisé cette tâche.");
         if (i.TagIds.Any(id => !h.Tags.Any(tag => tag.Id == id))) throw new RuleException("Tag inconnu.");
@@ -160,12 +216,14 @@ public static class Rules
             if (!t.Assignees.SequenceEqual(i.Assignees)) Event(t, actor, "assignees", JsonSerializer.Serialize(new { before = t.Assignees, after = i.Assignees }, Defaults.Json), now);
             if (!t.Performers.SequenceEqual(performers)) Event(t, actor, "performers", JsonSerializer.Serialize(new { before = t.Performers, after = performers }, Defaults.Json), now);
             if (t.StartDate != i.StartDate || t.DueDate != i.DueDate) Event(t, actor, "dates", $"{t.StartDate}/{t.DueDate} → {i.StartDate}/{i.DueDate}", now);
+            if (t.StartMinute != i.StartMinute || t.DurationMinutes != i.DurationMinutes) Event(t, actor, "time", $"{t.StartMinute}/{t.DurationMinutes} → {i.StartMinute}/{i.DurationMinutes}", now);
             if (JsonSerializer.Serialize(t.Checklist) != JsonSerializer.Serialize(i.Checklist)) Event(t, actor, "checklist", JsonSerializer.Serialize(new { before = t.Checklist, after = i.Checklist }, Defaults.Json), now);
             if (t.Title != i.Title || t.Description != i.Description || t.Priority != i.Priority || t.Kind != i.Kind || !t.TagIds.SequenceEqual(i.TagIds)) Event(t, actor, "edited", "Contenu du ticket modifié", now);
             t.Version++;
         }
         t.Title = i.Title.Trim(); t.Description = i.Description; t.Kind = i.Kind; t.Priority = i.Priority; t.StageId = i.StageId;
         t.StartDate = i.StartDate; t.DueDate = i.DueDate; t.Assignees = i.Assignees.Distinct().ToList(); t.Performers = i.StageId == "done" ? i.Performers.Distinct().ToList() : [];
+        t.StartMinute = i.StartMinute; t.DurationMinutes = i.DurationMinutes;
         t.TagIds = i.TagIds.Distinct().ToList(); t.Checklist = i.Checklist; t.UpdatedAt = now;
         t.ClosedAt = Closed(t) ? t.ClosedAt ?? now : null;
         if (!create && wasOpen && Closed(t) && t.Shopping) Foyer.Shopping.ReturnUnbought(h, t);
@@ -176,7 +234,7 @@ public static class Rules
     {
         if (Closed(t)) throw new RuleException("Cette tâche est déjà close.", 409);
         Apply(h, t, new TicketInput(t.Title, t.Description, t.Kind, t.Priority, "done", t.StartDate, t.DueDate,
-            t.Assignees, [member], t.TagIds, t.Checklist, t.Version, t.ShortcutId), member, now);
+            t.Assignees, [member], t.TagIds, t.Checklist, t.Version, t.ShortcutId, t.StartMinute, t.DurationMinutes), member, now);
     }
 
     // Historique in-app : les annonces de mise à jour n'y figurent pas (ciblées par appareil

@@ -153,6 +153,7 @@ api.MapGet("/state", async (HttpContext ctx, Store store) => await store.Read(h 
     h.Stages,
     h.Tags,
     tickets = h.Tickets.OrderByDescending(t => t.UpdatedAt),
+    events = h.Events,
     today = Rules.Today(h, DateTimeOffset.UtcNow),
     todayIds = h.Tickets.Where(t => Rules.TodayView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
     weekIds = h.Tickets.Where(t => Rules.WeekView(h, t, Rules.Today(h, DateTimeOffset.UtcNow))).Select(t => t.Id),
@@ -202,6 +203,28 @@ api.MapPost("/tickets", async (TicketInput input, HttpContext ctx, Store store) 
     h.Tickets.Add(t); return t;
 }));
 api.MapPut("/tickets/{id}", async (string id, TicketInput input, HttpContext ctx, Store store) => await store.Update(h => { var me = Security.Member(ctx, h); var t = Find(h, id); Rules.Apply(h, t, input, me.Id, DateTimeOffset.UtcNow); return t; }));
+// Calendrier : événements autonomes du foyer. La synchro (google/ics) n'est pas modifiable ici.
+api.MapPost("/events", async (CalendarEventInput input, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    if (settings.PublicDemo && h.Events.Count >= Demo.MaxTickets) throw new RuleException(Demo.Limit, 403);
+    Security.Member(ctx, h);
+    return CalendarEvents.Apply(h, null, input, DateTimeOffset.UtcNow);
+}));
+api.MapPut("/events/{id}", async (string id, CalendarEventInput input, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    Security.Member(ctx, h);
+    var e = h.Events.FirstOrDefault(x => x.Id == id) ?? throw new RuleException("Événement introuvable.", 404);
+    if (e.Source != "local") throw new RuleException("Événement synchronisé : modifiez-le à la source.");
+    return CalendarEvents.Apply(h, e, input, DateTimeOffset.UtcNow);
+}));
+api.MapDelete("/events/{id}", async (string id, HttpContext ctx, Store store) => await store.Update(h =>
+{
+    Security.Member(ctx, h);
+    var e = h.Events.FirstOrDefault(x => x.Id == id) ?? throw new RuleException("Événement introuvable.", 404);
+    if (e.Source != "local") throw new RuleException("Événement synchronisé : supprimez-le à la source.");
+    h.Events.Remove(e);
+    return Results.NoContent();
+}));
 api.MapPost("/tickets/{id}/comments", async (string id, CommentInput input, HttpContext ctx, Store store) => await store.Update(h =>
 {
     var me = Security.Member(ctx, h); var t = Find(h, id);
@@ -390,3 +413,6 @@ public partial class Program { }
 
 public record AppearanceInput(string? PaletteId, string? FontId = null, string? ListStyle = null, string? Density = null, string? Corners = null,
     string? CustomPrimary = null, string? CustomAccent = null, string? CustomBg = null, bool? CustomDark = null);
+public record CalendarEventInput(string Title, DateTimeOffset Start, DateTimeOffset End, bool AllDay = false,
+    string Category = "other", List<string>? Participants = null, string? Notes = null, string? Location = null,
+    string? Rrule = null, string? TaskId = null);
