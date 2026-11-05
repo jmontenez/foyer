@@ -37,6 +37,14 @@ DateTime _mondayOf(DateTime d) =>
     _dateOnly(d).subtract(Duration(days: d.weekday - 1));
 String _hhmm(int m) =>
     '${(m ~/ 60).toString().padLeft(2, '0')}h${(m % 60).toString().padLeft(2, '0')}';
+// Nombre venu du JSON, tolérant (int, double, chaîne) : jamais de cast qui plante.
+int? _int(dynamic v) => v is int
+    ? v
+    : v is num
+    ? v.toInt()
+    : v is String
+    ? int.tryParse(v)
+    : null;
 String _durLabel(int m) => m < 60
     ? '$m min'
     : m % 60 == 0
@@ -129,6 +137,27 @@ class _CalendarViewState extends State<CalendarView> {
 
   @override
   Widget build(BuildContext context) {
+    // Filet de sécurité : une donnée inattendue ne doit jamais donner une page grise ;
+    // on affiche l'erreur plutôt que de planter la zone contenu.
+    try {
+      return _buildWeek(context);
+    } catch (e) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            'Calendrier indisponible.\n$e',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildWeek(BuildContext context) {
     final c = Theme.of(context).colorScheme;
     final days = [for (var i = 0; i < 7; i++) _week.add(Duration(days: i))];
     final timed = List.generate(7, (_) => <_Timed>[]);
@@ -146,8 +175,8 @@ class _CalendarViewState extends State<CalendarView> {
       if (due == null) continue;
       final idx = idxOf(due);
       if (idx == null) continue;
-      final sm = t['startMinute'] as int?;
-      final dm = t['durationMinutes'] as int?;
+      final sm = _int(t['startMinute']);
+      final dm = _int(t['durationMinutes']);
       if (sm != null && dm != null) {
         timed[idx].add(
           _Timed(t['title'].toString(), false, sm, max(sm + 15, min(1440, sm + dm)), t, null),

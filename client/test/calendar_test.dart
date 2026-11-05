@@ -129,4 +129,52 @@ void main() {
     expect(find.text('Modifier l’événement'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Visio'), findsOneWidget);
   });
+
+  // Robustesse : données du vrai serveur (minutes en double, clés manquantes,
+  // stage nul, tâche hors semaine) ne doivent jamais donner une page grise.
+  testWidgets('Données inattendues : pas de page grise', (tester) async {
+    final messy = <String, dynamic>{
+      'today': '2026-11-05',
+      // ni 'members' ni 'events'
+      'tickets': [
+        {
+          'id': 'x1',
+          'title': 'Double minute',
+          'stageId': 'todo',
+          'dueDate': '2026-11-05',
+          'startMinute': 540.0,
+          'durationMinutes': 60.0,
+        },
+        {'id': 'x2', 'title': 'Sans stage', 'dueDate': '2026-11-05'},
+        {
+          'id': 'x3',
+          'title': 'Hors semaine',
+          'stageId': 'todo',
+          'dueDate': '2027-01-01',
+          'startMinute': 600,
+          'durationMinutes': 30,
+        },
+      ],
+    };
+    tester.view.physicalSize = const Size(900, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(const AppAppearance()),
+        home: Scaffold(
+          body: CalendarView(
+            data: messy,
+            api: Api(),
+            onOpenTicket: (_) {},
+            onChanged: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Double minute'), findsOneWidget);
+    expect(find.textContaining('indisponible'), findsNothing);
+  });
 }
