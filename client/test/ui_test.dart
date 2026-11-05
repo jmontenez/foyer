@@ -205,11 +205,11 @@ void main() {
     expect(find.text('Annuler'), findsNothing);
   });
 
-  // Le bandeau à cinq destinations tient sur les petites largeurs, même en
+  // Le bandeau à six destinations tient sur les petites largeurs, même en
   // grande police : libellés tronqués proprement, jamais de débordement.
   for (final (width, scale) in [(320.0, 1.0), (360.0, 1.3), (412.0, 1.5)]) {
     testWidgets(
-      'Les 5 destinations tiennent à ${width.toInt()} px, police ×$scale',
+      'Les 6 destinations tiennent à ${width.toInt()} px, police ×$scale',
       (tester) async {
         tester.view.physicalSize = Size(width, 800);
         tester.view.devicePixelRatio = 1;
@@ -230,6 +230,7 @@ void main() {
                     (FoyerSign.sun, 'Aujourd’hui'),
                     (FoyerSign.bag, 'Courses'),
                     (FoyerSign.cal, 'Prévu'),
+                    (FoyerSign.grid, 'Calendrier'),
                     (FoyerSign.hourglass, 'Backlog'),
                     (FoyerSign.book, 'Journal'),
                   ],
@@ -243,7 +244,7 @@ void main() {
         final band = tester.getRect(find.byType(FloatingNav));
         expect(band.right, lessThanOrEqualTo(width));
         await tester.tap(find.bySemanticsLabel('Journal'));
-        expect(picked, 4);
+        expect(picked, 5);
       },
     );
   }

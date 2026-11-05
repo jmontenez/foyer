@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'appearance.dart';
+import 'calendar.dart';
 import 'shopping.dart';
 import 'shortcuts.dart';
 import 'ui.dart';
@@ -1171,20 +1172,22 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Ce qu’il faut rapporter',
     ];
     final tickets = visible();
-    // Cinq destinations : « Prévu » = Semaine/Tableau ; le backlog (« Un jour »,
-    // vue interne tab 3) a sa propre porte d'entrée pour y accéder directement.
+    // Six destinations : « Prévu » = Semaine/Tableau (board) ; « Calendrier » = la
+    // timeline (tab 6) ; le backlog (« Un jour », vue interne tab 3) a sa propre porte.
     const destinations = [
       (FoyerSign.sun, 'Aujourd’hui'),
       (FoyerSign.bag, 'Courses'),
       (FoyerSign.cal, 'Prévu'),
+      (FoyerSign.grid, 'Calendrier'),
       (FoyerSign.hourglass, 'Backlog'),
       (FoyerSign.book, 'Journal'),
     ];
     final destination = switch (tab) {
       0 => 0,
       5 => 1,
-      3 => 3,
-      4 => 4,
+      6 => 3,
+      3 => 4,
+      4 => 5,
       _ => 2,
     };
     void openDestination(int d) => setState(() {
@@ -1196,8 +1199,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       tab = switch (d) {
         0 => 0,
         1 => 5,
-        3 => 3,
-        4 => 4,
+        3 => 6,
+        4 => 3,
+        5 => 4,
         _ => lastPlanned,
       };
     });
@@ -1456,7 +1460,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                 ],
                               ),
                             ),
-                          if (tab != 5) ...[
+                          if (tab != 5 && tab != 6) ...[
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(
@@ -1469,7 +1473,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                             const SizedBox(height: 12),
                           ],
                           Expanded(
-                            child: tab == 5
+                            child: tab == 6
+                                ? const CalendarView()
+                                : tab == 5
                                 ? ShoppingView(
                                     focusSearch: shoppingSearch,
                                     data: data!,
