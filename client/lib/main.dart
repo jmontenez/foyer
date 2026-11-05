@@ -8,7 +8,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
+// `hide TextDirection` : intl exporte un TextDirection (LTR/RTL) qui masque celui de
+// Flutter (ltr/rtl) utilisé par Directionality.
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
@@ -84,6 +86,24 @@ Future<void> backgroundMessage(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // En release, l'ErrorWidget par défaut est un carré gris illisible. On affiche
+  // l'erreur à la place : indispensable pour diagnostiquer un souci sur l'appareil.
+  ErrorWidget.builder = (FlutterErrorDetails details) => Directionality(
+    textDirection: TextDirection.ltr,
+    child: Material(
+      color: const Color(0xFFF6EFE3),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            'Oups — erreur d’affichage :\n\n${details.exceptionAsString()}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF342650), fontSize: 13),
+          ),
+        ),
+      ),
+    ),
+  );
   LicenseRegistry.addLicense(() async* {
     for (final (family, file) in [
       ('Space Grotesk', 'SpaceGrotesk'),

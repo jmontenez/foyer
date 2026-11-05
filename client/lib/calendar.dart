@@ -214,19 +214,35 @@ class _CalendarViewState extends State<CalendarView> {
         if (_showAllDay && hasAllDay) _allDayBand(c, allday),
         const Divider(height: 1),
         Expanded(
-          child: SingleChildScrollView(
-            controller: _scroll,
-            child: SizedBox(
-              height: 24 * _hourH,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(width: _gutter, child: _hoursGutter(c)),
-                  for (var i = 0; i < 7; i++)
-                    Expanded(child: _dayColumn(c, days[i], timed[i])),
-                ],
-              ),
-            ),
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // Largeur mesurée une seule fois → colonnes à largeur FIXE (plus de
+              // LayoutBuilder imbriqué ni d'Expanded dans le défilement : robuste).
+              final totalW = box.hasBoundedWidth ? box.maxWidth : 700.0;
+              final dayW = max(1.0, (totalW - _gutter) / 7);
+              return SingleChildScrollView(
+                controller: _scroll,
+                child: SizedBox(
+                  height: 24 * _hourH,
+                  width: totalW,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: _gutter,
+                        height: 24 * _hourH,
+                        child: _hoursGutter(c),
+                      ),
+                      for (var i = 0; i < 7; i++)
+                        SizedBox(
+                          width: dayW,
+                          height: 24 * _hourH,
+                          child: _dayColumn(c, days[i], timed[i], dayW),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -581,41 +597,37 @@ class _CalendarViewState extends State<CalendarView> {
     ],
   );
 
-  Widget _dayColumn(ColorScheme c, DateTime day, List<_Timed> slots) =>
-      LayoutBuilder(
-        builder: (context, box) {
-          final w = box.maxWidth;
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: day == _today ? c.primary.withValues(alpha: .05) : null,
-              border: Border(left: BorderSide(color: c.outlineVariant)),
+  // [dayW] est fourni par la grille (largeur fixe) : plus de LayoutBuilder ici.
+  Widget _dayColumn(ColorScheme c, DateTime day, List<_Timed> slots, double dayW) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: day == _today ? c.primary.withValues(alpha: .05) : null,
+        border: Border(left: BorderSide(color: c.outlineVariant)),
+      ),
+      child: Stack(
+        children: [
+          for (var h = 1; h < 24; h++)
+            Positioned(
+              top: h * _hourH,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 1,
+                color: c.outlineVariant.withValues(alpha: .45),
+              ),
             ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                for (var h = 1; h < 24; h++)
-                  Positioned(
-                    top: h * _hourH,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 1,
-                      color: c.outlineVariant.withValues(alpha: .45),
-                    ),
-                  ),
-                for (final s in slots)
-                  Positioned(
-                    top: s.start / 60 * _hourH,
-                    height: (s.end - s.start) / 60 * _hourH,
-                    left: s.lane * (w / s.lanes),
-                    width: w / s.lanes,
-                    child: _block(c, s),
-                  ),
-              ],
+          for (final s in slots)
+            Positioned(
+              top: s.start / 60 * _hourH,
+              height: (s.end - s.start) / 60 * _hourH,
+              left: s.lane * (dayW / s.lanes),
+              width: dayW / s.lanes,
+              child: _block(c, s),
             ),
-          );
-        },
-      );
+        ],
+      ),
+    );
+  }
 
   Widget _block(ColorScheme c, _Timed s) {
     final accent = s.isEvent ? c.secondary : c.primary;
