@@ -1548,7 +1548,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                             child: tab == 6
                                 ? CalendarView(
                                     data: data!,
+                                    api: api,
                                     onOpenTicket: openTicket,
+                                    onChanged: refresh,
                                   )
                                 : tab == 5
                                 ? ShoppingView(

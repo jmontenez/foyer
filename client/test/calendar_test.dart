@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:foyer/api.dart';
 import 'package:foyer/appearance.dart';
 import 'package:foyer/calendar.dart';
 
@@ -7,6 +8,10 @@ void main() {
   // Semaine du jeudi 5 nov. 2026 (toujours dans sa propre semaine).
   final data = <String, dynamic>{
     'today': '2026-11-05',
+    'members': [
+      {'id': 'a', 'name': 'Camille'},
+      {'id': 'b', 'name': 'Alex'},
+    ],
     'tickets': [
       {
         'id': 't1',
@@ -63,7 +68,12 @@ void main() {
       MaterialApp(
         theme: buildAppTheme(const AppAppearance()),
         home: Scaffold(
-          body: CalendarView(data: data, onOpenTicket: onOpen ?? (_) {}),
+          body: CalendarView(
+            data: data,
+            api: Api(),
+            onOpenTicket: onOpen ?? (_) {},
+            onChanged: () async {},
+          ),
         ),
       ),
     );
@@ -98,5 +108,25 @@ void main() {
     await tester.tap(find.text('RDV dentiste'));
     await tester.pump();
     expect(opened?['id'], 't1');
+  });
+
+  testWidgets('Le « + » ouvre l’éditeur de nouvel événement', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byTooltip('Nouvel événement'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nouvel événement'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Enregistrer'), findsOneWidget);
+  });
+
+  testWidgets('Taper un événement ouvre son édition pré-remplie', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.ensureVisible(find.text('Visio'));
+    await tester.tap(find.text('Visio'));
+    await tester.pumpAndSettle();
+    expect(find.text('Modifier l’événement'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Visio'), findsOneWidget);
   });
 }
