@@ -1546,7 +1546,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                           ],
                           Expanded(
                             child: tab == 6
-                                ? const CalendarView()
+                                ? CalendarView(
+                                    data: data!,
+                                    onOpenTicket: openTicket,
+                                  )
                                 : tab == 5
                                 ? ShoppingView(
                                     focusSearch: shoppingSearch,
