@@ -43,6 +43,15 @@ String timeLabel(dynamic value) {
   return date == null ? '' : DateFormat('dd/MM à HH:mm').format(date.toLocal());
 }
 
+// Heure (minutes depuis minuit) et durée (minutes) d'une tâche timée / d'un événement.
+String hhmm(int m) =>
+    '${(m ~/ 60).toString().padLeft(2, '0')}h${(m % 60).toString().padLeft(2, '0')}';
+String durLabel(int m) => m < 60
+    ? '$m min'
+    : m % 60 == 0
+    ? '${m ~/ 60} h'
+    : '${m ~/ 60} h ${m % 60}';
+
 String priorityName(String p) =>
     {
       'low': 'Basse',
@@ -571,6 +580,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'stageId': 'backlog',
       'startDate': null,
       'dueDate': null,
+      'startMinute': null,
+      'durationMinutes': null,
       'assignees': <String>[],
       'performers': <String>[],
       'tagIds': <String>[],
@@ -726,10 +737,69 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                             day.add(const Duration(days: 7)),
                           ),
                         ],
-                        onPick: (d) => ticket['dueDate'] = d == null
-                            ? null
-                            : iso(d as DateTime),
+                        onPick: (d) {
+                          ticket['dueDate'] = d == null
+                              ? null
+                              : iso(d as DateTime);
+                          // Sans date → pas d'heure (le serveur exige une date).
+                          if (d == null) {
+                            ticket['startMinute'] = null;
+                            ticket['durationMinutes'] = null;
+                          }
+                        },
                       ),
+                      // Heure (optionnelle) : nécessite une date. Une tâche datée +
+                      // heure + durée devient un bloc horaire au calendrier.
+                      if (due != null)
+                        FilterPill(
+                          icon: Icons.schedule_outlined,
+                          label: ticket['startMinute'] == null
+                              ? 'Heure ?'
+                              : hhmm(ticket['startMinute'] as int),
+                          selected: ticket['startMinute'] != null,
+                          onTap: () async {
+                            final m = ticket['startMinute'] as int?;
+                            final picked = await showTimePicker(
+                              context: c,
+                              initialTime: m == null
+                                  ? const TimeOfDay(hour: 9, minute: 0)
+                                  : TimeOfDay(hour: m ~/ 60, minute: m % 60),
+                            );
+                            if (picked != null) {
+                              change(() {
+                                ticket['startMinute'] =
+                                    picked.hour * 60 + picked.minute;
+                                ticket['durationMinutes'] ??= 60;
+                              });
+                            }
+                          },
+                        ),
+                      if (due != null && ticket['startMinute'] != null)
+                        chip(
+                          icon: Icons.hourglass_empty_outlined,
+                          label: durLabel(
+                            (ticket['durationMinutes'] ?? 60) as int,
+                          ),
+                          active: true,
+                          options: const [
+                            ('15 min', 15),
+                            ('30 min', 30),
+                            ('45 min', 45),
+                            ('1 h', 60),
+                            ('1 h 30', 90),
+                            ('2 h', 120),
+                            ('3 h', 180),
+                            ('Retirer l’heure', 0),
+                          ],
+                          onPick: (v) {
+                            if (v == 0) {
+                              ticket['startMinute'] = null;
+                              ticket['durationMinutes'] = null;
+                            } else {
+                              ticket['durationMinutes'] = v;
+                            }
+                          },
+                        ),
                       chip(
                         icon: Icons.person_outline,
                         label: who.isEmpty
@@ -837,6 +907,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           'stageId',
           'startDate',
           'dueDate',
+          'startMinute',
+          'durationMinutes',
           'assignees',
           'performers',
           'tagIds',
@@ -2024,6 +2096,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           'priority',
           'startDate',
           'dueDate',
+          'startMinute',
+          'durationMinutes',
           'assignees',
           'performers',
           'tagIds',
@@ -2656,6 +2730,8 @@ class _TicketPageState extends State<TicketPage> {
             'stageId': 'backlog',
             'startDate': null,
             'dueDate': null,
+            'startMinute': null,
+            'durationMinutes': null,
             'assignees': <String>[],
             'performers': <String>[],
             'tagIds': <String>[],
@@ -2742,6 +2818,8 @@ class _TicketPageState extends State<TicketPage> {
           'stageId',
           'startDate',
           'dueDate',
+          'startMinute',
+          'durationMinutes',
           'assignees',
           'performers',
           'tagIds',
@@ -2806,6 +2884,54 @@ class _TicketPageState extends State<TicketPage> {
         dirty = true;
       });
     }
+  }
+
+  Future<void> timePick() async {
+    final m = t['startMinute'] as int?;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: m == null
+          ? const TimeOfDay(hour: 9, minute: 0)
+          : TimeOfDay(hour: m ~/ 60, minute: m % 60),
+    );
+    if (picked != null) {
+      setState(() {
+        t['startMinute'] = picked.hour * 60 + picked.minute;
+        t['durationMinutes'] ??= 60;
+        dirty = true;
+      });
+    }
+  }
+
+  Future<void> pickDuration() async {
+    const options = [15, 30, 45, 60, 90, 120, 180];
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final m in options)
+              ListTile(title: Text(durLabel(m)), onTap: () => Navigator.pop(c, m)),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Retirer l’heure'),
+              onTap: () => Navigator.pop(c, 0),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (picked == 0) {
+        t['startMinute'] = null;
+        t['durationMinutes'] = null;
+      } else {
+        t['durationMinutes'] = picked;
+      }
+      dirty = true;
+    });
   }
 
   Future<void> addTag() async {
@@ -3535,6 +3661,25 @@ class _TicketPageState extends State<TicketPage> {
         ),
         () => datePick('dueDate'),
       ),
+      // Heure + durée (optionnelles, nécessitent une date) : rendent la tâche
+      // visible comme un bloc horaire au calendrier.
+      if (due != null)
+        defRow(
+          'Heure',
+          Text(
+            t['startMinute'] == null
+                ? 'Sans heure'
+                : hhmm(t['startMinute'] as int),
+            style: bold,
+          ),
+          timePick,
+        ),
+      if (due != null && t['startMinute'] != null)
+        defRow(
+          'Durée',
+          Text(durLabel((t['durationMinutes'] ?? 60) as int), style: bold),
+          pickDuration,
+        ),
       defRow(
         'Étapes',
         Text(check.isEmpty ? 'Aucune' : '$done / ${check.length}', style: bold),
