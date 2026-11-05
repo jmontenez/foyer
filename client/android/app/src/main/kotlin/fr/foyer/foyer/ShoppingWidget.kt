@@ -78,7 +78,6 @@ class ShoppingWidget : HomeWidgetProvider() {
                 }
                 val pending = row.optBoolean("pending")
                 val item = RemoteViews(context.packageName, R.layout.widget_shopping_item)
-                theme.row(item, R.id.item_root)
                 item.setTextViewText(R.id.item_text, text)
                 item.setTextColor(R.id.item_text, if (pending) theme.muted else theme.text)
                 item.setTextViewText(R.id.item_qty, if (row.isNull("qty")) "" else row.optString("qty"))

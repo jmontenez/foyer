@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Variante « angles vifs » de la rangée : rectangle franc. Teinté au runtime. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="96dp" android:height="96dp"
-    android:viewportWidth="96" android:viewportHeight="96">
-    <path android:fillColor="@color/widget_row"
-        android:pathData="M0,0 L96,0 L96,96 L0,96 Z" />
-</vector>

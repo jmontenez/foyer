@@ -70,7 +70,6 @@ class TodayWidget : HomeWidgetProvider() {
             val id = Uri.encode(task.optString("id"))
             val pending = task.optBoolean("pending")
             views.setViewVisibility(row.row, View.VISIBLE)
-            theme.row(views, row.row)
             views.setTextViewText(row.title, task.optString("title"))
             views.setTextColor(row.title, if (pending) theme.muted else theme.text)
             val label = if (pending) "Envoi…" else task.optString("meta")
