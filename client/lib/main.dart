@@ -84,6 +84,24 @@ Future<void> backgroundMessage(RemoteMessage message) async {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // En release, l'ErrorWidget par défaut est un carré gris illisible. On affiche
+  // l'erreur à la place : indispensable pour diagnostiquer un souci sur l'appareil.
+  ErrorWidget.builder = (FlutterErrorDetails details) => Directionality(
+    textDirection: TextDirection.ltr,
+    child: Material(
+      color: const Color(0xFFF6EFE3),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            'Oups — erreur d’affichage :\n\n${details.exceptionAsString()}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Color(0xFF342650), fontSize: 13),
+          ),
+        ),
+      ),
+    ),
+  );
   LicenseRegistry.addLicense(() async* {
     for (final (family, file) in [
       ('Space Grotesk', 'SpaceGrotesk'),
