@@ -119,7 +119,8 @@ class _CalendarViewState extends State<CalendarView> {
   final ScrollController _scroll = ScrollController(
     initialScrollOffset: 7 * _hourH,
   );
-  DateTime? _weekStart;
+  DateTime? _anchor; // jour focalisé (défaut : aujourd'hui)
+  String _view = 'semaine'; // jour | semaine | mois
   bool _showAllDay = true;
 
   DateTime get _today {
@@ -127,7 +128,11 @@ class _CalendarViewState extends State<CalendarView> {
     return t == null ? _dateOnly(DateTime.now()) : _dateOnly(t);
   }
 
-  DateTime get _week => _weekStart ?? _mondayOf(_today);
+  DateTime get _focus => _anchor ?? _today;
+  // Jours affichés par la grille horaire (1 en vue Jour, 7 en vue Semaine).
+  List<DateTime> get _gridDays => _view == 'jour'
+      ? [_dateOnly(_focus)]
+      : [for (var i = 0; i < 7; i++) _mondayOf(_focus).add(Duration(days: i))];
 
   @override
   void dispose() {
@@ -140,7 +145,7 @@ class _CalendarViewState extends State<CalendarView> {
     // Filet de sécurité : une donnée inattendue ne doit jamais donner une page grise ;
     // on affiche l'erreur plutôt que de planter la zone contenu.
     try {
-      return _buildWeek(context);
+      return _buildView(context);
     } catch (e) {
       return Center(
         child: Padding(
@@ -157,15 +162,26 @@ class _CalendarViewState extends State<CalendarView> {
     }
   }
 
-  Widget _buildWeek(BuildContext context) {
+  Widget _buildView(BuildContext context) {
     final c = Theme.of(context).colorScheme;
-    final days = [for (var i = 0; i < 7; i++) _week.add(Duration(days: i))];
-    final timed = List.generate(7, (_) => <_Timed>[]);
-    final allday = List.generate(7, (_) => <_AllDay>[]);
+    if (_view == 'mois') {
+      return Column(
+        children: [
+          _controls(c),
+          const Divider(height: 1),
+          Expanded(child: _monthGrid(c)),
+        ],
+      );
+    }
+    final days = _gridDays;
+    final n = days.length;
+    final first = days.first;
+    final timed = List.generate(n, (_) => <_Timed>[]);
+    final allday = List.generate(n, (_) => <_AllDay>[]);
 
     int? idxOf(DateTime d) {
-      final diff = _dateOnly(d).difference(_week).inDays;
-      return (diff >= 0 && diff < 7) ? diff : null;
+      final diff = _dateOnly(d).difference(first).inDays;
+      return (diff >= 0 && diff < n) ? diff : null;
     }
 
     for (final t in _maps(widget.data['tickets'])) {
@@ -209,7 +225,7 @@ class _CalendarViewState extends State<CalendarView> {
 
     return Column(
       children: [
-        _controls(c, days),
+        _controls(c),
         _dayHeader(c, days),
         if (_showAllDay && hasAllDay) _allDayBand(c, allday),
         const Divider(height: 1),
@@ -219,7 +235,7 @@ class _CalendarViewState extends State<CalendarView> {
               // Largeur mesurée une seule fois → colonnes à largeur FIXE (plus de
               // LayoutBuilder imbriqué ni d'Expanded dans le défilement : robuste).
               final totalW = box.hasBoundedWidth ? box.maxWidth : 700.0;
-              final dayW = max(1.0, (totalW - _gutter) / 7);
+              final dayW = max(1.0, (totalW - _gutter) / days.length);
               return SingleChildScrollView(
                 controller: _scroll,
                 child: SizedBox(
@@ -232,7 +248,7 @@ class _CalendarViewState extends State<CalendarView> {
                         height: 24 * _hourH,
                         child: _hoursGutter(c),
                       ),
-                      for (var i = 0; i < 7; i++)
+                      for (var i = 0; i < days.length; i++)
                         SizedBox(
                           width: dayW,
                           height: 24 * _hourH,
@@ -249,53 +265,87 @@ class _CalendarViewState extends State<CalendarView> {
     );
   }
 
-  Widget _controls(ColorScheme c, List<DateTime> days) {
-    final label =
-        '${days.first.day} – ${days.last.day} ${_mo[days.last.month - 1]}';
+  Widget _controls(ColorScheme c) {
+    final f = _focus;
+    final d = _gridDays;
+    final label = switch (_view) {
+      'jour' => '${f.day} ${_mo[f.month - 1]} ${f.year}',
+      'mois' => '${_mo[f.month - 1]} ${f.year}',
+      _ => '${d.first.day} – ${d.last.day} ${_mo[d.last.month - 1]}',
+    };
+    void step(int dir) => setState(() {
+      _anchor = switch (_view) {
+        'jour' => f.add(Duration(days: dir)),
+        'mois' => DateTime(f.year, f.month + dir, 1),
+        _ => f.add(Duration(days: 7 * dir)),
+      };
+    });
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            tooltip: 'Semaine précédente',
-            icon: const Icon(Icons.chevron_left),
-            onPressed: () =>
-                setState(() => _weekStart = _week.subtract(const Duration(days: 7))),
-          ),
-          Expanded(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 15,
-                color: c.onSurface,
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Précédent',
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => step(-1),
               ),
-            ),
+              Expanded(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: c.onSurface,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Suivant',
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => step(1),
+              ),
+              IconButton(
+                tooltip: 'Nouvel événement',
+                icon: const Icon(Icons.add),
+                onPressed: () => _openEditor(null),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Semaine suivante',
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () =>
-                setState(() => _weekStart = _week.add(const Duration(days: 7))),
-          ),
-          TextButton(
-            onPressed: () => setState(() => _weekStart = null),
-            child: const Text('Auj.'),
-          ),
-          IconButton(
-            tooltip: _showAllDay
-                ? 'Masquer les tâches sans heure'
-                : 'Afficher les tâches sans heure',
-            icon: Icon(
-              _showAllDay ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            ),
-            onPressed: () => setState(() => _showAllDay = !_showAllDay),
-          ),
-          IconButton(
-            tooltip: 'Nouvel événement',
-            icon: const Icon(Icons.add),
-            onPressed: () => _openEditor(null),
+          Row(
+            children: [
+              SegmentedButton<String>(
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: 'jour', label: Text('Jour')),
+                  ButtonSegment(value: 'semaine', label: Text('Semaine')),
+                  ButtonSegment(value: 'mois', label: Text('Mois')),
+                ],
+                selected: {_view},
+                onSelectionChanged: (s) => setState(() => _view = s.first),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => setState(() => _anchor = null),
+                child: const Text('Auj.'),
+              ),
+              if (_view != 'mois')
+                IconButton(
+                  tooltip: _showAllDay
+                      ? 'Masquer les tâches sans heure'
+                      : 'Afficher les tâches sans heure',
+                  icon: Icon(
+                    _showAllDay
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                  onPressed: () => setState(() => _showAllDay = !_showAllDay),
+                ),
+            ],
           ),
         ],
       ),
@@ -315,7 +365,7 @@ class _CalendarViewState extends State<CalendarView> {
     final titleCtrl = TextEditingController(
       text: event?['title']?.toString() ?? '',
     );
-    var date = start == null ? _today : _dateOnly(start);
+    var date = start == null ? _focus : _dateOnly(start);
     var allDay = event?['allDay'] == true;
     var startMin = (start != null && !allDay) ? start.hour * 60 + start.minute : 540;
     var durMin = (start != null && end != null && !allDay)
@@ -507,12 +557,12 @@ class _CalendarViewState extends State<CalendarView> {
   Widget _dayHeader(ColorScheme c, List<DateTime> days) => Row(
     children: [
       const SizedBox(width: _gutter),
-      for (var i = 0; i < 7; i++)
+      for (var i = 0; i < days.length; i++)
         Expanded(
           child: Column(
             children: [
               Text(
-                _wd[i],
+                _wd[days[i].weekday - 1],
                 style: TextStyle(
                   fontSize: 10,
                   letterSpacing: .5,
@@ -540,7 +590,7 @@ class _CalendarViewState extends State<CalendarView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(width: _gutter),
-          for (var i = 0; i < 7; i++)
+          for (var i = 0; i < allday.length; i++)
             Expanded(
               child: Column(
                 children: [
@@ -578,6 +628,154 @@ class _CalendarViewState extends State<CalendarView> {
               style: TextStyle(fontSize: 10.5, color: c.onSurface),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // Vue Mois : grille 6×7 (du lundi avant le 1er). Chaque jour montre ses éléments ;
+  // un tap sur un jour bascule en vue Jour.
+  Widget _monthGrid(ColorScheme c) {
+    final f = _focus;
+    final gridStart = _mondayOf(DateTime(f.year, f.month, 1));
+    final cells = [for (var i = 0; i < 42; i++) gridStart.add(Duration(days: i))];
+    final items = <int, List<_AllDay>>{};
+    int? cellOf(DateTime d) {
+      final diff = _dateOnly(d).difference(gridStart).inDays;
+      return (diff >= 0 && diff < 42) ? diff : null;
+    }
+
+    for (final t in _maps(widget.data['tickets'])) {
+      final stage = t['stageId']?.toString();
+      if (stage == 'done' || stage == 'abandoned') continue;
+      final due = DateTime.tryParse(t['dueDate']?.toString() ?? '');
+      if (due == null) continue;
+      final k = cellOf(due);
+      if (k == null) continue;
+      (items[k] ??= []).add(_AllDay(t['title'].toString(), false, t, null));
+    }
+    for (final e in _maps(widget.data['events'])) {
+      final start = DateTime.tryParse(e['start']?.toString() ?? '')?.toLocal();
+      if (start == null) continue;
+      final k = cellOf(start);
+      if (k == null) continue;
+      (items[k] ??= []).add(_AllDay(e['title'].toString(), true, null, e));
+    }
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    _wd[i],
+                    style: TextStyle(fontSize: 10, color: c.onSurfaceVariant),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        for (var w = 0; w < 6; w++)
+          Expanded(
+            child: Row(
+              children: [
+                for (var col = 0; col < 7; col++)
+                  Expanded(
+                    child: _monthCell(
+                      c,
+                      cells[w * 7 + col],
+                      items[w * 7 + col] ?? const <_AllDay>[],
+                      f.month,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _monthCell(
+    ColorScheme c,
+    DateTime day,
+    List<_AllDay> items,
+    int focusMonth,
+  ) {
+    final inMonth = day.month == focusMonth;
+    final isToday = day == _today;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() {
+        _view = 'jour';
+        _anchor = day;
+      }),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isToday ? c.primary.withValues(alpha: .08) : null,
+          border: Border.all(
+            color: c.outlineVariant.withValues(alpha: .5),
+            width: .5,
+          ),
+        ),
+        padding: const EdgeInsets.all(2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${day.day}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+                color: inMonth
+                    ? (isToday ? c.primary : c.onSurface)
+                    : c.onSurfaceVariant.withValues(alpha: .5),
+              ),
+            ),
+            // Rogné (pas de débordement) : au plus 3 éléments puis « +N ».
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final a in items.take(3)) _monthChip(c, a),
+                    if (items.length > 3)
+                      Text(
+                        '+${items.length - 3}',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: c.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _monthChip(ColorScheme c, _AllDay a) {
+    final fill = a.isEvent
+        ? c.secondary.withValues(alpha: .20)
+        : c.primary.withValues(alpha: .16);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 1),
+      child: Container(
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(3),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        child: Text(
+          a.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 9, color: c.onSurface),
         ),
       ),
     );

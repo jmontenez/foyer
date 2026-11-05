@@ -177,4 +177,23 @@ void main() {
     expect(find.text('Double minute'), findsOneWidget);
     expect(find.textContaining('indisponible'), findsNothing);
   });
+
+  testWidgets('Bascule Jour / Semaine / Mois sans planter', (tester) async {
+    await pump(tester);
+    // Vue Jour : le jour focalisé (aujourd'hui) porte RDV dentiste.
+    await tester.tap(find.text('Jour'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('RDV dentiste'), findsOneWidget);
+    // Vue Mois : grille de jours (numéros), aucun plantage.
+    await tester.tap(find.text('Mois'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('5'), findsWidgets);
+    // Retour Semaine.
+    await tester.tap(find.text('Semaine'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Visio'), findsOneWidget);
+  });
 }
