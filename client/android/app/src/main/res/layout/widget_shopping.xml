@@ -25,15 +25,16 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
+                android:fontFamily="@font/manrope_extrabold"
                 android:maxLines="1"
                 android:text="Courses"
                 android:textColor="@color/widget_text"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:textSize="20sp" />
             <TextView
                 android:id="@+id/widget_subtitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="@font/atkinson"
                 android:textColor="@color/widget_muted"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -59,6 +60,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:fontFamily="@font/atkinson"
         android:gravity="center"
         android:paddingStart="8dp"
         android:paddingEnd="8dp"
