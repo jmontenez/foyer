@@ -8,7 +8,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
+// `hide TextDirection` : intl exporte un TextDirection (LTR/RTL) qui masque celui de
+// Flutter (ltr/rtl) utilisé par Directionality.
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
