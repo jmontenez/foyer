@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- « + » : petit carré au coin coupé (cut-sm) dans la couleur d’accent, comme le bouton
-     plat de l’application (plus de pastille ronde). Teinté au runtime vers l’accent. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp" android:height="48dp"
-    android:viewportWidth="48" android:viewportHeight="48">
-    <path android:fillColor="@color/widget_accent"
-        android:pathData="M0,0 L37,0 L48,8 L48,48 L0,48 Z" />
-</vector>
+<!-- « + » : bouton plat aux coins arrondis asymétriques « Découpes » (cutShape(cut-sm) de l'app :
+     grands en haut-gauche / bas-droite, petits en haut-droite / bas-gauche), teinté au runtime
+     vers l'accent (setBackgroundTintList). Remplace l'ancien biseau droit. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_accent" />
+    <corners
+        android:topLeftRadius="12dp"
+        android:bottomRightRadius="12dp"
+        android:topRightRadius="4dp"
+        android:bottomLeftRadius="4dp" />
+</shape>
