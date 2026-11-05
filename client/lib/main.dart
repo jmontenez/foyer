@@ -1262,6 +1262,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       'Plus tard, sans pression',
       'Ce qu’on a fait, et ce qu’on a décidé',
       'Ce qu’il faut rapporter',
+      'La semaine en un coup d’œil',
     ];
     final tickets = visible();
     // Six destinations : « Prévu » = Semaine/Tableau (board) ; « Calendrier » = la
@@ -1407,7 +1408,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         children: [
                           ScreenHeader(
                             title: title,
-                            subtitle: subtitles[tab],
+                            subtitle: tab < subtitles.length
+                                ? subtitles[tab]
+                                : '',
                             stamp: stamp,
                             live: 'Liste partagée',
                             // En ouvert, les utilitaires sont dans le rail ;
