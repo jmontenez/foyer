@@ -82,5 +82,5 @@ public static class Security
         var origin = ctx.Request.Headers.Origin.ToString();
         if (origin.Length > 0 && origin != settings.Origin) throw new RuleException("Origine refusée.", 403);
     }
-    public static object PublicMember(Member m) => new { m.Id, m.Name, m.DigestTime, m.DigestEnabled, m.PaletteId, m.FontId, m.ListStyle, m.Density, m.Corners, m.CustomPrimary, m.CustomAccent, m.CustomDark };
+    public static object PublicMember(Member m) => new { m.Id, m.Name, m.DigestTime, m.DigestEnabled, m.PaletteId, m.FontId, m.ListStyle, m.Density, m.Corners, m.CustomPrimary, m.CustomAccent, m.CustomBg, m.CustomDark };
 }
