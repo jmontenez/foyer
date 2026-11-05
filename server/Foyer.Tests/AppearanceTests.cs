@@ -66,6 +66,14 @@ public class AppearanceTests
         Assert.Equal(("sauge", "#1F4FE0", "#facc15"), (m.PaletteId, m.CustomPrimary, m.CustomAccent));
     }
     [Fact]
+    public void PublicMemberExposesCustomBackground()
+    {
+        // Le fond doit repartir au client, sinon il « revient à l'original » après Enregistrer.
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            Security.PublicMember(new Member { CustomBg = "#101014" }), Defaults.Json);
+        Assert.Contains("\"customBg\":\"#101014\"", json);
+    }
+    [Fact]
     public void CustomBackgroundAcceptsHexEmptyAndRejectsInvalid()
     {
         var m = new Member();
