@@ -290,6 +290,7 @@ enum FoyerSign {
   cal,
   book,
   hourglass,
+  grid,
 }
 
 /// Signe d’un rayon de courses (ids du serveur, repli : cabas).
@@ -499,6 +500,37 @@ class _SignPainter extends CustomPainter {
         );
         canvas.drawRRect(
           RRect.fromLTRBR(14.8, 2, 17, 7, const Radius.circular(1)),
+          fill,
+        );
+      case FoyerSign.grid:
+        // Calendrier à cases (distinct du « cal » plein de Prévu) : deux pattes,
+        // une barre d'en-tête, et quatre cases de jours (2×2).
+        canvas.drawRRect(
+          RRect.fromLTRBR(7, 2, 9, 6, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(15, 2, 17, 6, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(4, 5, 20, 8.5, const Radius.circular(1.5)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(6, 11, 10.5, 15, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(13.5, 11, 18, 15, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(6, 16.5, 10.5, 20.5, const Radius.circular(1)),
+          fill,
+        );
+        canvas.drawRRect(
+          RRect.fromLTRBR(13.5, 16.5, 18, 20.5, const Radius.circular(1)),
           fill,
         );
       case FoyerSign.book:
@@ -1278,9 +1310,15 @@ class FoyerRail extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            for (final (i, (sign, label)) in items.indexed)
-              Semantics(
-                selected: i == index,
+            // Liste défilante : six destinations tiennent même sur un écran large
+            // mais court (paysage), sans débordement ; utilitaires + avatars en bas.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final (i, (sign, label)) in items.indexed)
+                      Semantics(
+                        selected: i == index,
                 button: true,
                 label: label,
                 excludeSemantics: true,
@@ -1332,7 +1370,10 @@ class FoyerRail extends StatelessWidget {
                   ),
                 ),
               ),
-            const Spacer(),
+                  ],
+                ),
+              ),
+            ),
             if (utilities.isNotEmpty) ...[
               ...utilities.map(
                 (u) => Padding(
@@ -1486,52 +1527,48 @@ class FloatingNav extends StatelessWidget {
           top: false,
           child: SizedBox(
             height: 72,
+            // Six destinations tiennent au repli : chacune en icône seule, et seule
+            // l'active s'étire en bloc coupé étiqueté (langage du rail). Plus de
+            // réglages ici (ils restent sur l'avatar de l'en-tête).
             child: Row(
               children: [
-                // Mêmes langage que le rail : destination active = bloc encre au
-                // coin (subtil) sur la bande accent. Plus de réglages ici (ils
-                // restent sur l'avatar de l'en-tête).
                 for (final (i, (sign, label)) in items.indexed)
-                  Expanded(
-                    child: Semantics(
-                      selected: i == index,
-                      button: true,
-                      label: label,
-                      excludeSemantics: true,
-                      child: Tooltip(
-                        message: label,
+                  if (i == index)
+                    Expanded(
+                      child: Semantics(
+                        selected: true,
+                        button: true,
+                        label: label,
+                        excludeSemantics: true,
                         child: InkWell(
                           onTap: () => onSelected(i),
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(3, 6, 3, 6),
+                            padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 5),
-                              decoration: i == index
-                                  ? ShapeDecoration(
-                                      color: c.onSurface,
-                                      shape: cutShape(13),
-                                    )
-                                  : null,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: ShapeDecoration(
+                                color: c.onSurface,
+                                shape: cutShape(13),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  SignIcon(
-                                    sign,
-                                    size: 19,
-                                    color: i == index ? c.surface : c.onSurface,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontFamily: t.displayFont,
-                                      fontWeight: FontWeight.w800,
-                                      color: i == index
-                                          ? c.surface
-                                          : c.onSurface,
+                                  SignIcon(sign, size: 19, color: c.surface),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontFamily: t.displayFont,
+                                        fontWeight: FontWeight.w800,
+                                        color: c.surface,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1540,8 +1577,30 @@ class FloatingNav extends StatelessWidget {
                           ),
                         ),
                       ),
+                    )
+                  else
+                    Semantics(
+                      selected: false,
+                      button: true,
+                      label: label,
+                      excludeSemantics: true,
+                      child: Tooltip(
+                        message: label,
+                        child: InkWell(
+                          onTap: () => onSelected(i),
+                          child: SizedBox(
+                            width: 48,
+                            child: Center(
+                              child: SignIcon(
+                                sign,
+                                size: 22,
+                                color: c.onSurface,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
               ],
             ),
           ),
