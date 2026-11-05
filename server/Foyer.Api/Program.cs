@@ -389,4 +389,4 @@ public record StageInput(List<Stage> Stages, long Revision);
 public partial class Program { }
 
 public record AppearanceInput(string? PaletteId, string? FontId = null, string? ListStyle = null, string? Density = null, string? Corners = null,
-    string? CustomPrimary = null, string? CustomAccent = null, bool? CustomDark = null);
+    string? CustomPrimary = null, string? CustomAccent = null, string? CustomBg = null, bool? CustomDark = null);

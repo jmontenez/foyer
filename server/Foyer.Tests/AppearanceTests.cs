@@ -66,6 +66,25 @@ public class AppearanceTests
         Assert.Equal(("sauge", "#1F4FE0", "#facc15"), (m.PaletteId, m.CustomPrimary, m.CustomAccent));
     }
     [Fact]
+    public void CustomBackgroundAcceptsHexEmptyAndRejectsInvalid()
+    {
+        var m = new Member();
+        Assert.Equal("", m.CustomBg); // défaut : papier fixe
+        Appearance.Apply(m, new AppearanceInput("custom", CustomBg: "#101014"));
+        Assert.Equal("#101014", m.CustomBg);
+        // "" repasse au papier fixe (crème/veillée).
+        Appearance.Apply(m, new AppearanceInput("custom", CustomBg: ""));
+        Assert.Equal("", m.CustomBg);
+        // Hex invalide rejeté ; rien n'a bougé.
+        Appearance.Apply(m, new AppearanceInput("custom", CustomBg: "#101014"));
+        Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput("custom", CustomBg: "101014")));
+        Assert.Throws<RuleException>(() => Appearance.Apply(m, new AppearanceInput("custom", CustomBg: "#ZZ1014")));
+        Assert.Equal("#101014", m.CustomBg);
+        // Le fond seul suffit (ni « Palette inconnue », ni palette imposée).
+        Appearance.Apply(m, new AppearanceInput(null, CustomBg: ""));
+        Assert.Equal("", m.CustomBg);
+    }
+    [Fact]
     public void PreviousMembersGetNeutralTokens()
     {
         // Le serveur ne valide pas à la lecture : une ancienne palette stockée est
