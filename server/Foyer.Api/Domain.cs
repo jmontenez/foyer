@@ -40,6 +40,8 @@ public sealed class Member
     // Palette personnalisée (PaletteId = « custom ») : couple principal/accent et clair/sombre.
     public string CustomPrimary { get; set; } = "#386653";
     public string CustomAccent { get; set; } = "#B58A44";
+    // Fond du duo sur mesure : "" = papier fixe (selon CustomDark), sinon « #RRGGBB » libre.
+    public string CustomBg { get; set; } = "";
     public bool CustomDark { get; set; }
     public string DigestTime { get; set; } = "08:00";
     public bool DigestEnabled { get; set; } = true;
@@ -242,7 +244,7 @@ public static class Appearance
     public static void Apply(Member member, AppearanceInput input)
     {
         if (input.PaletteId is null && input.FontId is null && input.ListStyle is null && input.Density is null && input.Corners is null
-            && input.CustomPrimary is null && input.CustomAccent is null && input.CustomDark is null) throw new RuleException("Palette inconnue.");
+            && input.CustomPrimary is null && input.CustomAccent is null && input.CustomBg is null && input.CustomDark is null) throw new RuleException("Palette inconnue.");
         if (input.PaletteId is not null && !PaletteIds.Contains(input.PaletteId)) throw new RuleException("Palette inconnue.");
         if (input.FontId is not null && !FontIds.Contains(input.FontId)) throw new RuleException("Police inconnue.");
         if (input.ListStyle is not null && !ListStyles.Contains(input.ListStyle)) throw new RuleException("Affichage inconnu.");
@@ -250,6 +252,8 @@ public static class Appearance
         if (input.Corners is not null && !CornerStyles.Contains(input.Corners)) throw new RuleException("Angles inconnus.");
         if (input.CustomPrimary is not null && !Hex(input.CustomPrimary)) throw new RuleException("Couleur invalide.");
         if (input.CustomAccent is not null && !Hex(input.CustomAccent)) throw new RuleException("Couleur invalide.");
+        // Le fond accepte "" (= papier fixe) ou un « #RRGGBB » strict.
+        if (input.CustomBg is not null && input.CustomBg.Length > 0 && !Hex(input.CustomBg)) throw new RuleException("Couleur invalide.");
         member.PaletteId = input.PaletteId ?? member.PaletteId;
         member.FontId = input.FontId ?? member.FontId;
         member.ListStyle = input.ListStyle ?? member.ListStyle;
@@ -257,6 +261,7 @@ public static class Appearance
         member.Corners = input.Corners ?? member.Corners;
         member.CustomPrimary = input.CustomPrimary ?? member.CustomPrimary;
         member.CustomAccent = input.CustomAccent ?? member.CustomAccent;
+        member.CustomBg = input.CustomBg ?? member.CustomBg;
         member.CustomDark = input.CustomDark ?? member.CustomDark;
     }
 }

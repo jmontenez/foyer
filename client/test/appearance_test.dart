@@ -106,6 +106,63 @@ void main() {
     }
   });
 
+  test('Fond personnalisé : surface = couleur choisie, encre lisible, mode auto', () {
+    for (final bg in [
+      '#FFFFFF',
+      '#000000',
+      '#386653',
+      '#FACC15',
+      '#241B31',
+      '#0A0A5E',
+      '#808080',
+    ]) {
+      final theme = buildAppTheme(
+        AppAppearance(paletteId: customPaletteId, customBg: bg),
+      );
+      final c = theme.colorScheme;
+      expect(hexOf(c.surface), bg, reason: bg);
+      // L'encre (noir/blanc) reste lisible quel que soit le fond choisi.
+      expect(
+        contrast(c.surface, c.onSurface),
+        greaterThanOrEqualTo(4.5),
+        reason: bg,
+      );
+    }
+    // Fond vide ⇒ papier fixe (crème clair, ou veillée si le toggle est sombre).
+    expect(
+      buildAppTheme(
+        const AppAppearance(paletteId: customPaletteId),
+      ).scaffoldBackgroundColor,
+      paperFor(false),
+    );
+    expect(
+      buildAppTheme(
+        const AppAppearance(paletteId: customPaletteId, customDark: true),
+      ).scaffoldBackgroundColor,
+      paperFor(true),
+    );
+    // La luminance du fond choisi fixe le mode (clair/veillée).
+    expect(
+      buildAppTheme(
+        const AppAppearance(paletteId: customPaletteId, customBg: '#241B31'),
+      ).brightness,
+      Brightness.dark,
+    );
+    expect(
+      buildAppTheme(
+        const AppAppearance(paletteId: customPaletteId, customBg: '#F6EFE3'),
+      ).brightness,
+      Brightness.light,
+    );
+    // Hors « sur mesure », un fond stocké n'a aucun effet (papier du duo prédéfini).
+    expect(
+      buildAppTheme(
+        const AppAppearance(paletteId: 'sauge', customBg: '#000000'),
+      ).scaffoldBackgroundColor,
+      paperFor(false),
+    );
+  });
+
   test('Hex : lecture stricte, écriture canonique', () {
     expect(hexOf(const Color(0xFF386653)), '#386653');
     expect(colorFromHex('#386653'), const Color(0xFF386653));
@@ -214,7 +271,7 @@ void main() {
     // Palette déjà « Sur mesure » : le sélecteur s’ouvre sur l’onglet des curseurs.
     await tester.tap(find.text('Couleurs'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Veillée'));
     await tester.pump();
     expect(selectedAppearance.value.customDark, isTrue);
     // Fermeture par la barrière (toucher hors de la feuille) : l’aperçu reste.
@@ -231,7 +288,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Couleurs'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Veillée'));
     await tester.pump();
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
@@ -269,7 +326,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Couleurs'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Veillée'));
     await tester.pump();
     await tester.tap(find.text('Enregistrer mes couleurs'));
     await tester.pumpAndSettle();

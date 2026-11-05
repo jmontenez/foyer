@@ -76,12 +76,14 @@ const palettes = [
 class _Neutrals {
   final Color paper, panel, ink, muted;
   final double lineOpacity;
+  final bool dark;
   const _Neutrals(
     this.paper,
     this.panel,
     this.ink,
     this.muted,
     this.lineOpacity,
+    this.dark,
   );
 }
 
@@ -91,6 +93,7 @@ const _lightNeutrals = _Neutrals(
   Color(0xFF342650), // --ink
   Color(0xFF6E6386), // --muted
   .16,
+  false,
 );
 const _darkNeutrals = _Neutrals(
   Color(0xFF241B31),
@@ -98,9 +101,21 @@ const _darkNeutrals = _Neutrals(
   Color(0xFFF2EBDF),
   Color(0xFFB6ABC9),
   .17,
+  true,
 );
 
 _Neutrals _neutralsFor(bool dark) => dark ? _darkNeutrals : _lightNeutrals;
+
+/// Neutres dérivés d'un fond libre (duo sur mesure) : encre noir ou blanc, le plus
+/// lisible sur le fond ([readableOn] garantit un contraste ≥ 4,5), puis un muté et un
+/// panneau posés dessus. Le mode (clair/veillée) suit la luminance du fond choisi.
+_Neutrals _neutralsFromPaper(Color paper) {
+  final dark = paper.computeLuminance() < 0.4;
+  final ink = readableOn(paper);
+  final muted = Color.lerp(ink, paper, .42)!;
+  final panel = Color.lerp(paper, Colors.white, dark ? .07 : .5)!;
+  return _Neutrals(paper, panel, ink, muted, dark ? .20 : .16, dark);
+}
 
 /// Fond papier (ou veillée) d’un mode — pour les aperçus du sélecteur.
 Color paperFor(bool dark) => _neutralsFor(dark).paper;
@@ -185,6 +200,9 @@ FontPair fontById(String? id) =>
 class AppAppearance {
   final String paletteId, fontId, listStyle, density, corners;
   final String customPrimary, customAccent;
+  // Fond du duo sur mesure : '' = l'un des deux papiers fixes (selon [customDark]) ;
+  // sinon un fond « #RRGGBB » libre, dont on dérive encre/panneau lisibles.
+  final String customBg;
   final bool customDark;
   const AppAppearance({
     this.paletteId = 'sauge',
@@ -194,6 +212,7 @@ class AppAppearance {
     this.corners = 'soft',
     this.customPrimary = '#386653',
     this.customAccent = '#B58A44',
+    this.customBg = '',
     this.customDark = false,
   });
 
@@ -215,6 +234,9 @@ class AppAppearance {
       customAccent: colorFromHex(m?['customAccent']?.toString()) == null
           ? '#B58A44'
           : m!['customAccent'].toString().toUpperCase(),
+      customBg: colorFromHex(m?['customBg']?.toString()) == null
+          ? ''
+          : m!['customBg'].toString().toUpperCase(),
       customDark: m?['customDark'] == true,
     );
   }
@@ -227,6 +249,7 @@ class AppAppearance {
     String? corners,
     String? customPrimary,
     String? customAccent,
+    String? customBg,
     bool? customDark,
   }) => AppAppearance(
     paletteId: paletteId ?? this.paletteId,
@@ -236,6 +259,7 @@ class AppAppearance {
     corners: corners ?? this.corners,
     customPrimary: customPrimary ?? this.customPrimary,
     customAccent: customAccent ?? this.customAccent,
+    customBg: customBg ?? this.customBg,
     customDark: customDark ?? this.customDark,
   );
 
@@ -247,6 +271,7 @@ class AppAppearance {
     'corners': corners,
     'customPrimary': customPrimary,
     'customAccent': customAccent,
+    'customBg': customBg,
     'customDark': customDark,
   };
 
@@ -260,6 +285,7 @@ class AppAppearance {
       other.corners == corners &&
       other.customPrimary == customPrimary &&
       other.customAccent == customAccent &&
+      other.customBg == customBg &&
       other.customDark == customDark;
 
   @override
@@ -271,6 +297,7 @@ class AppAppearance {
     corners,
     customPrimary,
     customAccent,
+    customBg,
     customDark,
   );
 }
@@ -361,9 +388,9 @@ Color contrastPanel(ColorScheme c) => Color.lerp(
 /// selon le mode) et **duo** (p/a) posé seulement sur actions, accents et tampons.
 /// On part d’un `fromSeed` pour les rôles résiduels (error, inverse…) puis on
 /// écrase tout ce que l’app lit, de sorte que le duo ne teinte jamais les neutres.
-ColorScheme _schemeFor(AppPalette palette) {
-  final dark = palette.dark;
-  final n = _neutralsFor(dark);
+ColorScheme _schemeFor(AppPalette palette, {Color? paper}) {
+  final n = paper != null ? _neutralsFromPaper(paper) : _neutralsFor(palette.dark);
+  final dark = n.dark;
   final p = palette.primary, a = palette.accent;
   final pSoft = _mix(n.paper, p, dark ? .26 : .13);
   final aMark = _mix(n.paper, a, dark ? .62 : .72);
@@ -409,7 +436,11 @@ ThemeData buildAppTheme(AppAppearance appearance) {
   final fieldRadius = sharp ? 6.0 : 14.0;
   // Coin coupé des cartes/panneaux (--cut du sketch) ; les boutons utilisent cutSmall.
   final cut = sharp ? 12.0 : cutBig;
-  final colors = _schemeFor(palette);
+  // Fond libre du duo sur mesure (sinon null → papier fixe clair/veillée).
+  final customPaper = appearance.paletteId == customPaletteId
+      ? colorFromHex(appearance.customBg)
+      : null;
+  final colors = _schemeFor(palette, paper: customPaper);
   // Les cartes et champs reposent sur le panneau (neutre fixe), jamais teinté.
   final card = colors.surfaceContainerLowest;
   final base = ThemeData(
@@ -485,13 +516,18 @@ class _PalettePickerState extends State<PalettePicker> {
   // L’apparence à l’ouverture, pour que « Annuler » la restaure — capturée tout de suite,
   // avant le moindre réglage.
   late final AppAppearance opened;
-  // Curseurs tenus en TSL pour éviter la dérive des allers-retours hexadécimaux
-  // (teinte perdue quand la saturation ou la luminosité touche une borne).
-  late HSLColor primary = HSLColor.fromColor(
+  // Couleurs tenues en TSV (source de vérité du nuancier) pour éviter la dérive des
+  // allers-retours hexadécimaux (teinte perdue quand saturation ou valeur touche 0).
+  late HSVColor primary = HSVColor.fromColor(
     colorFromHex(selectedAppearance.value.customPrimary)!,
   );
-  late HSLColor accent = HSLColor.fromColor(
+  late HSVColor accent = HSVColor.fromColor(
     colorFromHex(selectedAppearance.value.customAccent)!,
+  );
+  // Fond « Perso » : part du papier courant (crème/veillée) tant qu'aucun fond libre.
+  late HSVColor bg = HSVColor.fromColor(
+    colorFromHex(selectedAppearance.value.customBg) ??
+        paperFor(selectedAppearance.value.customDark),
   );
 
   @override
@@ -507,20 +543,75 @@ class _PalettePickerState extends State<PalettePicker> {
     ),
   );
 
+  // Fond du duo : deux papiers prêts (crème/veillée) en un tap, ou « Perso » qui ouvre
+  // le nuancier (encre dérivée automatiquement pour rester lisible).
+  Widget bgControl(AppAppearance a) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final hasBg = colorFromHex(a.customBg) != null;
+    final sel = hasBg ? 2 : (a.customDark ? 1 : 0);
+    Widget chip(int i, String label, VoidCallback onTap) => ChoiceChip(
+      label: Text(label),
+      selected: sel == i,
+      onSelected: (_) => onTap(),
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 86,
+            child: Text('Fond', style: TextStyle(color: muted, fontSize: 13)),
+          ),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                chip(
+                  0,
+                  'Crème',
+                  () => custom(
+                    (x) => x.copyWith(customBg: '', customDark: false),
+                  ),
+                ),
+                chip(
+                  1,
+                  'Veillée',
+                  () =>
+                      custom((x) => x.copyWith(customBg: '', customDark: true)),
+                ),
+                chip(2, 'Perso', () {
+                  bg = HSVColor.fromColor(
+                    colorFromHex(a.customBg) ?? paperFor(a.customDark),
+                  );
+                  custom((x) => x.copyWith(customBg: hexOf(bg.toColor())));
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget customTab() {
     final a = selectedAppearance.value;
     final from = paletteById(a.paletteId);
+    final hasBg = colorFromHex(a.customBg) != null;
     return ListView(
       children: [
         if (a.paletteId != customPaletteId)
           TextButton.icon(
             onPressed: () {
-              primary = HSLColor.fromColor(from.primary);
-              accent = HSLColor.fromColor(from.accent);
+              primary = HSVColor.fromColor(from.primary);
+              accent = HSVColor.fromColor(from.accent);
+              bg = HSVColor.fromColor(paperFor(from.dark));
               custom(
                 (x) => x.copyWith(
                   customPrimary: hexOf(from.primary),
                   customAccent: hexOf(from.accent),
+                  customBg: '',
                   customDark: from.dark,
                 ),
               );
@@ -528,13 +619,20 @@ class _PalettePickerState extends State<PalettePicker> {
             icon: const Icon(Icons.colorize_outlined),
             label: Text('Partir de « ${from.name} »'),
           ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Veillée (sombre)'),
-          value: a.paletteId == customPaletteId && a.customDark,
-          onChanged: (v) => custom((x) => x.copyWith(customDark: v)),
-        ),
-        ColorSliders(
+        bgControl(a),
+        if (hasBg) ...[
+          const SizedBox(height: 8),
+          ColorField2D(
+            label: 'Fond',
+            color: bg,
+            onChanged: (c) {
+              bg = c;
+              custom((x) => x.copyWith(customBg: hexOf(c.toColor())));
+            },
+          ),
+        ],
+        const SizedBox(height: 16),
+        ColorField2D(
           label: 'Couleur principale',
           color: primary,
           onChanged: (c) {
@@ -542,8 +640,8 @@ class _PalettePickerState extends State<PalettePicker> {
             custom((x) => x.copyWith(customPrimary: hexOf(c.toColor())));
           },
         ),
-        const SizedBox(height: 8),
-        ColorSliders(
+        const SizedBox(height: 16),
+        ColorField2D(
           label: 'Accent',
           color: accent,
           onChanged: (c) {
@@ -570,7 +668,7 @@ class _PalettePickerState extends State<PalettePicker> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Un duo appliqué tel quel, sur un papier qui ne change pas. Vos couleurs vous suivent sur vos appareils.',
+              'Votre duo et, si vous voulez, votre propre fond. Vos couleurs vous suivent sur vos appareils.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -672,12 +770,13 @@ class _PalettePickerState extends State<PalettePicker> {
   );
 }
 
-/// Une couleur du duo personnalisé : pastille d’aperçu et curseurs teinte/saturation/luminosité.
-class ColorSliders extends StatelessWidget {
+/// Nuancier 2D d'une couleur : carré saturation × clarté, barre de teinte, champ hex.
+/// État porté en TSV par le parent (source de vérité) pour éviter la dérive aux bornes.
+class ColorField2D extends StatefulWidget {
   final String label;
-  final HSLColor color;
-  final ValueChanged<HSLColor> onChanged;
-  const ColorSliders({
+  final HSVColor color;
+  final ValueChanged<HSVColor> onChanged;
+  const ColorField2D({
     super.key,
     required this.label,
     required this.color,
@@ -685,64 +784,210 @@ class ColorSliders extends StatelessWidget {
   });
 
   @override
+  State<ColorField2D> createState() => _ColorField2DState();
+}
+
+class _ColorField2DState extends State<ColorField2D> {
+  static const _boxH = 150.0, _barH = 22.0, _thumb = 18.0;
+  final FocusNode _hexFocus = FocusNode();
+  late final TextEditingController _hex = TextEditingController(text: _hex6());
+
+  String _hex6() => hexOf(widget.color.toColor()).substring(1);
+
+  @override
+  void didUpdateWidget(ColorField2D old) {
+    super.didUpdateWidget(old);
+    // Suit la couleur quand elle change ailleurs (nuancier, preset) sans écraser une saisie.
+    if (!_hexFocus.hasFocus && _hex.text.toUpperCase() != _hex6()) {
+      _hex.text = _hex6();
+    }
+  }
+
+  @override
+  void dispose() {
+    _hexFocus.dispose();
+    _hex.dispose();
+    super.dispose();
+  }
+
+  void _typed(String v) {
+    final s = v.replaceAll(RegExp('[^0-9a-fA-F]'), '');
+    final c = s.length == 6 ? colorFromHex('#$s') : null;
+    if (c != null) {
+      final h = HSVColor.fromColor(c);
+      widget.onChanged(HSVColor.fromAHSV(1, h.hue, h.saturation, h.value));
+    }
+  }
+
+  Widget _dot(Color fill) => Container(
+    width: _thumb,
+    height: _thumb,
+    decoration: BoxDecoration(
+      color: fill,
+      shape: BoxShape.circle,
+      border: Border.all(color: Colors.white, width: 2),
+      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    Widget slider(
-      String name,
-      double value,
-      double max,
-      ValueChanged<double> change,
-    ) => Row(
-      children: [
-        SizedBox(
-          width: 86,
-          child: Text(name, style: TextStyle(color: muted, fontSize: 13)),
-        ),
-        Expanded(
-          child: Slider(value: value, max: max, onChanged: change),
-        ),
-      ],
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final hsv = widget.color;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final w = box.maxWidth;
+        void pickSV(Offset p) => widget.onChanged(
+          HSVColor.fromAHSV(
+            1,
+            hsv.hue,
+            (p.dx / w).clamp(0.0, 1.0),
+            (1 - p.dy / _boxH).clamp(0.0, 1.0),
+          ),
+        );
+        void pickHue(Offset p) => widget.onChanged(
+          HSVColor.fromAHSV(
+            1,
+            (p.dx / w).clamp(0.0, 1.0) * 360,
+            hsv.saturation,
+            hsv.value,
+          ),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: color.toColor(),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+            Row(
+              children: [
+                Text(
+                  widget.label,
+                  style: TextStyle(color: muted, fontSize: 13),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 118,
+                  child: TextField(
+                    controller: _hex,
+                    focusNode: _hexFocus,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      prefixText: '#',
+                      isDense: true,
+                    ),
+                    onChanged: _typed,
+                    onSubmitted: (v) {
+                      _typed(v);
+                      _hex.text = _hex6();
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onPanDown: (d) => pickSV(d.localPosition),
+              onPanUpdate: (d) => pickSV(d.localPosition),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: w,
+                  height: _boxH,
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor(),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.white,
+                                Colors.white.withValues(alpha: 0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0),
+                                Colors.black,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: (hsv.saturation * w - _thumb / 2).clamp(
+                          0.0,
+                          w - _thumb,
+                        ),
+                        top: ((1 - hsv.value) * _boxH - _thumb / 2).clamp(
+                          0.0,
+                          _boxH - _thumb,
+                        ),
+                        child: _dot(hsv.toColor()),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 10),
-            Text(label),
-            const Spacer(),
-            Text(
-              hexOf(color.toColor()),
-              style: TextStyle(color: muted, fontSize: 13),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onPanDown: (d) => pickHue(d.localPosition),
+              onPanUpdate: (d) => pickHue(d.localPosition),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(_barH / 2),
+                child: SizedBox(
+                  width: w,
+                  height: _barH,
+                  child: Stack(
+                    children: [
+                      const Positioned.fill(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Color(0xFFFF0000),
+                                Color(0xFFFFFF00),
+                                Color(0xFF00FF00),
+                                Color(0xFF00FFFF),
+                                Color(0xFF0000FF),
+                                Color(0xFFFF00FF),
+                                Color(0xFFFF0000),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: (hsv.hue / 360 * w - _thumb / 2).clamp(
+                          0.0,
+                          w - _thumb,
+                        ),
+                        top: (_barH - _thumb) / 2,
+                        child: _dot(
+                          HSVColor.fromAHSV(1, hsv.hue, 1, 1).toColor(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
-        ),
-        slider('Teinte', color.hue, 360, (v) => onChanged(color.withHue(v))),
-        slider(
-          'Saturation',
-          color.saturation,
-          1,
-          (v) => onChanged(color.withSaturation(v)),
-        ),
-        // Bornée : un principal quasi noir ou blanc rend le duo illisible.
-        slider(
-          'Luminosité',
-          color.lightness.clamp(.05, .95),
-          1,
-          (v) => onChanged(color.withLightness(v.clamp(.05, .95))),
-        ),
-      ],
+        );
+      },
     );
   }
 }
