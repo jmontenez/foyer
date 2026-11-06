@@ -556,7 +556,7 @@ class _CalendarViewState extends State<CalendarView> {
               'notes': event?['notes'],
               'location': event?['location'],
               'taskId': event?['taskId'],
-              if (exDates != null) 'exDates': exDates,
+              'exDates': ?exDates,
             };
 
             var scope = 'all';
@@ -597,7 +597,7 @@ class _CalendarViewState extends State<CalendarView> {
                   edited(date, withRrule: null),
                 );
                 final ex = _exList(event);
-                final key = _ymd(occurrence!);
+                final key = _ymd(occurrence);
                 if (!ex.contains(key)) {
                   await widget.api.call(
                     'PUT',
@@ -629,7 +629,7 @@ class _CalendarViewState extends State<CalendarView> {
               } else {
                 // Supprimer juste cette occurrence = l'exclure de la série.
                 final ex = _exList(ev);
-                final key = _ymd(occurrence!);
+                final key = _ymd(occurrence);
                 if (!ex.contains(key)) ex.add(key);
                 await widget.api.call(
                   'PUT',
