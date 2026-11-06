@@ -36,6 +36,24 @@ public class WidgetsTests
     }
 
     [Fact]
+    public void AgendaGroupsUpcomingEventsAndDatedTasksByDay()
+    {
+        var h = Home();
+        h.Tickets.Add(new() { Id = "t1", Title = "RDV dentiste", StageId = "todo", DueDate = Today, StartMinute = 540, DurationMinutes = 60 });
+        h.Tickets.Add(new() { Id = "t2", Title = "Courses", StageId = "todo", DueDate = Today });
+        h.Tickets.Add(new() { Id = "tc", Title = "Finie", StageId = "done", DueDate = Today });
+        h.Tickets.Add(new() { Id = "tf", Title = "Trop loin", StageId = "todo", DueDate = Today.AddDays(30) });
+        h.Events.Add(new() { Id = "e1", Title = "Anniv", AllDay = true, Start = new DateTimeOffset(2026, 9, 26, 10, 0, 0, TimeSpan.Zero), End = new DateTimeOffset(2026, 9, 26, 10, 0, 0, TimeSpan.Zero) });
+        var agenda = Widgets.Build(h, h.Members[0], Now).Agenda;
+        // Tout-la-journée avant le timé le même jour ; close et hors-horizon exclus.
+        Assert.Equal(["Aujourd’hui", "Courses", "RDV dentiste", "Demain", "Anniv"], agenda.Select(r => r.Text));
+        Assert.Equal([null, "t2", "t1", null, "e1"], agenda.Select(r => r.Id));
+        Assert.Equal(("journée", "09:00"), (agenda[1].Time, agenda[2].Time));
+        Assert.True(agenda[4].IsEvent);
+        Assert.False(agenda[2].IsEvent);
+    }
+
+    [Fact]
     public void DoneInOneTapIsByMeAndKeepsTheRest()
     {
         var h = Home();

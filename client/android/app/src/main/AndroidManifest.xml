@@ -50,6 +50,13 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_shopping_info" />
         </receiver>
+        <!-- Widget « Agenda » (écran d’accueil). -->
+        <receiver android:name=".AgendaWidget" android:exported="true" android:label="@string/widget_agenda_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_agenda_info" />
+        </receiver>
         <!-- Touchers des widgets (fait, article coché), exécutés en Dart ; seules nos PendingIntent y mènent. -->
         <receiver android:name=".WidgetActionReceiver" android:exported="false" />
         <receiver android:name=".UpdatedReceiver" android:exported="false">

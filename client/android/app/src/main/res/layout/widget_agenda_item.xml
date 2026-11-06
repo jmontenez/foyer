@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Élément d'agenda : barre de couleur (accent = événement, muté = tâche) + heure + titre.
+     Toucher ouvre l'élément (tâche → sa fiche ; événement → le calendrier). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="2dp"
+    android:gravity="center_vertical"
+    android:minHeight="40dp"
+    android:orientation="horizontal"
+    android:paddingStart="6dp"
+    android:paddingEnd="12dp">
+    <View
+        android:id="@+id/item_bar"
+        android:layout_width="3dp"
+        android:layout_height="30dp" />
+    <TextView
+        android:id="@+id/item_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="10dp"
+        android:fontFamily="@font/atkinson"
+        android:textColor="@color/widget_accent"
+        android:textSize="12sp" />
+    <TextView
+        android:id="@+id/item_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="@font/atkinson"
+        android:maxLines="1"
+        android:textColor="@color/widget_text"
+        android:textSize="14sp" />
+</LinearLayout>
