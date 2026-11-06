@@ -85,4 +85,24 @@ public class CalendarTests
         Assert.Throws<RuleException>(() => CalendarEvents.Apply(h, null, endBeforeStart, Now));
         Assert.Empty(h.Events);
     }
+
+    [Fact]
+    public void EventReminderFiresOnceInWindowAndSkipsAllDay()
+    {
+        var h = Home();
+        h.Members.ForEach(m => m.DigestEnabled = false);
+        var start = new DateTimeOffset(2026, 11, 10, 14, 0, 0, TimeSpan.Zero);
+        CalendarEvents.Apply(h, null, new CalendarEventInput("RDV", start, start.AddHours(1), ReminderMinutes: 60, Participants: ["a"]), Now);
+        CalendarEvents.Apply(h, null, new CalendarEventInput("Anniv", start, start, AllDay: true, ReminderMinutes: 60), Now);
+        List<Notification> fired() => h.Notifications.Where(n => n.Kind == "event").ToList();
+        // Trop tôt (2 h avant) : rien.
+        Rules.Schedule(h, start.AddHours(-2));
+        Assert.Empty(fired());
+        // Dans la fenêtre (1 h avant = le rappel choisi) : un rappel pour le participant, pas pour l'anniv.
+        Rules.Schedule(h, start.AddMinutes(-60));
+        Assert.Equal(("a", "RDV"), (Assert.Single(fired()).MemberId, fired()[0].Title));
+        // Idempotent : une seconde passe ne re-notifie pas.
+        Rules.Schedule(h, start.AddMinutes(-50));
+        Assert.Single(fired());
+    }
 }

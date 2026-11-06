@@ -58,6 +58,15 @@ const _catLabels = {
   'other': 'Autre',
 };
 String _catLabel(String c) => _catLabels[c] ?? 'Autre';
+// Libellé court du rappel (minutes avant le début ; null = aucun).
+String _reminderLabel(int? m) {
+  if (m == null) return 'Aucun';
+  if (m == 0) return 'À l’heure';
+  if (m == 1440) return '1 j avant';
+  if (m < 60) return '$m min avant';
+  if (m % 60 == 0) return '${m ~/ 60} h avant';
+  return '${m ~/ 60} h ${m % 60} avant';
+}
 
 // Bloc horaire placé sur la grille (tâche timée ou événement).
 class _Timed {
@@ -378,6 +387,8 @@ class _CalendarViewState extends State<CalendarView> {
         ? max(15, end.difference(start).inMinutes)
         : 60;
     var category = event?['category']?.toString() ?? 'other';
+    // Rappel (minutes avant le début) : 1 h par défaut à la création ; null = aucun.
+    var reminder = event == null ? 60 : _int(event['reminderMinutes']);
     final participants = <String>{
       ...?(event?['participants'] as List?)?.map((e) => e.toString()),
     };
@@ -403,6 +414,7 @@ class _CalendarViewState extends State<CalendarView> {
               'allDay': allDay,
               'category': category,
               'participants': participants.toList(),
+              'reminderMinutes': reminder,
             };
             try {
               await widget.api.call(
@@ -508,6 +520,26 @@ class _CalendarViewState extends State<CalendarView> {
                             label: Text(_catLabel(category)),
                           ),
                         ),
+                        // Rappel push (événements timés) : -1 = aucun.
+                        if (!allDay)
+                          PopupMenuButton<int>(
+                            onSelected: (v) =>
+                                setSheet(() => reminder = v < 0 ? null : v),
+                            itemBuilder: (_) => [
+                              for (final r in [-1, 0, 15, 30, 60, 120, 1440])
+                                PopupMenuItem(
+                                  value: r,
+                                  child: Text(r < 0 ? 'Aucun' : _reminderLabel(r)),
+                                ),
+                            ],
+                            child: Chip(
+                              avatar: const Icon(
+                                Icons.notifications_outlined,
+                                size: 18,
+                              ),
+                              label: Text(_reminderLabel(reminder)),
+                            ),
+                          ),
                       ],
                     ),
                     if (members.isNotEmpty) ...[

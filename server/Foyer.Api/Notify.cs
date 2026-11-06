@@ -27,7 +27,7 @@ public static class Notify
     // Canal Android selon le type (les anciens APK sans ces canaux prennent le canal par défaut).
     public static string Channel(string kind) => kind switch
     {
-        "start" or "digest" => "foyer_reminders",
+        "start" or "digest" or "event" => "foyer_reminders",
         "update" => "foyer_updates",
         _ => "foyer_activity",
     };
@@ -65,6 +65,18 @@ public static class Notify
             Title = $"{who} vous a confié une tâche", Body = subject,
             CreatedAt = now, NextAttempt = now, ExpiresAt = now.AddDays(3),
         });
+    }
+
+    // Rappel d'événement (push au moment choisi avant le début) : l'heure et le lieu en corps.
+    public static Notification EventReminder(Household h, CalendarEvent e, string memberId, DateTimeOffset now)
+    {
+        var local = TimeZoneInfo.ConvertTime(e.Start, Zone(h));
+        var body = $"À {local.Hour:D2}:{local.Minute:D2}" + (e.Location is { Length: > 0 } loc ? $" · {loc}" : "");
+        return new()
+        {
+            MemberId = memberId, Kind = "event", Title = e.Title, Body = body,
+            CreatedAt = now, NextAttempt = now, ExpiresAt = now.AddHours(2),
+        };
     }
 
     // Heures calmes : de 22 h à l’heure du résumé du membre (08:00 si elle tombe l’après-midi).

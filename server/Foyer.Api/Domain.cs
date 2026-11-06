@@ -139,6 +139,10 @@ public sealed class CalendarEvent
     public string? ExternalId { get; set; }
     // Lien optionnel vers une tâche (adhésion douce tâche <-> événement).
     public string? TaskId { get; set; }
+    // Rappel push : minutes AVANT le début (défaut 60 ; null = aucun). ReminderSent évite
+    // de notifier deux fois (remis à false si l'horaire ou le rappel change).
+    public int? ReminderMinutes { get; set; } = 60;
+    public bool ReminderSent { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -156,12 +160,15 @@ public static class CalendarEvents
         if (participants.Any(id => !h.Members.Any(m => m.Id == id))) throw new RuleException("Membre inconnu.");
         if (i.TaskId is not null && !h.Tickets.Any(t => t.Id == i.TaskId)) throw new RuleException("Tâche inconnue.");
         if ((i.Notes?.Length ?? 0) > 12000 || (i.Location?.Length ?? 0) > 300 || (i.Rrule?.Length ?? 0) > 500) throw new RuleException("Note, lieu ou récurrence trop long.");
+        if (i.ReminderMinutes is < 0 or > 10080) throw new RuleException("Rappel invalide.");
         var e = existing ?? new CalendarEvent();
         if (existing is null) h.Events.Add(e);
+        // Horaire ou rappel modifié : on re-planifie le rappel.
+        if (e.Start != i.Start || e.ReminderMinutes != i.ReminderMinutes) e.ReminderSent = false;
         e.Title = i.Title.Trim(); e.Notes = i.Notes; e.AllDay = i.AllDay;
         e.Start = i.Start; e.End = i.End; e.Rrule = i.Rrule; e.Category = i.Category;
         e.Participants = participants.Distinct().ToList(); e.Location = i.Location;
-        e.TaskId = i.TaskId; e.UpdatedAt = now;
+        e.TaskId = i.TaskId; e.ReminderMinutes = i.ReminderMinutes; e.UpdatedAt = now;
         return e;
     }
 }
@@ -277,6 +284,17 @@ public static class Rules
                 m.LastDigestDate = today.ToString("yyyy-MM-dd");
                 if (Notify.Digest(h, m, today, now) is { } digest) h.Notifications.Add(digest);
             }
+        }
+        // Rappels d'événements : push au moment choisi (défaut 1 h avant le début), une seule fois.
+        // Ignorés pour les événements tout-la-journée ; on ne rappelle pas un événement déjà passé.
+        foreach (var e in h.Events)
+        {
+            if (e.AllDay || e.ReminderMinutes is not { } lead || e.ReminderSent) continue;
+            if (now < e.Start - TimeSpan.FromMinutes(lead) || now >= e.Start + TimeSpan.FromMinutes(5)) continue;
+            e.ReminderSent = true;
+            var recipients = e.Participants.Count > 0 ? e.Participants : h.Members.Select(m => m.Id).ToList();
+            foreach (var mid in recipients.Distinct())
+                if (h.Members.Any(m => m.Id == mid)) h.Notifications.Add(Notify.EventReminder(h, e, mid, now));
         }
         h.Sessions.RemoveAll(s => s.ExpiresAt <= now);
         h.Devices.RemoveAll(d => !h.Sessions.Any(s => s.Hash == d.SessionHash));
