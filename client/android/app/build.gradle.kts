@@ -44,6 +44,7 @@ android {
         manifestPlaceholders["appLabel"] = if (foyerBeta) "Foyer β" else "Foyer"
         resValue("string", "widget_today_label", if (foyerBeta) "Foyer β · Aujourd’hui" else "Foyer · Aujourd’hui")
         resValue("string", "widget_shopping_label", if (foyerBeta) "Foyer β · Courses" else "Foyer · Courses")
+        resValue("string", "widget_agenda_label", if (foyerBeta) "Foyer β · Agenda" else "Foyer · Agenda")
     }
 
     signingConfigs {

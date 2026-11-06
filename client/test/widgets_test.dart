@@ -48,6 +48,7 @@ void main() {
       expect(widgetSnapshot(null, at), {
         'today': null,
         'shopping': null,
+        'agenda': null,
         'fetchedAt': null,
         'notice': null,
         'shoppingNotice': null,

@@ -11,6 +11,7 @@ import 'appearance.dart';
 // Les actions des widgets s’exécutent ici, en Dart, dans un isolat d’arrière-plan.
 const todayWidget = 'fr.foyer.foyer.TodayWidget';
 const shoppingWidget = 'fr.foyer.foyer.ShoppingWidget';
+const agendaWidget = 'fr.foyer.foyer.AgendaWidget';
 
 bool get widgetsSupported =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -26,6 +27,7 @@ sealed class WidgetLink {
     return switch (uri.host) {
       'today' => const OpenToday(),
       'create' => const QuickCreate(),
+      'calendar' => const OpenCalendar(),
       'courses' => OpenCourses(add: uri.queryParameters['add'] == '1'),
       'ticket' when uri.pathSegments.length == 1 => OpenTicket(
         uri.pathSegments.single,
@@ -41,6 +43,10 @@ class OpenToday extends WidgetLink {
 
 class QuickCreate extends WidgetLink {
   const QuickCreate();
+}
+
+class OpenCalendar extends WidgetLink {
+  const OpenCalendar();
 }
 
 class OpenCourses extends WidgetLink {
@@ -59,6 +65,7 @@ Map<String, String?> widgetSnapshot(Map<String, dynamic>? data, DateTime at) =>
     {
       'today': data == null ? null : jsonEncode(data['today']),
       'shopping': data == null ? null : jsonEncode(data['shopping']),
+      'agenda': data == null ? null : jsonEncode(data['agenda']),
       'fetchedAt': data == null ? null : at.millisecondsSinceEpoch.toString(),
       'notice': null,
       'shoppingNotice': null,
@@ -79,6 +86,7 @@ String? markPending(String? snapshot, String id, {String list = 'tasks'}) {
 Future<void> _updateAll() async {
   await HomeWidget.updateWidget(qualifiedAndroidName: todayWidget);
   await HomeWidget.updateWidget(qualifiedAndroidName: shoppingWidget);
+  await HomeWidget.updateWidget(qualifiedAndroidName: agendaWidget);
 }
 
 Future<void> _save(Map<String, String?> snapshot) async {

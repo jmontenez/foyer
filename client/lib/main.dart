@@ -219,6 +219,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     switch (link) {
       case OpenToday():
         setState(() => tab = 0);
+      case OpenCalendar():
+        setState(() => tab = 6);
       case QuickCreate():
         await quickCreate();
       case OpenCourses(:final add):
