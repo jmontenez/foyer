@@ -54,6 +54,14 @@ void main() {
         'start': '2026-11-05T14:00:00',
         'end': '2026-11-05T15:00:00',
       },
+      {
+        'id': 'e3',
+        'title': 'Quotidien',
+        'allDay': false,
+        'start': '2026-11-02T08:00:00',
+        'end': '2026-11-02T08:30:00',
+        'rrule': 'FREQ=DAILY',
+      },
     ],
   };
 
@@ -176,6 +184,14 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Double minute'), findsOneWidget);
     expect(find.textContaining('indisponible'), findsNothing);
+  });
+
+  testWidgets('Événement récurrent : plusieurs occurrences dans la semaine', (
+    tester,
+  ) async {
+    await pump(tester);
+    // « Quotidien » (FREQ=DAILY depuis le lundi) apparaît sur plusieurs jours.
+    expect(find.text('Quotidien'), findsAtLeastNWidgets(2));
   });
 
   testWidgets('Bascule Jour / Semaine / Mois sans planter', (tester) async {

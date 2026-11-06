@@ -58,6 +58,52 @@ const _catLabels = {
   'other': 'Autre',
 };
 String _catLabel(String c) => _catLabels[c] ?? 'Autre';
+// Récurrence : presets simples → RRULE (iCal). Désactivée par défaut (null).
+const _repeatOptions = <(String, String?)>[
+  ('Ne pas répéter', null),
+  ('Chaque jour', 'FREQ=DAILY'),
+  ('Chaque semaine', 'FREQ=WEEKLY'),
+  ('Chaque mois', 'FREQ=MONTHLY'),
+  ('Chaque jour ouvré', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR'),
+];
+String _rruleLabel(String? r) {
+  if (r == null || r.isEmpty) return 'Répéter';
+  for (final o in _repeatOptions) {
+    if (o.$2 == r) return o.$1;
+  }
+  return 'Répétition';
+}
+
+// Jours (date seule) où un événement [baseStart] se produit dans [from, to], selon [rrule].
+List<DateTime> _occurrenceDays(
+  DateTime baseStart,
+  String? rrule,
+  DateTime from,
+  DateTime to,
+) {
+  final base = _dateOnly(baseStart);
+  if (rrule == null || rrule.isEmpty) {
+    return (!base.isBefore(from) && !base.isAfter(to)) ? [base] : const [];
+  }
+  final weekdays = rrule.contains('BYDAY=MO,TU,WE,TH,FR');
+  final freq = RegExp('FREQ=([A-Z]+)').firstMatch(rrule)?.group(1);
+  final out = <DateTime>[];
+  var d = from.isBefore(base) ? base : _dateOnly(from);
+  while (!d.isAfter(to)) {
+    final ok = weekdays
+        ? d.weekday <= 5
+        : freq == 'DAILY'
+        ? true
+        : freq == 'WEEKLY'
+        ? d.weekday == base.weekday
+        : freq == 'MONTHLY'
+        ? d.day == base.day
+        : d == base;
+    if (ok) out.add(d);
+    d = d.add(const Duration(days: 1));
+  }
+  return out;
+}
 // Libellé court du rappel (minutes avant le début ; null = aucun).
 String _reminderLabel(int? m) {
   if (m == null) return 'Aucun';
@@ -213,18 +259,26 @@ class _CalendarViewState extends State<CalendarView> {
     for (final e in _maps(widget.data['events'])) {
       final start = DateTime.tryParse(e['start']?.toString() ?? '')?.toLocal();
       if (start == null) continue;
-      final idx = idxOf(start);
-      if (idx == null) continue;
-      if (e['allDay'] == true) {
-        allday[idx].add(_AllDay(e['title'].toString(), true, null, e));
-      } else {
-        final end = DateTime.tryParse(e['end']?.toString() ?? '')?.toLocal();
-        final sm = start.hour * 60 + start.minute;
-        final sameDay = end != null && _dateOnly(end) == _dateOnly(start);
-        final em = end == null ? sm + 60 : (sameDay ? end.hour * 60 + end.minute : 1440);
-        timed[idx].add(
-          _Timed(e['title'].toString(), true, sm, max(sm + 15, min(1440, em)), null, e),
-        );
+      final end = DateTime.tryParse(e['end']?.toString() ?? '')?.toLocal();
+      final allDayEv = e['allDay'] == true;
+      final sm = start.hour * 60 + start.minute;
+      final durMin = end != null ? max(15, end.difference(start).inMinutes) : 60;
+      // Récurrence : une occurrence par jour correspondant dans la plage affichée.
+      for (final day in _occurrenceDays(
+        start,
+        e['rrule']?.toString(),
+        days.first,
+        days.last,
+      )) {
+        final idx = idxOf(day);
+        if (idx == null) continue;
+        if (allDayEv) {
+          allday[idx].add(_AllDay(e['title'].toString(), true, null, e));
+        } else {
+          timed[idx].add(
+            _Timed(e['title'].toString(), true, sm, max(sm + 15, min(1440, sm + durMin)), null, e),
+          );
+        }
       }
     }
     for (final list in timed) {
@@ -389,6 +443,9 @@ class _CalendarViewState extends State<CalendarView> {
     var category = event?['category']?.toString() ?? 'other';
     // Rappel (minutes avant le début) : 1 h par défaut à la création ; null = aucun.
     var reminder = event == null ? 60 : _int(event['reminderMinutes']);
+    // Récurrence (RRULE) : désactivée par défaut (null).
+    var rrule = event?['rrule']?.toString();
+    if (rrule != null && rrule.isEmpty) rrule = null;
     final participants = <String>{
       ...?(event?['participants'] as List?)?.map((e) => e.toString()),
     };
@@ -415,6 +472,7 @@ class _CalendarViewState extends State<CalendarView> {
               'category': category,
               'participants': participants.toList(),
               'reminderMinutes': reminder,
+              'rrule': rrule,
             };
             try {
               await widget.api.call(
@@ -518,6 +576,19 @@ class _CalendarViewState extends State<CalendarView> {
                           child: Chip(
                             avatar: const Icon(Icons.label_outline, size: 18),
                             label: Text(_catLabel(category)),
+                          ),
+                        ),
+                        // Récurrence (tous les événements) : '' = ne pas répéter.
+                        PopupMenuButton<String>(
+                          onSelected: (v) =>
+                              setSheet(() => rrule = v.isEmpty ? null : v),
+                          itemBuilder: (_) => [
+                            for (final o in _repeatOptions)
+                              PopupMenuItem(value: o.$2 ?? '', child: Text(o.$1)),
+                          ],
+                          child: Chip(
+                            avatar: const Icon(Icons.repeat, size: 18),
+                            label: Text(_rruleLabel(rrule)),
                           ),
                         ),
                         // Rappel push (événements timés) : -1 = aucun.
@@ -695,9 +766,16 @@ class _CalendarViewState extends State<CalendarView> {
     for (final e in _maps(widget.data['events'])) {
       final start = DateTime.tryParse(e['start']?.toString() ?? '')?.toLocal();
       if (start == null) continue;
-      final k = cellOf(start);
-      if (k == null) continue;
-      (items[k] ??= []).add(_AllDay(e['title'].toString(), true, null, e));
+      for (final day in _occurrenceDays(
+        start,
+        e['rrule']?.toString(),
+        cells.first,
+        cells.last,
+      )) {
+        final k = cellOf(day);
+        if (k == null) continue;
+        (items[k] ??= []).add(_AllDay(e['title'].toString(), true, null, e));
+      }
     }
     return Column(
       children: [
