@@ -139,10 +139,12 @@ public sealed class CalendarEvent
     public string? ExternalId { get; set; }
     // Lien optionnel vers une tâche (adhésion douce tâche <-> événement).
     public string? TaskId { get; set; }
-    // Rappel push : minutes AVANT le début (défaut 60 ; null = aucun). ReminderSent évite
-    // de notifier deux fois (remis à false si l'horaire ou le rappel change).
+    // Rappel push : minutes AVANT le début (défaut 60 ; null = aucun). ReminderOccurrence =
+    // début de la dernière occurrence déjà rappelée (ou dépassée) : curseur qui évite les doublons
+    // ET fait avancer le rappel d'occurrence en occurrence pour une série. Remis à null si l'horaire
+    // ou le rappel change.
     public int? ReminderMinutes { get; set; } = 60;
-    public bool ReminderSent { get; set; }
+    public DateTimeOffset? ReminderOccurrence { get; set; }
     // Dates (« yyyy-MM-dd ») exclues d'une série récurrente (occurrences détachées/supprimées).
     public List<string> ExDates { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -166,8 +168,8 @@ public static class CalendarEvents
         if ((i.ExDates?.Count ?? 0) > 1000) throw new RuleException("Trop d’exceptions de récurrence.");
         var e = existing ?? new CalendarEvent();
         if (existing is null) h.Events.Add(e);
-        // Horaire ou rappel modifié : on re-planifie le rappel.
-        if (e.Start != i.Start || e.ReminderMinutes != i.ReminderMinutes) e.ReminderSent = false;
+        // Horaire ou rappel modifié : on re-planifie le rappel (curseur remis à zéro).
+        if (e.Start != i.Start || e.ReminderMinutes != i.ReminderMinutes) e.ReminderOccurrence = null;
         e.Title = i.Title.Trim(); e.Notes = i.Notes; e.AllDay = i.AllDay;
         e.Start = i.Start; e.End = i.End; e.Rrule = i.Rrule; e.Category = i.Category;
         e.Participants = participants.Distinct().ToList(); e.Location = i.Location;
@@ -175,6 +177,40 @@ public static class CalendarEvents
         // Dates d'exception : omises (null) = inchangées ; fournies = remplacent (occurrences détachées/supprimées).
         if (i.ExDates is not null) e.ExDates = i.ExDates.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
         return e;
+    }
+
+    // Jours LOCAUX (fuseau du foyer) où [e] se produit dans [from, to] inclus, selon Rrule, hors ExDates.
+    // Miroir serveur de _occurrenceDays côté client (mêmes 4 motifs : DAILY/WEEKLY/MONTHLY/jours ouvrés).
+    public static IEnumerable<DateOnly> OccurrenceDates(CalendarEvent e, TimeZoneInfo zone, DateOnly from, DateOnly to)
+    {
+        var baseDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(e.Start, zone).DateTime);
+        var ex = e.ExDates.ToHashSet();
+        bool Kept(DateOnly d) => !ex.Contains(d.ToString("yyyy-MM-dd"));
+        if (string.IsNullOrEmpty(e.Rrule))
+        {
+            if (baseDate >= from && baseDate <= to && Kept(baseDate)) yield return baseDate;
+            yield break;
+        }
+        var weekdays = e.Rrule.Contains("BYDAY=MO,TU,WE,TH,FR");
+        var freq = System.Text.RegularExpressions.Regex.Match(e.Rrule, "FREQ=([A-Z]+)") is { Success: true } m ? m.Groups[1].Value : null;
+        for (var d = from < baseDate ? baseDate : from; d <= to; d = d.AddDays(1))
+        {
+            var dow = ((int)d.DayOfWeek + 6) % 7; // 0 = lundi … 6 = dimanche
+            var ok = weekdays ? dow <= 4
+                : freq == "DAILY" ? true
+                : freq == "WEEKLY" ? d.DayOfWeek == baseDate.DayOfWeek
+                : freq == "MONTHLY" ? d.Day == baseDate.Day
+                : d == baseDate;
+            if (ok && Kept(d)) yield return d;
+        }
+    }
+
+    // Début ABSOLU d'une occurrence : date locale + heure locale de l'événement de base.
+    public static DateTimeOffset OccurrenceStart(CalendarEvent e, TimeZoneInfo zone, DateOnly day)
+    {
+        var baseLocal = TimeZoneInfo.ConvertTime(e.Start, zone).DateTime;
+        var local = day.ToDateTime(TimeOnly.FromDateTime(baseLocal));
+        return new DateTimeOffset(local, zone.GetUtcOffset(local));
     }
 }
 public sealed class RuleException(string message, int status = 400) : Exception(message) { public int Status { get; } = status; }
@@ -290,16 +326,29 @@ public static class Rules
                 if (Notify.Digest(h, m, today, now) is { } digest) h.Notifications.Add(digest);
             }
         }
-        // Rappels d'événements : push au moment choisi (défaut 1 h avant le début), une seule fois.
-        // Ignorés pour les événements tout-la-journée ; on ne rappelle pas un événement déjà passé.
+        // Rappels d'événements : push au moment choisi (défaut 1 h avant le début), une fois par
+        // occurrence. Ignorés pour les événements tout-la-journée ; on ne rappelle pas un événement
+        // déjà passé. Pour une série, le curseur ReminderOccurrence avance d'occurrence en occurrence.
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(h.TimeZone);
         foreach (var e in h.Events)
         {
-            if (e.AllDay || e.ReminderMinutes is not { } lead || e.ReminderSent) continue;
-            if (now < e.Start - TimeSpan.FromMinutes(lead) || now >= e.Start + TimeSpan.FromMinutes(5)) continue;
-            e.ReminderSent = true;
-            var recipients = e.Participants.Count > 0 ? e.Participants : h.Members.Select(m => m.Id).ToList();
-            foreach (var mid in recipients.Distinct())
-                if (h.Members.Any(m => m.Id == mid)) h.Notifications.Add(Notify.EventReminder(h, e, mid, now));
+            if (e.AllDay || e.ReminderMinutes is not { } lead) continue;
+            var after = e.ReminderOccurrence ?? DateTimeOffset.MinValue;
+            // Fenêtre large (le rappel peut précéder le début de 7 j max) ; on traite la 1re occurrence due.
+            foreach (var day in CalendarEvents.OccurrenceDates(e, zone, today.AddDays(-1), today.AddDays(8)))
+            {
+                var start = CalendarEvents.OccurrenceStart(e, zone, day);
+                if (start <= after) continue;                                 // déjà rappelée/dépassée
+                if (now < start - TimeSpan.FromMinutes(lead)) break;          // trop tôt (suivantes aussi)
+                if (now < start + TimeSpan.FromMinutes(5))                    // dans la fenêtre → notifier
+                {
+                    var recipients = e.Participants.Count > 0 ? e.Participants : h.Members.Select(m => m.Id).ToList();
+                    foreach (var mid in recipients.Distinct())
+                        if (h.Members.Any(m => m.Id == mid)) h.Notifications.Add(Notify.EventReminder(h, e, mid, now, start));
+                }
+                e.ReminderOccurrence = start;  // avance le curseur (notifié OU trop tard)
+                break;                          // une occurrence par passage
+            }
         }
         h.Sessions.RemoveAll(s => s.ExpiresAt <= now);
         h.Devices.RemoveAll(d => !h.Sessions.Any(s => s.Hash == d.SessionHash));
