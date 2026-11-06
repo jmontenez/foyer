@@ -68,9 +68,10 @@ public static class Notify
     }
 
     // Rappel d'événement (push au moment choisi avant le début) : l'heure et le lieu en corps.
-    public static Notification EventReminder(Household h, CalendarEvent e, string memberId, DateTimeOffset now)
+    // [start] = début de l'occurrence concernée (= e.Start pour un événement ponctuel).
+    public static Notification EventReminder(Household h, CalendarEvent e, string memberId, DateTimeOffset now, DateTimeOffset start)
     {
-        var local = TimeZoneInfo.ConvertTime(e.Start, Zone(h));
+        var local = TimeZoneInfo.ConvertTime(start, Zone(h));
         var body = $"À {local.Hour:D2}:{local.Minute:D2}" + (e.Location is { Length: > 0 } loc ? $" · {loc}" : "");
         return new()
         {

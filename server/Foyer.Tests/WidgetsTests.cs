@@ -54,6 +54,25 @@ public class WidgetsTests
     }
 
     [Fact]
+    public void AgendaExpandsRecurringEventsAndSkipsExceptions()
+    {
+        var h = Home();
+        // Série quotidienne tout-la-journée dès aujourd'hui, avec l'occurrence de demain détachée (ExDate).
+        h.Events.Add(new()
+        {
+            Id = "e1", Title = "Méditation", AllDay = true,
+            Start = new DateTimeOffset(2026, 9, 25, 8, 0, 0, TimeSpan.Zero),
+            End = new DateTimeOffset(2026, 9, 25, 8, 0, 0, TimeSpan.Zero),
+            Rrule = "FREQ=DAILY", ExDates = ["2026-09-26"],
+        });
+        var agenda = Widgets.Build(h, h.Members[0], Now).Agenda;
+        // Plusieurs occurrences rendues (plafonnées par MaxAgenda)…
+        Assert.True(agenda.Count(r => r.Text == "Méditation") >= 2);
+        // …mais pas celle du 26 (exclue) : « Demain » n'apparaît pas.
+        Assert.DoesNotContain("Demain", agenda.Select(r => r.Text));
+    }
+
+    [Fact]
     public void DoneInOneTapIsByMeAndKeepsTheRest()
     {
         var h = Home();

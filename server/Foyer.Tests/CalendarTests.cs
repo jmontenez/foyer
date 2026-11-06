@@ -124,4 +124,28 @@ public class CalendarTests
         Rules.Schedule(h, start.AddMinutes(-50));
         Assert.Single(fired());
     }
+
+    [Fact]
+    public void EventReminderAdvancesAcrossRecurringOccurrences()
+    {
+        var h = Home();
+        h.Members.ForEach(m => m.DigestEnabled = false);
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(h.TimeZone);
+        // Série quotidienne à 14:00 (heure du foyer), rappel 60 min avant.
+        var firstLocal = new DateTime(2026, 11, 10, 14, 0, 0);
+        var start = new DateTimeOffset(firstLocal, tz.GetUtcOffset(firstLocal));
+        CalendarEvents.Apply(h, null, new CalendarEventInput("Sport", start, start.AddHours(1),
+            Rrule: "FREQ=DAILY", ReminderMinutes: 60, Participants: ["a"]), Now);
+        int fired() => h.Notifications.Count(n => n.Kind == "event");
+        // Rappel de la 1re occurrence (J − 60 min).
+        Rules.Schedule(h, start.AddMinutes(-60));
+        Assert.Equal(1, fired());
+        // Pas de doublon un peu plus tard le même jour.
+        Rules.Schedule(h, start.AddMinutes(-50));
+        Assert.Equal(1, fired());
+        // L'occurrence du lendemain re-déclenche un rappel (le curseur a avancé).
+        var next = start.AddDays(1);
+        Rules.Schedule(h, next.AddMinutes(-60));
+        Assert.Equal(2, fired());
+    }
 }

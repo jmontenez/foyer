@@ -45,9 +45,10 @@ public static class Widgets
         foreach (var e in h.Events)
         {
             var local = TimeZoneInfo.ConvertTime(e.Start, tz);
-            var day = DateOnly.FromDateTime(local.DateTime);
-            if (day < today || day >= horizon) continue;
-            items.Add((day, e.AllDay ? -1 : local.Hour * 60 + local.Minute, e.AllDay, e.Id, e.Title, true));
+            var min = e.AllDay ? -1 : local.Hour * 60 + local.Minute;
+            // Récurrence : une ligne par occurrence dans l'horizon (hors ExDates).
+            foreach (var day in CalendarEvents.OccurrenceDates(e, tz, today, horizon.AddDays(-1)))
+                items.Add((day, min, e.AllDay, e.Id, e.Title, true));
         }
         items.Sort((a, b) => a.Day != b.Day ? a.Day.CompareTo(b.Day) : a.Min.CompareTo(b.Min));
         var rows = new List<WidgetAgendaRow>();
