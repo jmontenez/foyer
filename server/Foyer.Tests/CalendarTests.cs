@@ -87,6 +87,25 @@ public class CalendarTests
     }
 
     [Fact]
+    public void EventExDatesStoredReplacedOrKept()
+    {
+        var h = Home();
+        var start = new DateTimeOffset(2026, 11, 10, 9, 0, 0, TimeSpan.Zero);
+        CalendarEventInput Series(string title, List<string>? ex) =>
+            new(title, start, start.AddHours(1), Rrule: "FREQ=DAILY", ExDates: ex);
+        // Création avec une date d'exception (occurrence détachée).
+        var e = CalendarEvents.Apply(h, null, Series("Série", ["2026-11-12"]), Now);
+        Assert.Equal(["2026-11-12"], e.ExDates);
+        // ExDates omis (null) = inchangé (édition « toute la série » qui ne touche pas aux exceptions).
+        CalendarEvents.Apply(h, e, Series("Série bis", null), Now);
+        Assert.Equal(["2026-11-12"], e.ExDates);
+        Assert.Equal("Série bis", e.Title);
+        // Liste fournie = remplace (nouvelle occasion exclue).
+        CalendarEvents.Apply(h, e, Series("Série", ["2026-11-12", "2026-11-13"]), Now);
+        Assert.Equal(["2026-11-12", "2026-11-13"], e.ExDates);
+    }
+
+    [Fact]
     public void EventReminderFiresOnceInWindowAndSkipsAllDay()
     {
         var h = Home();

@@ -194,6 +194,25 @@ void main() {
     expect(find.text('Quotidien'), findsAtLeastNWidgets(2));
   });
 
+  testWidgets('Éditer une occurrence récurrente propose cet évt / la série', (
+    tester,
+  ) async {
+    await pump(tester);
+    // Ouvrir l'éditeur depuis une occurrence de « Quotidien » (série FREQ=DAILY).
+    await tester.ensureVisible(find.text('Quotidien').first);
+    await tester.tap(find.text('Quotidien').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Modifier l’événement'), findsOneWidget);
+    // La récurrence est reflétée dans l'éditeur.
+    expect(find.text('Chaque jour'), findsOneWidget);
+    // Enregistrer → choix de portée.
+    await tester.tap(find.text('Enregistrer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Événement récurrent'), findsOneWidget);
+    expect(find.text('Cet événement'), findsOneWidget);
+    expect(find.text('Toute la série'), findsOneWidget);
+  });
+
   testWidgets('Bascule Jour / Semaine / Mois sans planter', (tester) async {
     await pump(tester);
     // Vue Jour : le jour focalisé (aujourd'hui) porte RDV dentiste.

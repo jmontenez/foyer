@@ -143,6 +143,8 @@ public sealed class CalendarEvent
     // de notifier deux fois (remis à false si l'horaire ou le rappel change).
     public int? ReminderMinutes { get; set; } = 60;
     public bool ReminderSent { get; set; }
+    // Dates (« yyyy-MM-dd ») exclues d'une série récurrente (occurrences détachées/supprimées).
+    public List<string> ExDates { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
@@ -161,6 +163,7 @@ public static class CalendarEvents
         if (i.TaskId is not null && !h.Tickets.Any(t => t.Id == i.TaskId)) throw new RuleException("Tâche inconnue.");
         if ((i.Notes?.Length ?? 0) > 12000 || (i.Location?.Length ?? 0) > 300 || (i.Rrule?.Length ?? 0) > 500) throw new RuleException("Note, lieu ou récurrence trop long.");
         if (i.ReminderMinutes is < 0 or > 10080) throw new RuleException("Rappel invalide.");
+        if ((i.ExDates?.Count ?? 0) > 1000) throw new RuleException("Trop d’exceptions de récurrence.");
         var e = existing ?? new CalendarEvent();
         if (existing is null) h.Events.Add(e);
         // Horaire ou rappel modifié : on re-planifie le rappel.
@@ -169,6 +172,8 @@ public static class CalendarEvents
         e.Start = i.Start; e.End = i.End; e.Rrule = i.Rrule; e.Category = i.Category;
         e.Participants = participants.Distinct().ToList(); e.Location = i.Location;
         e.TaskId = i.TaskId; e.ReminderMinutes = i.ReminderMinutes; e.UpdatedAt = now;
+        // Dates d'exception : omises (null) = inchangées ; fournies = remplacent (occurrences détachées/supprimées).
+        if (i.ExDates is not null) e.ExDates = i.ExDates.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
         return e;
     }
 }
