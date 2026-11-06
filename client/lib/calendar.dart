@@ -35,6 +35,13 @@ List<Map<String, dynamic>> _maps(dynamic v) =>
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 DateTime _mondayOf(DateTime d) =>
     _dateOnly(d).subtract(Duration(days: d.weekday - 1));
+// Clé date locale « yyyy-MM-dd » (EXDATE d'une série : occurrences détachées/supprimées).
+String _ymd(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+Set<String> _exDatesOf(Map e) =>
+    {...?(e['exDates'] as List?)?.map((x) => x.toString())};
+List<String> _exList(Map e) =>
+    (e['exDates'] as List?)?.map((x) => x.toString()).toList() ?? <String>[];
 String _hhmm(int m) =>
     '${(m ~/ 60).toString().padLeft(2, '0')}h${(m % 60).toString().padLeft(2, '0')}';
 // Nombre venu du JSON, tolérant (int, double, chaîne) : jamais de cast qui plante.
@@ -75,15 +82,20 @@ String _rruleLabel(String? r) {
 }
 
 // Jours (date seule) où un événement [baseStart] se produit dans [from, to], selon [rrule].
+// [exDates] (clés « yyyy-MM-dd ») sont les occurrences détachées/supprimées : jamais rendues.
 List<DateTime> _occurrenceDays(
   DateTime baseStart,
   String? rrule,
   DateTime from,
-  DateTime to,
-) {
+  DateTime to, {
+  Set<String> exDates = const {},
+}) {
   final base = _dateOnly(baseStart);
+  bool kept(DateTime d) => !exDates.contains(_ymd(d));
   if (rrule == null || rrule.isEmpty) {
-    return (!base.isBefore(from) && !base.isAfter(to)) ? [base] : const [];
+    return (!base.isBefore(from) && !base.isAfter(to) && kept(base))
+        ? [base]
+        : const [];
   }
   final weekdays = rrule.contains('BYDAY=MO,TU,WE,TH,FR');
   final freq = RegExp('FREQ=([A-Z]+)').firstMatch(rrule)?.group(1);
@@ -99,11 +111,30 @@ List<DateTime> _occurrenceDays(
         : freq == 'MONTHLY'
         ? d.day == base.day
         : d == base;
-    if (ok) out.add(d);
+    if (ok && kept(d)) out.add(d);
     d = d.add(const Duration(days: 1));
   }
   return out;
 }
+
+// Corps PUT reconstruisant une série à l'identique (champs du serveur) + exDates donnés.
+// Sert à exclure une occurrence sans toucher au reste de la série.
+Map<String, dynamic> _seriesBody(Map e, String? rrule, List<String> exDates) => {
+  'title': e['title']?.toString() ?? '',
+  'start': e['start'],
+  'end': e['end'],
+  'allDay': e['allDay'] == true,
+  'category': e['category']?.toString() ?? 'other',
+  'participants':
+      (e['participants'] as List?)?.map((x) => x.toString()).toList() ??
+      const <String>[],
+  'reminderMinutes': _int(e['reminderMinutes']),
+  'rrule': rrule,
+  'notes': e['notes'],
+  'location': e['location'],
+  'taskId': e['taskId'],
+  'exDates': exDates,
+};
 // Libellé court du rappel (minutes avant le début ; null = aucun).
 String _reminderLabel(int? m) {
   if (m == null) return 'Aucun';
@@ -121,8 +152,17 @@ class _Timed {
   final int start, end; // minutes depuis minuit
   final Map<String, dynamic>? ticket; // la tâche (pour l'ouvrir), null si événement
   final Map<String, dynamic>? event; // l'événement (pour l'éditer), null si tâche
+  final DateTime? occurrence; // jour de CETTE occurrence (série récurrente)
   int lane = 0, lanes = 1;
-  _Timed(this.title, this.isEvent, this.start, this.end, this.ticket, this.event);
+  _Timed(
+    this.title,
+    this.isEvent,
+    this.start,
+    this.end,
+    this.ticket,
+    this.event, {
+    this.occurrence,
+  });
 }
 
 class _AllDay {
@@ -130,7 +170,8 @@ class _AllDay {
   final bool isEvent;
   final Map<String, dynamic>? ticket;
   final Map<String, dynamic>? event;
-  _AllDay(this.title, this.isEvent, this.ticket, this.event);
+  final DateTime? occurrence;
+  _AllDay(this.title, this.isEvent, this.ticket, this.event, {this.occurrence});
 }
 
 // Attribue des « couloirs » aux blocs qui se chevauchent (algo d'intervalles).
@@ -269,14 +310,15 @@ class _CalendarViewState extends State<CalendarView> {
         e['rrule']?.toString(),
         days.first,
         days.last,
+        exDates: _exDatesOf(e),
       )) {
         final idx = idxOf(day);
         if (idx == null) continue;
         if (allDayEv) {
-          allday[idx].add(_AllDay(e['title'].toString(), true, null, e));
+          allday[idx].add(_AllDay(e['title'].toString(), true, null, e, occurrence: day));
         } else {
           timed[idx].add(
-            _Timed(e['title'].toString(), true, sm, max(sm + 15, min(1440, sm + durMin)), null, e),
+            _Timed(e['title'].toString(), true, sm, max(sm + 15, min(1440, sm + durMin)), null, e, occurrence: day),
           );
         }
       }
@@ -421,6 +463,7 @@ class _CalendarViewState extends State<CalendarView> {
     Map<String, dynamic>? event, {
     DateTime? initialDay,
     int? initialMinute,
+    DateTime? occurrence,
   }) async {
     final members = _maps(widget.data['members']);
     final start = event == null
@@ -429,10 +472,21 @@ class _CalendarViewState extends State<CalendarView> {
     final end = event == null
         ? null
         : DateTime.tryParse(event['end']?.toString() ?? '')?.toLocal();
+    // Série récurrente éditée depuis une occurrence précise → on proposera
+    // « cet événement / toute la série ».
+    final baseRrule = () {
+      final r = event?['rrule']?.toString();
+      return (r == null || r.isEmpty) ? null : r;
+    }();
+    final recurringEdit =
+        event != null && baseRrule != null && occurrence != null;
     final titleCtrl = TextEditingController(
       text: event?['title']?.toString() ?? '',
     );
-    var date = start == null ? (initialDay ?? _focus) : _dateOnly(start);
+    // On ouvre sur le jour de l'occurrence touchée (pas l'ancre de la série).
+    var date = start == null
+        ? (initialDay ?? _focus)
+        : _dateOnly(occurrence ?? start);
     var allDay = event?['allDay'] == true;
     var startMin = start != null && !allDay
         ? start.hour * 60 + start.minute
@@ -457,29 +511,101 @@ class _CalendarViewState extends State<CalendarView> {
       builder: (sheetCtx) => StatefulBuilder(
         builder: (ctx, setSheet) {
           final c = Theme.of(ctx).colorScheme;
+          // Pour une série : appliquer à « cet événement » (one) ou « toute la série » (all).
+          Future<String?> askScope(String action) => showDialog<String>(
+            context: ctx,
+            builder: (dc) => AlertDialog(
+              title: const Text('Événement récurrent'),
+              content: Text('$action :'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dc),
+                  child: const Text('Annuler'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dc, 'one'),
+                  child: const Text('Cet événement'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dc, 'all'),
+                  child: const Text('Toute la série'),
+                ),
+              ],
+            ),
+          );
+
           Future<void> submit() async {
             if (titleCtrl.text.trim().isEmpty || saving) return;
-            setSheet(() => saving = true);
-            DateTime at(int min) =>
-                DateTime(date.year, date.month, date.day, min ~/ 60, min % 60);
-            final body = {
+            DateTime at(DateTime day, int min) =>
+                DateTime(day.year, day.month, day.day, min ~/ 60, min % 60);
+            String iso(DateTime d) => d.toUtc().toIso8601String();
+            // Corps depuis les champs édités, posé sur [day].
+            Map<String, dynamic> edited(
+              DateTime day, {
+              String? withRrule,
+              List<String>? exDates,
+            }) => {
               'title': titleCtrl.text.trim(),
-              'start': (allDay ? at(0) : at(startMin)).toUtc().toIso8601String(),
-              'end': (allDay ? at(23 * 60 + 59) : at(startMin + durMin))
-                  .toUtc()
-                  .toIso8601String(),
+              'start': iso(allDay ? at(day, 0) : at(day, startMin)),
+              'end': iso(allDay ? at(day, 23 * 60 + 59) : at(day, startMin + durMin)),
               'allDay': allDay,
               'category': category,
               'participants': participants.toList(),
               'reminderMinutes': reminder,
-              'rrule': rrule,
+              'rrule': withRrule,
+              'notes': event?['notes'],
+              'location': event?['location'],
+              'taskId': event?['taskId'],
+              if (exDates != null) 'exDates': exDates,
             };
+
+            var scope = 'all';
+            if (recurringEdit) {
+              final choice = await askScope('Appliquer la modification à');
+              if (choice == null) return; // annulé
+              scope = choice;
+            }
+            setSheet(() => saving = true);
             try {
-              await widget.api.call(
-                event == null ? 'POST' : 'PUT',
-                event == null ? '/api/v1/events' : '/api/v1/events/${event['id']}',
-                body,
-              );
+              if (event == null) {
+                await widget.api.call(
+                  'POST',
+                  '/api/v1/events',
+                  edited(date, withRrule: rrule),
+                );
+              } else if (!recurringEdit) {
+                await widget.api.call(
+                  'PUT',
+                  '/api/v1/events/${event['id']}',
+                  edited(date, withRrule: rrule),
+                );
+              } else if (scope == 'all') {
+                // Toute la série : garder l'ancre (date de base), appliquer le reste.
+                final anchor =
+                    DateTime.tryParse(event['start']?.toString() ?? '')?.toLocal() ??
+                    date;
+                await widget.api.call(
+                  'PUT',
+                  '/api/v1/events/${event['id']}',
+                  edited(_dateOnly(anchor), withRrule: rrule, exDates: _exList(event)),
+                );
+              } else {
+                // Cet événement seul : détacher une occurrence isolée + exclure sa date de la série.
+                await widget.api.call(
+                  'POST',
+                  '/api/v1/events',
+                  edited(date, withRrule: null),
+                );
+                final ex = _exList(event);
+                final key = _ymd(occurrence!);
+                if (!ex.contains(key)) {
+                  await widget.api.call(
+                    'PUT',
+                    '/api/v1/events/${event['id']}',
+                    _seriesBody(event, baseRrule, [...ex, key]),
+                  );
+                }
+              }
               if (ctx.mounted) Navigator.pop(ctx);
               await widget.onChanged();
             } catch (_) {
@@ -488,10 +614,29 @@ class _CalendarViewState extends State<CalendarView> {
           }
 
           Future<void> remove() async {
-            if (saving) return;
+            if (saving || event == null) return;
+            final ev = event;
+            var scope = 'all';
+            if (recurringEdit) {
+              final choice = await askScope('Supprimer');
+              if (choice == null) return;
+              scope = choice;
+            }
             setSheet(() => saving = true);
             try {
-              await widget.api.call('DELETE', '/api/v1/events/${event!['id']}');
+              if (!recurringEdit || scope == 'all') {
+                await widget.api.call('DELETE', '/api/v1/events/${ev['id']}');
+              } else {
+                // Supprimer juste cette occurrence = l'exclure de la série.
+                final ex = _exList(ev);
+                final key = _ymd(occurrence!);
+                if (!ex.contains(key)) ex.add(key);
+                await widget.api.call(
+                  'PUT',
+                  '/api/v1/events/${ev['id']}',
+                  _seriesBody(ev, baseRrule, ex),
+                );
+              }
               if (ctx.mounted) Navigator.pop(ctx);
               await widget.onChanged();
             } catch (_) {
@@ -726,7 +871,7 @@ class _CalendarViewState extends State<CalendarView> {
           onTap: a.ticket != null
               ? () => widget.onOpenTicket(a.ticket!)
               : a.event != null
-              ? () => _openEditor(a.event)
+              ? () => _openEditor(a.event, occurrence: a.occurrence)
               : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
@@ -771,10 +916,11 @@ class _CalendarViewState extends State<CalendarView> {
         e['rrule']?.toString(),
         cells.first,
         cells.last,
+        exDates: _exDatesOf(e),
       )) {
         final k = cellOf(day);
         if (k == null) continue;
-        (items[k] ??= []).add(_AllDay(e['title'].toString(), true, null, e));
+        (items[k] ??= []).add(_AllDay(e['title'].toString(), true, null, e, occurrence: day));
       }
     }
     return Column(
@@ -968,7 +1114,7 @@ class _CalendarViewState extends State<CalendarView> {
           onTap: s.ticket != null
               ? () => widget.onOpenTicket(s.ticket!)
               : s.event != null
-              ? () => _openEditor(s.event)
+              ? () => _openEditor(s.event, occurrence: s.occurrence)
               : null,
           child: Container(
             decoration: BoxDecoration(

@@ -415,4 +415,4 @@ public record AppearanceInput(string? PaletteId, string? FontId = null, string? 
     string? CustomPrimary = null, string? CustomAccent = null, string? CustomBg = null, bool? CustomDark = null);
 public record CalendarEventInput(string Title, DateTimeOffset Start, DateTimeOffset End, bool AllDay = false,
     string Category = "other", List<string>? Participants = null, string? Notes = null, string? Location = null,
-    string? Rrule = null, string? TaskId = null, int? ReminderMinutes = 60);
+    string? Rrule = null, string? TaskId = null, int? ReminderMinutes = 60, List<string>? ExDates = null);
